@@ -1,0 +1,13 @@
+{
+  "description": "orqestrai guards. Active only in task sessions (ORQ_TASK set by orq).",
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash|Read|Grep|Glob|Write|Edit|MultiEdit|NotebookEdit",
+        "hooks": [
+          { "type": "command", "command": "${CLAUDE_PLUGIN_ROOT}/hooks/guard.sh", "timeout": 10 }
+        ]
+      }
+    ]
+  }
+}

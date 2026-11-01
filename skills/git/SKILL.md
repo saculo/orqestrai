@@ -30,11 +30,12 @@ One commit per verifiable unit: a task from `SPEC.md`, or a step's files.
 
 - `type`: `feat`, `fix`, `refactor`, `test`, `docs`, `chore`.
 - Step files use `docs`, for example `docs(T-0007): approve brief`.
-- A task from the spec names its wave task: `feat(T-0007/W1.2): retry failed webhook calls`.
-- Subject: imperative, lower case, no full stop, at most 72 characters.
+- Code: `feat(T-0007): retry failed webhook calls`. Put the wave task (`W1.2`) in the
+  body, not in the subject.
+- Subject: short, imperative, lower case, no full stop, at most 72 characters.
 - Write in simple, direct English: short sentences, one idea per sentence, active voice,
   the same word for the same thing (the glossary words).
-- No AI co-author lines unless the project asks for them.
+- No AI co-author lines.
 
 ## History
 

@@ -51,8 +51,10 @@ slugify() {
 }
 
 open_tab() {
-  local id=$1 wt=$2
-  local cmd=(claude --model "$MODEL" "/orqestrai:task $id")
+  local id=$1 wt=$2 base=$3
+  # ORQ_* variables switch on the guard hooks (hooks/guard.sh) for this session only.
+  local cmd=(env "ORQ_TASK=$id" "ORQ_WORKTREE=$wt" "ORQ_BASE=$base"
+             claude --model "$MODEL" "/orqestrai:task $id")
   if [ -n "${ZELLIJ:-}" ]; then
     zellij action new-tab --name "orq-$id" --cwd "$wt" -- "${cmd[@]}" >/dev/null
     echo "opened zellij tab orq-$id"
@@ -87,7 +89,17 @@ cmd_new() {
   sql "INSERT INTO tasks(id, repo, title, branch, worktree) VALUES($(q "$id"), $(q "$root"), $(q "$request"), $(q "$branch"), $(q "$wt"));
        INSERT INTO events(task_id, kind, detail) VALUES($(q "$id"), 'created', $(q "$branch from $base"));"
   echo "$id  $branch  $wt"
-  open_tab "$id" "$wt"
+  open_tab "$id" "$wt" "$base"
+}
+
+cmd_open() {
+  [ $# -eq 1 ] || die 'usage: orq open <id>'
+  local row repo wt
+  row=$(sql -separator $'\t' "SELECT repo, worktree FROM tasks WHERE id = $(q "$1");")
+  [ -n "$row" ] || die "no task $1"
+  IFS=$'\t' read -r repo wt <<<"$row"
+  [ -d "$wt" ] || die "worktree $wt is gone"
+  open_tab "$1" "$wt" "$(base_branch "$repo")"
 }
 
 cmd_state() {
@@ -130,6 +142,7 @@ cmd_ls() {
 usage() {
   cat <<'EOF'
 orq new "<request>"                 new task: id, branch, worktree, zellij tab
+orq open <id>                       open the task's tab again (after a restart)
 orq state <id> <step> <status> [n]  record step and status
 orq show <id>                       one task and its last events
 orq file <id> <NAME>                new task file from templates/NAME.md
@@ -144,6 +157,7 @@ command -v sqlite3 >/dev/null || die "sqlite3 is required"
 init_db
 case "${1:-}" in
   new)   shift; cmd_new "$@" ;;
+  open)  shift; cmd_open "$@" ;;
   state) shift; cmd_state "$@" ;;
   show)  shift; cmd_show "$@" ;;
   file)  shift; cmd_file "$@" ;;

@@ -2,7 +2,7 @@
 
 Status: draft for review, 2026-11-01. Mark it up: cross out, add, ask.
 Source of the ideas: `orqestrai.md`, and the comparison of super-board, humanlayer, pstack,
-firstmate, shipwright and mattpocock/skills (see the last section).
+firstmate, shipwright and mattpocock/skills (see §10).
 
 ## 1. Principles
 
@@ -247,17 +247,35 @@ before.
 - SSH only over Tailscale. Inbound traffic denied by default.
 - GitHub: fine-grained token per repo. Branch protection on `main`; the token cannot
   bypass it.
-- Permissions: deny reads of `.env*`, keys, credential files.
-- Guard hooks (from super-board): worktree path, secret reads, key literals in files,
-  delete outside the project, push to `main`.
+- Guard hooks (`hooks/guard.sh`, PreToolUse). Active only when `ORQ_TASK` is set, which
+  `orq new` / `orq open` do for task sessions; other sessions are not affected.
+  - G1 protect base: no push, merge or commit on the base branch; no force push; no
+    `gh pr merge`.
+  - G2 secrets: no reading or writing `.env*`, keys, credential files.
+  - G3 stay inside: file writes and git writes only inside the task worktree; no
+    `git worktree add/remove`.
+  - G4 destructive: `rm -r`, `find -delete`, `git clean`, `git reset --hard` only inside
+    the worktree.
+  - They stop mistakes; they are not a security boundary. Tests: `hooks/test-guard.sh`.
+- Second lock on the VPS: deny rules for secret files in the user settings
+  (`~/.claude/settings.json`). Claude Code enforces them itself, in every session, even
+  when the plugin is off.
+- Later: a check for API keys written into files (gitleaks covers it in verify).
 
-## 7. Not in v1
+## 7. Evals (after the first manual run)
+
+`claude plugin eval` with cases in `evals/`, each against a small fixture repo, with a
+no-plugin baseline. Priority 1: **principle skills load** when a step names them.
+Then: neutral research, question format, no self-approval, approval moves on, git rules.
+Later, promptfoo or similar tools for prompt-level comparisons.
+
+## 8. Not in v1
 
 Fleet-level orchestrator, automatic merge, `.out-of-scope/` knowledge base, formal
-verification, evals, metrics/tracing, playbooks per work type, self-improvement,
+verification, metrics/tracing, playbooks per work type, self-improvement,
 Kubernetes preview environments, TesterArmy `e2e` (experiment after Playwright works).
 
-## 8. Open questions
+## 9. Open questions
 
 Settled 2026-11-01:
 
@@ -272,7 +290,7 @@ Open:
    `orq new` + one task session that runs triage → plan locally, with no Slack and no
    dashboard. Then impl + verify, then ship, then Slack, then the dashboard.
 
-## 9. Where the ideas come from
+## 10. Where the ideas come from
 
 | Idea                                              | From             |
 |---------------------------------------------------|------------------|

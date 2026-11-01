@@ -15,6 +15,8 @@ the records true.
 1. Run `orq show <id>`. It gives the step, the status and the worktree.
 2. Check that `git rev-parse --show-toplevel` is that worktree. If it is not, stop and tell
    the user. Do not work in another checkout.
+   Check that `echo $ORQ_TASK` prints this id. If it does not, the guard hooks are off:
+   tell the user to start the session with `orq open <id>`.
 3. Read the files in `.orqestrai/tasks/<id>/`. The `status:` line in each file's
    frontmatter and the database row together tell you where the task is.
 4. Continue from the workflow below. A restart must lose nothing: decisions are in the
