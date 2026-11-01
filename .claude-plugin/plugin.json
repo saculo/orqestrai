@@ -1,0 +1,7 @@
+{
+  "name": "orqestrai",
+  "version": "0.1.0",
+  "description": "An orchestrated software factory with human gates: triage, plan, impl, verify, learn, ship.",
+  "author": { "name": "saculo" },
+  "license": "MIT"
+}
