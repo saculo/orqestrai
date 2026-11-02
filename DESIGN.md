@@ -161,15 +161,26 @@ summary, the `VERIFY.md` verdicts, the open non-critical findings and the learn 
   task. No fleet-level agent in v1.
 - Each task has its own **git worktree**, created before any step.
 
-### Scripts
+### The `orq` CLI
 
-| Script                     | Does                                                        |
+TypeScript on Bun, with Effect 4 (`src/`). Rule: **the code does mechanics only** —
+ids, state, worktrees, tabs, Slack, slots. Routing, gates and step order stay in the
+skills. Size budget: about 150 lines per module. `src/domain.ts` is the one definition of
+steps, statuses and task fields. Tests drive the CLI (`test/`). The guard hook stays in
+bash (`hooks/guard.sh`) until its text checks are not enough.
+
+| Command                    | Does                                                        |
 |----------------------------|-------------------------------------------------------------|
 | `orq new "<request>"`      | task id, SQLite row, worktree, branch, zellij tab           |
-| `orq state <id> <status>`  | updates the SQLite row, adds an event                       |
+| `orq open <id>`            | opens the task's tab again (after a restart)                |
+| `orq state <id> <step> <status> [note]` | updates the SQLite row, adds an event          |
+| `orq show <id>`            | one task and its last events                                |
+| `orq file <id> <NAME>`     | new task file from `templates/`                             |
 | `orq ask <id> "<text>"`    | status → WAITING FOR ME, posts to the task's Slack thread   |
 | `orq send <id> "<text>"`   | types text into the task's zellij pane                      |
 | `orq ls`                   | lists tasks and status                                      |
+
+`orq ask` and `orq send` come with the Slack bridge (slice 4).
 
 ### Slack bridge
 

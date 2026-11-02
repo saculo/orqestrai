@@ -8,7 +8,8 @@ Status: slice 1 — `orq new`, and a task session that runs triage and plan.
 ## Install (Claude Code)
 
 ```bash
-ln -s "$PWD/bin/orq" ~/.local/bin/orq          # needs git, sqlite3; zellij optional
+bun install                                    # needs Bun and git; zellij optional
+ln -s "$PWD/bin/orq" ~/.local/bin/orq
 claude plugin marketplace add "$PWD"
 claude plugin install orqestrai@orqestrai
 ```
@@ -36,7 +37,9 @@ State is in `~/.orqestrai/state.db`, worktrees in `~/.orqestrai/worktrees/<repo>
 ## Layout
 
 ```
-bin/orq                  mechanics: ids, state, worktrees, tabs
+bin/orq                  launcher for src/cli.ts
+src/                     orq: TypeScript, Effect 4, Bun. Mechanics only.
+test/                    CLI tests (bun run test runs these and the guard tests)
 skills/task              the orchestrator for one task
 skills/triage, plan      steps
 skills/git               branch, staging, commit and push rules
