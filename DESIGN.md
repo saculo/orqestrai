@@ -280,8 +280,8 @@ Drafts, outside the flow for now:
 
 | Skill               | Possible signal                          | Idea                                    |
 |---------------------|------------------------------------------|-----------------------------------------|
-| representation lens | the domain answers a question badly      | the question's operation → the model that makes it native |
-| archetypes          | "have we seen this problem shape before?"| short cards (signals, anti-signals, one deciding question), checked one by one, default "doesn't fit" |
+| representation lens | the domain answers a question badly      | the question's operation → the model that makes it native; business and technical examples |
+| archetypes          | "have we seen this problem shape before?"| one card per archetype with business **and** technical words (availability = resource pool, plan vs actual = reconciliation loop, …) plus a pipeline card; checked one by one, default "doesn't fit" |
 
 Drafts live in `drafts/modeling/` in the orqestrai repo; `orq init` does not install them. A draft
 moves to `skills/modeling/` when a step names it. The in-flow skills are written with the next
@@ -479,7 +479,26 @@ Open:
 1. **Build order.** Slice 1 (`orq new`, triage → plan) is done. Proposal: then impl +
    verify, then ship, then Slack, then the dashboard.
 2. ~~Modeling toolbox~~: settled 2026-11-02 (§3.7).
-3. **Test guidelines** (§3.3): the full document and the principle skill that points to it.
+3. ~~Test guidelines~~: settled 2026-11-03 (§3.3), written in
+   `skills/principles/test-behavior/GUIDELINES.md`.
+4. **GitHub and CI.** Push orqestrai to GitHub (private repo, `saculo/orqestrai`), protect
+   `main`, and add a CI workflow. Proposal for `.github/workflows/ci.yml`, on every pull
+   request and push to `main`:
+
+   | Job step | Why |
+   |----------|-----|
+   | Bun pinned to the version in use (`oven-sh/setup-bun`), `bun install --frozen-lockfile` | same toolchain as local; a lockfile drift fails |
+   | `bun run check` (tsc) | types |
+   | `bun test` (CLI, guard, init; needs git, which runners have) | behavior |
+   | skill check (a bun test): every installed skill has `name: orq-*` matching its install name, a description, at most ~150 lines; every `orq-*` reference points to a skill or agent that exists; no `orqestrai:` leftovers; drafts are not referenced by installed skills | the skills are the product; a broken reference fails silently in a session |
+   | module size: warn above ~150 lines per `src/` module | principle 6 |
+   | gitleaks | no secrets in the repo |
+   | actionlint | the workflow itself |
+
+   Rules: actions pinned by commit SHA, `permissions: contents: read`, `concurrency`
+   cancels runs superseded on the same branch. Branch protection requires CI to pass.
+   Not in CI: evals with a real model (cost, secrets) — later, as a manual
+   `workflow_dispatch` job; npm publishing — when `bunx orqestrai init` comes.
 
 ## 10. Where the ideas come from
 

@@ -33,6 +33,7 @@ describe("orq init", () => {
     expect(skills).toContain("orq-principle-test-behavior")
     expect(skills).toContain("orq-problem-class")
     expect(skills.every((s) => s.startsWith("orq-"))).toBe(true)
+    expect(skills).not.toContain("orq-archetypes") // drafts are not installed
     expect(read(".claude/skills/orq-triage/SKILL.md")).toMatch(/^---\nname: orq-triage\n/)
   })
 
