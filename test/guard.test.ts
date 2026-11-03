@@ -35,7 +35,11 @@ const bash = (command: string, cwd?: string) => guardOf("Bash", { command }, cwd
 
 describe("outside a task session", () => {
   test("allows everything", () => {
-    const v = decide({ tool_name: "Bash", cwd: "/", tool_input: { command: "git push origin main --force" } }, { ...env, task: undefined }, gitBranch)
+    const v = decide(
+      { tool_name: "Bash", cwd: "/", tool_input: { command: "git push origin main --force" } },
+      { ...env, task: undefined },
+      gitBranch,
+    )
     expect(v.allow).toBe(true)
   })
 })

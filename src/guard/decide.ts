@@ -32,7 +32,10 @@ export type Verdict = { readonly allow: true } | { readonly allow: false; readon
 export type BranchOf = (dir: string) => string | null
 
 class Block {
-  constructor(readonly guard: Guard, readonly reason: string) {}
+  constructor(
+    readonly guard: Guard,
+    readonly reason: string,
+  ) {}
 }
 const block = (guard: Guard, reason: string): never => {
   throw new Block(guard, reason)
@@ -46,8 +49,22 @@ const SAFE = /\.env\.(example|sample|template)/g
 
 const WRITE_TOOLS = new Set(["Write", "Edit", "MultiEdit", "NotebookEdit"])
 const GIT_WRITES = new Set([
-  "commit", "push", "merge", "rebase", "reset", "clean", "checkout", "switch", "restore",
-  "stash", "cherry-pick", "revert", "am", "tag", "branch", "pull",
+  "commit",
+  "push",
+  "merge",
+  "rebase",
+  "reset",
+  "clean",
+  "checkout",
+  "switch",
+  "restore",
+  "stash",
+  "cherry-pick",
+  "revert",
+  "am",
+  "tag",
+  "branch",
+  "pull",
 ])
 const ON_BASE = new Set(["commit", "merge", "rebase", "cherry-pick", "revert", "am", "pull", "push"])
 const SHELLS = new Set(["bash", "sh", "zsh", "dash"])
@@ -105,10 +122,9 @@ const check = (input: HookInput, env: GuardEnv, branchOf: BranchOf) => {
   const git = (a: string[]) => {
     let i = 1
     let gdir = cwd
-    while (i < a.length && a[i]!.startsWith("-")) {
-      if (a[i] === "-C") (gdir = path(a[i + 1] ?? ".")), (i += 2)
-      else if (a[i] === "-c") i += 2
-      else i += 1
+    for (let flag = a[i]; flag?.startsWith("-"); flag = a[i]) {
+      if (flag === "-C") gdir = path(a[i + 1] ?? ".")
+      i += flag === "-C" || flag === "-c" ? 2 : 1
     }
     gdir = resolve(gdir)
     const sub = a[i] ?? ""
@@ -135,12 +151,13 @@ const check = (input: HookInput, env: GuardEnv, branchOf: BranchOf) => {
 
   const segment = (words: string[]) => {
     let w = words
-    while (w.length > 0 && (/^[A-Za-z_][A-Za-z0-9_]*=/.test(w[0]!) || PREFIXES.has(w[0]!))) w = w.slice(1)
+    const isPrefix = (x: string) => /^[A-Za-z_][A-Za-z0-9_]*=/.test(x) || PREFIXES.has(x)
+    while (w[0] !== undefined && isPrefix(w[0])) w = w.slice(1)
     const [cmd, ...args] = w
     if (!cmd) return
     if (SHELLS.has(cmd)) {
-      const c = args.indexOf("-c")
-      if (c >= 0 && args[c + 1]) command(args[c + 1]!)
+      const inner = args[args.indexOf("-c") + 1]
+      if (args.includes("-c") && inner) command(inner)
       return
     }
     if (cmd === "eval") return command(args.join(" "))
@@ -169,8 +186,10 @@ const check = (input: HookInput, env: GuardEnv, branchOf: BranchOf) => {
       for (const t of tokens) {
         if (typeof t === "string") words.push(t)
         else if ("op" in t && t.op === "glob") words.push((t as { pattern: string }).pattern)
-        else if ("op" in t && SEPARATORS.has(t.op)) (segment(words), (words = []))
-        else if ("comment" in t) break
+        else if ("op" in t && SEPARATORS.has(t.op)) {
+          segment(words)
+          words = []
+        } else if ("comment" in t) break
       }
       segment(words)
     }

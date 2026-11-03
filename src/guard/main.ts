@@ -3,7 +3,7 @@
 // Exit 2 blocks the call; the message on stderr goes back to the agent.
 import { spawnSync } from "node:child_process"
 import { homedir, tmpdir } from "node:os"
-import { decide, type BranchOf, type HookInput } from "./decide.ts"
+import { type BranchOf, decide, type HookInput } from "./decide.ts"
 
 export const gitBranch: BranchOf = (dir) => {
   const p = spawnSync("git", ["-C", dir, "branch", "--show-current"], { encoding: "utf8" })

@@ -2,9 +2,10 @@
 // (skills/<group>/<name>/); the project gets them flat, under their frontmatter names,
 // in .claude/skills/<name>/. Everything orq init writes starts with "orq-" and is replaced
 // on the next run; anything else in .claude/ is the project's and stays as it is.
-import { Effect } from "effect"
+
 import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs"
 import { basename, join } from "node:path"
+import { Effect } from "effect"
 import { OrqError } from "./domain.ts"
 
 const PREFIX = "orq-"
@@ -73,11 +74,12 @@ const installAgents = (orqRoot: string, project: string) => {
 }
 
 type HookEntry = { matcher?: string; hooks: { type: string; command: string; timeout?: number }[] }
+type Settings = Record<string, unknown> & { hooks?: Record<string, unknown> & { PreToolUse?: HookEntry[] } }
 
 /** Adds the guard hook to .claude/settings.json once, and keeps every other setting. */
 const installHook = (project: string) => {
   const file = join(project, ".claude", "settings.json")
-  const settings = existsSync(file) ? (JSON.parse(readFileSync(file, "utf8")) as Record<string, any>) : {}
+  const settings = existsSync(file) ? (JSON.parse(readFileSync(file, "utf8")) as Settings) : ({} as Settings)
   settings.hooks ??= {}
   const entries = ((settings.hooks.PreToolUse ?? []) as HookEntry[])
     .map((e) => ({ ...e, hooks: e.hooks.filter((h) => h.command !== GUARD.command) }))

@@ -21,7 +21,11 @@ const orq = (args: string[], cwd = repo) => {
   return { code: p.exitCode, out: p.stdout.toString(), err: p.stderr.toString() }
 }
 
-const worktreeOf = (id: string) => /worktree = (.+)/.exec(orq(["show", id]).out)![1]!.trim()
+const worktreeOf = (id: string) => {
+  const m = /worktree = (.+)/.exec(orq(["show", id]).out)
+  if (!m?.[1]) throw new Error(`no worktree for ${id}`)
+  return m[1].trim()
+}
 
 beforeEach(() => {
   dir = mkdtempSync(join(tmpdir(), "orq-test-"))

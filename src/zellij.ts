@@ -5,8 +5,14 @@ import { exec, run } from "./proc.ts"
 
 /** The command that starts a task session. ORQ_* switch on the guard hook (orq guard). */
 export const sessionCommand = (id: string, worktree: string, base: string, model: string) => [
-  "env", `ORQ_TASK=${id}`, `ORQ_WORKTREE=${worktree}`, `ORQ_BASE=${base}`,
-  "claude", "--model", model, `/orq-task ${id}`,
+  "env",
+  `ORQ_TASK=${id}`,
+  `ORQ_WORKTREE=${worktree}`,
+  `ORQ_BASE=${base}`,
+  "claude",
+  "--model",
+  model,
+  `/orq-task ${id}`,
 ]
 
 const shellQuote = (s: string) => (/^[\w@%+=:,./-]+$/.test(s) ? s : `'${s.replaceAll("'", `'\\''`)}'`)
@@ -22,7 +28,9 @@ export const openTab = (id: string, worktree: string, base: string) =>
       yield* exec("zellij", tab)
       return `opened zellij tab orq-${id}`
     }
-    const sessions = yield* run("zellij", ["list-sessions", "--short"]).pipe(Effect.orElseSucceed(() => ({ code: 1, stdout: "", stderr: "" })))
+    const sessions = yield* run("zellij", ["list-sessions", "--short"]).pipe(
+      Effect.orElseSucceed(() => ({ code: 1, stdout: "", stderr: "" })),
+    )
     if (sessions.code === 0 && sessions.stdout.split("\n").includes(session)) {
       yield* exec("zellij", ["--session", session, ...tab])
       return `opened tab orq-${id} in zellij session ${session} (attach: zellij attach ${session})`

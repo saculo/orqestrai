@@ -481,24 +481,29 @@ Open:
 2. ~~Modeling toolbox~~: settled 2026-11-02 (§3.7).
 3. ~~Test guidelines~~: settled 2026-11-03 (§3.3), written in
    `skills/principles/test-behavior/GUIDELINES.md`.
-4. **GitHub and CI.** Push orqestrai to GitHub (private repo, `saculo/orqestrai`), protect
-   `main`, and add a CI workflow. Proposal for `.github/workflows/ci.yml`, on every pull
+4. **GitHub and CI.** orqestrai is public on GitHub (`saculo/orqestrai`, MIT), `main` is
+   protected (CI must pass, no force push). `.github/workflows/ci.yml` runs on every pull
    request and push to `main`:
 
    | Job step | Why |
    |----------|-----|
-   | Bun pinned to the version in use (`oven-sh/setup-bun`), `bun install --frozen-lockfile` | same toolchain as local; a lockfile drift fails |
+   | Bun 1.3.10, `bun install --frozen-lockfile` | same toolchain as local; lockfile drift fails |
    | `bun run check` (tsc) | types |
-   | `bun test` (CLI, guard, init; needs git, which runners have) | behavior |
-   | skill check (a bun test): every installed skill has `name: orq-*` matching its install name, a description, at most ~150 lines; every `orq-*` reference points to a skill or agent that exists; no `orqestrai:` leftovers; drafts are not referenced by installed skills | the skills are the product; a broken reference fails silently in a session |
-   | module size: warn above ~150 lines per `src/` module | principle 6 |
-   | gitleaks | no secrets in the repo |
+   | `bunx biome ci .` | lint and format |
+   | `bun test` (CLI, guard, init) | behavior |
+   | module size: a warning above ~150 lines | principle 6 |
+   | gitleaks (whole history) | no secrets in the repo |
+   | Opengrep with the TypeScript, JavaScript, bash and GitHub Actions rules | static analysis |
    | actionlint | the workflow itself |
 
-   Rules: actions pinned by commit SHA, `permissions: contents: read`, `concurrency`
-   cancels runs superseded on the same branch. Branch protection requires CI to pass.
-   Not in CI: evals with a real model (cost, secrets) — later, as a manual
-   `workflow_dispatch` job; npm publishing — when `bunx orqestrai init` comes.
+   Rules: actions pinned by commit SHA, tools by version (Opengrep also by SHA-256, its
+   rules by commit), only versions at least two weeks old, `permissions: contents: read`,
+   a newer run on the same branch cancels the older one.
+
+   Later: **evals** with a real model, as a manual `workflow_dispatch` job (cost, an API
+   key secret); **AI review** of pull requests (CodeRabbit as a GitHub App needs no secret
+   for a public repo; PR-Agent runs as an Action with our own model key); npm publishing
+   when `bunx orqestrai init` comes.
 
 ## 10. Where the ideas come from
 

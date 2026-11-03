@@ -1,10 +1,10 @@
 // The SQLite index of tasks. Content lives in Markdown and git; this is only the index.
 import { Database } from "bun:sqlite"
-import { Context, Effect, Layer } from "effect"
 import { mkdirSync } from "node:fs"
 import { join } from "node:path"
+import { Context, Effect, Layer } from "effect"
 import { OrqConfig } from "./config.ts"
-import { OrqError, taskId, type LinkRole, type Status, type Step, type Task, type TaskEvent, type TaskLink } from "./domain.ts"
+import { type LinkRole, OrqError, type Status, type Step, type Task, type TaskEvent, type TaskLink, taskId } from "./domain.ts"
 
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS tasks(
@@ -92,7 +92,11 @@ export class Db extends Context.Service<
           attempt("insert", () =>
             db.transaction(() => {
               db.query("INSERT INTO tasks(id, repo, title, branch, worktree) VALUES($id, $repo, $title, $branch, $worktree)").run({
-                id: t.id, repo: t.repo, title: t.title, branch: t.branch, worktree: t.worktree,
+                id: t.id,
+                repo: t.repo,
+                title: t.title,
+                branch: t.branch,
+                worktree: t.worktree,
               })
               addEvent.run({ id: t.id, kind: "created", detail: t.note })
             })(),
@@ -103,7 +107,11 @@ export class Db extends Context.Service<
             Effect.flatMap(() =>
               attempt("set state", () =>
                 db.transaction(() => {
-                  db.query("UPDATE tasks SET step = $step, status = $status, updated_at = datetime('now') WHERE id = $id").run({ id, step, status })
+                  db.query("UPDATE tasks SET step = $step, status = $status, updated_at = datetime('now') WHERE id = $id").run({
+                    id,
+                    step,
+                    status,
+                  })
                   addEvent.run({ id, kind: `${step}: ${status}`, detail: note })
                 })(),
               ),
@@ -111,22 +119,34 @@ export class Db extends Context.Service<
           ),
         list: attempt("list", () => db.query("SELECT * FROM tasks ORDER BY id").all() as Task[]),
         events: (id, limit) =>
-          attempt("events", () =>
-            db.query("SELECT at, kind, detail FROM events WHERE task_id = $id ORDER BY rowid DESC LIMIT $limit").all({ id, limit }) as TaskEvent[],
+          attempt(
+            "events",
+            () =>
+              db
+                .query("SELECT at, kind, detail FROM events WHERE task_id = $id ORDER BY rowid DESC LIMIT $limit")
+                .all({ id, limit }) as TaskEvent[],
           ),
         link: (id, kind, ref, role) =>
           get(id).pipe(
             Effect.flatMap(() =>
               attempt("link", () =>
                 db.transaction(() => {
-                  db.query("INSERT OR REPLACE INTO task_links(task_id, kind, ref, role) VALUES($id, $kind, $ref, $role)").run({ id, kind, ref, role })
+                  db.query("INSERT OR REPLACE INTO task_links(task_id, kind, ref, role) VALUES($id, $kind, $ref, $role)").run({
+                    id,
+                    kind,
+                    ref,
+                    role,
+                  })
                   addEvent.run({ id, kind: "linked", detail: `${kind} ${ref} (${role})` })
                 })(),
               ),
             ),
           ),
         links: (id) =>
-          attempt("links", () => db.query("SELECT kind, ref, role FROM task_links WHERE task_id = $id ORDER BY rowid").all({ id }) as TaskLink[]),
+          attempt(
+            "links",
+            () => db.query("SELECT kind, ref, role FROM task_links WHERE task_id = $id ORDER BY rowid").all({ id }) as TaskLink[],
+          ),
       }
     }),
   )

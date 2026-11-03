@@ -1,13 +1,14 @@
 // orq: the mechanics of orqestrai. Task ids, state, worktrees, zellij tabs, task files.
 // The workflow lives in skills/. This program does not decide. It only does.
+
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs"
+import { dirname, join } from "node:path"
 import { BunRuntime, BunServices } from "@effect/platform-bun"
 import { Console, Effect, Layer } from "effect"
 import { Argument, CliError, Command } from "effect/cli"
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs"
-import { dirname, join } from "node:path"
 import { OrqConfig } from "./config.ts"
 import { Db } from "./db.ts"
-import { LINK_ROLES, OrqError, STATUSES, STEPS, TEMPLATES, slugify } from "./domain.ts"
+import { LINK_ROLES, OrqError, STATUSES, STEPS, slugify, TEMPLATES } from "./domain.ts"
 import { addWorktree, baseBranch, requireRef, topLevel } from "./git.ts"
 import { install } from "./init.ts"
 import { openTab } from "./zellij.ts"
@@ -16,7 +17,9 @@ import { openTab } from "./zellij.ts"
 const warnIfNotOnPath = Effect.gen(function* () {
   if (Bun.which("orq")) return
   const { root } = yield* OrqConfig
-  yield* Console.error(`orq: warning: orq is not on PATH, so the guard hook and the skills cannot call it.\n  ln -s "${root}/bin/orq" ~/.local/bin/orq`)
+  yield* Console.error(
+    `orq: warning: orq is not on PATH, so the guard hook and the skills cannot call it.\n  ln -s "${root}/bin/orq" ~/.local/bin/orq`,
+  )
 })
 
 const init = Command.make("init", {}, () =>

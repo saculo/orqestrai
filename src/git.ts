@@ -1,14 +1,13 @@
 // Git mechanics: find the repository, the base branch, create worktrees.
-import { Effect } from "effect"
+
 import { existsSync, readFileSync } from "node:fs"
 import { join } from "node:path"
+import { Effect } from "effect"
 import { OrqError } from "./domain.ts"
 import { exec, run } from "./proc.ts"
 
 export const topLevel = (cwd?: string) =>
-  exec("git", ["rev-parse", "--show-toplevel"], cwd).pipe(
-    Effect.mapError(() => new OrqError({ message: "not in a git repository" })),
-  )
+  exec("git", ["rev-parse", "--show-toplevel"], cwd).pipe(Effect.mapError(() => new OrqError({ message: "not in a git repository" })))
 
 /** base_branch from .orqestrai/config.toml, else origin's HEAD, else "main". */
 export const baseBranch = (root: string) =>

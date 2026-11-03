@@ -1,7 +1,8 @@
 // Settings from the environment, read once at the boundary.
-import { Config, Context, Effect, Layer } from "effect"
+
 import { homedir } from "node:os"
 import { join, resolve } from "node:path"
+import { Config, Context, Effect, Layer } from "effect"
 
 export class OrqConfig extends Context.Service<
   OrqConfig,
