@@ -6,7 +6,7 @@ import { exec, run } from "./proc.ts"
 /** The command that starts a task session. ORQ_* switch on the guard hook (orq guard). */
 export const sessionCommand = (id: string, worktree: string, base: string, model: string) => [
   "env", `ORQ_TASK=${id}`, `ORQ_WORKTREE=${worktree}`, `ORQ_BASE=${base}`,
-  "claude", "--model", model, `/orqestrai:task ${id}`,
+  "claude", "--model", model, `/orq-task ${id}`,
 ]
 
 const shellQuote = (s: string) => (/^[\w@%+=:,./-]+$/.test(s) ? s : `'${s.replaceAll("'", `'\\''`)}'`)

@@ -20,7 +20,7 @@ compendium (see §10). Ideas are taken in our own words, never copied 1:1.
 
 ### Principle skills
 
-Short skills (`skills/principle-*`, adapted from pstack, MIT). Each step skill names the
+Short skills (`skills/principles/`, adapted from pstack, MIT). Each step skill names the
 ones it loads, so an agent loads only what its step needs.
 
 | Principle                    | Loaded by                     |
@@ -73,7 +73,7 @@ Automatic merge by risk: not in v1.
 
 ### 3.0 Grilling (triage and plan)
 
-Both interactive steps ask questions the same way (`skills/grill`):
+Both interactive steps ask questions the same way (`skills/workflow/grill`):
 
 - **Design tree.** Decisions depend on each other. A round asks the whole **frontier**:
   every open decision whose prerequisites are settled. An answer opens or removes
@@ -166,7 +166,7 @@ rejected and does not go there.
 
 Test guidelines, two layers:
 
-- **General** (`skills/principle-test-behavior/GUIDELINES.md`): what and why;
+- **General** (`skills/principles/test-behavior/GUIDELINES.md`): what and why;
   independent of language and framework.
 - **Per project** (`.orqestrai/testing.md`): with what — tools, commands, existing
   doubles and containers, examples of good tests in the repo. Created at onboarding,
@@ -283,8 +283,8 @@ Drafts, outside the flow for now:
 | representation lens | the domain answers a question badly      | the question's operation → the model that makes it native |
 | archetypes          | "have we seen this problem shape before?"| short cards (signals, anti-signals, one deciding question), checked one by one, default "doesn't fit" |
 
-Drafts live in `drafts/` in the orqestrai repo; `orq init` does not install them. A draft
-moves to `skills/` when a step names it. The in-flow skills are written with the next
+Drafts live in `drafts/modeling/` in the orqestrai repo; `orq init` does not install them. A draft
+moves to `skills/modeling/` when a step names it. The in-flow skills are written with the next
 plan-skill rewrite; the drafts after the test guidelines. Size: the normal skill budget
 (~150 lines), not smaller — they need their examples.
 
@@ -306,8 +306,14 @@ ids, state, worktrees, tabs, Slack, slots. Routing, gates and step order stay in
 skills. Size budget: about 150 lines per module. `src/domain.ts` is the one definition of
 steps, statuses and task fields. Tests drive the CLI (`test/`).
 
-Install: an npm package run with Bun (`bunx orqestrai init`), not a Claude Code plugin.
-Bun is needed at runtime (`bun:sqlite`).
+Install: not a Claude Code plugin. Today: a checkout with `orq` on PATH, then `orq init`
+in each project. Later: an npm package run with Bun (`bunx orqestrai init`). Bun is
+needed at runtime (`bun:sqlite`).
+
+`orq init` writes `.orqestrai/config.toml` (if missing) and, into `.claude/`, every skill
+from `skills/<group>/<name>/` flat as `skills/<name>/` (the frontmatter name, always
+`orq-*`), the agents, and the guard hook in `settings.json`. Each file it writes says it
+is generated. A rerun replaces its own `orq-*` files and keeps the rest.
 
 | Command                    | Does                                                        |
 |----------------------------|-------------------------------------------------------------|
@@ -430,7 +436,7 @@ before.
 ## 7. Evals (after the first manual run)
 
 Cases in `evals/`, each against a small fixture repo after `orq init`, with a baseline
-without orqestrai. The harness is open: `claude plugin eval` expects a plugin. Priority 1: **principle skills load** when a step names them.
+without orqestrai. The harness is open (`claude plugin eval` expects a plugin; orqestrai is not one). Priority 1: **principle skills load** when a step names them.
 Then: neutral research, question format, no self-approval, approval moves on, git rules.
 Later, promptfoo or similar tools for prompt-level comparisons.
 

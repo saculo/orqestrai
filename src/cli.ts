@@ -9,7 +9,26 @@ import { OrqConfig } from "./config.ts"
 import { Db } from "./db.ts"
 import { LINK_ROLES, OrqError, STATUSES, STEPS, TEMPLATES, slugify } from "./domain.ts"
 import { addWorktree, baseBranch, requireRef, topLevel } from "./git.ts"
+import { install } from "./init.ts"
 import { openTab } from "./zellij.ts"
+
+/** The guard hook and the skills call `orq` by name. Without it on PATH the guards are off. */
+const warnIfNotOnPath = Effect.gen(function* () {
+  if (Bun.which("orq")) return
+  const { root } = yield* OrqConfig
+  yield* Console.error(`orq: warning: orq is not on PATH, so the guard hook and the skills cannot call it.\n  ln -s "${root}/bin/orq" ~/.local/bin/orq`)
+})
+
+const init = Command.make("init", {}, () =>
+  Effect.gen(function* () {
+    const { root: orqRoot } = yield* OrqConfig
+    const project = yield* topLevel()
+    const { skills, agents } = yield* install(orqRoot, project, yield* baseBranch(project))
+    yield* Console.log(`.orqestrai/config.toml\n.claude/skills: ${skills.join(" ")}\n.claude/agents: ${agents.join(" ")}`)
+    yield* Console.log(".claude/settings.json: PreToolUse hook `orq guard`")
+    yield* warnIfNotOnPath
+  }),
+).pipe(Command.withDescription("install orqestrai into this project: .orqestrai/ and .claude/"))
 
 const id = Argument.String("id").pipe(Argument.withDescription("task id, e.g. T-0001"))
 
@@ -34,6 +53,7 @@ const newTask = Command.make("new", { request: Argument.String("request") }, ({ 
     yield* db.insert({ id: tid, repo: root, title: request, branch, worktree, note: `${branch} from ${base}` })
     yield* Console.log(`${tid}  ${branch}  ${worktree}`)
     yield* Console.log(yield* openTab(tid, worktree, base))
+    yield* warnIfNotOnPath
   }),
 ).pipe(Command.withDescription("new task: id, branch, worktree, zellij tab"))
 
@@ -105,7 +125,7 @@ const file = Command.make("file", { id, name: Argument.Literals("name", TEMPLATE
 
 const orq = Command.make("orq").pipe(
   Command.withDescription("orqestrai mechanics. The workflow is in the skills."),
-  Command.withSubcommands([newTask, open, state, show, link, ls, file]),
+  Command.withSubcommands([init, newTask, open, state, show, link, ls, file]),
 )
 
 const AppLayer = Db.layer.pipe(Layer.provideMerge(OrqConfig.layer), Layer.provideMerge(BunServices.layer))

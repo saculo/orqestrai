@@ -49,7 +49,7 @@ describe("orq new", () => {
     const r = orq(["new", "x"])
     expect(r.out).toContain("ORQ_TASK=T-0001")
     expect(r.out).toContain("ORQ_BASE=main")
-    expect(r.out).toContain("'/orqestrai:task T-0001'")
+    expect(r.out).toContain("'/orq-task T-0001'")
   })
 
   test("gives the next id to each new task", () => {

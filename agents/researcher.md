@@ -1,5 +1,5 @@
 ---
-name: researcher
+name: orq-researcher
 description: Answers neutral questions about how the current code works, with file:line evidence. It does not know the change the user wants. Used by orqestrai triage.
 tools: Read, Grep, Glob, Bash
 model: sonnet
