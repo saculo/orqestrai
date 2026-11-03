@@ -409,9 +409,10 @@ before.
 - SSH only over Tailscale. Inbound traffic denied by default.
 - GitHub: fine-grained token per repo. Branch protection on `main`; the token cannot
   bypass it.
-- Guard hook (`orq guard`, PreToolUse, in TS; replaces `hooks/guard.sh`). One pure
-  function decides allow / block; a shell parser replaces the text checks; tests are bun
-  tests. Active only when `ORQ_TASK` is set, which
+- Guard hook (`orq guard`, PreToolUse, `src/guard/`). `decide()` is plain TS (no Effect,
+  no `bun:*`) and decides allow / block; a shell parser splits commands, also inside
+  `bash -c`, `eval` and over several lines. `bin/orq` starts it without the Effect CLI,
+  so a call takes ~20 ms. Tests: `test/guard.test.ts`. Active only when `ORQ_TASK` is set, which
   `orq new` / `orq open` do for task sessions; other sessions are not affected.
   - G1 protect base: no push, merge or commit on the base branch; no force push; no
     `gh pr merge`.

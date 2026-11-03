@@ -39,7 +39,7 @@ State is in `~/.orqestrai/state.db`, worktrees in `~/.orqestrai/worktrees/<repo>
 ```
 bin/orq                  launcher for src/cli.ts
 src/                     orq: TypeScript, Effect 4, Bun. Mechanics only.
-test/                    CLI tests (bun run test runs these and the guard tests)
+test/                    CLI and guard tests (bun run test)
 skills/task              the orchestrator for one task
 skills/triage, plan      steps
 skills/grill             how triage and plan ask questions (design tree, frontier)
@@ -49,7 +49,7 @@ skills/git               branch, staging, commit and push rules
 skills/principle-*       short principles that steps load; test-behavior has GUIDELINES.md
 templates/               task files; `orq file <id> <NAME>` copies one into the task
 agents/researcher        neutral, read-only code research (triage)
-hooks/guard.sh           guards G1–G4 for task sessions; tests: hooks/test-guard.sh
+src/guard/               `orq guard`: guards G1–G4 for task sessions (PreToolUse hook)
 ```
 
 ## Secrets on a VPS (second lock)

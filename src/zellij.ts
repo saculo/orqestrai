@@ -3,7 +3,7 @@ import { Effect } from "effect"
 import { OrqConfig } from "./config.ts"
 import { exec, run } from "./proc.ts"
 
-/** The command that starts a task session. ORQ_* switch on the guard hooks (hooks/guard.sh). */
+/** The command that starts a task session. ORQ_* switch on the guard hook (orq guard). */
 export const sessionCommand = (id: string, worktree: string, base: string, model: string) => [
   "env", `ORQ_TASK=${id}`, `ORQ_WORKTREE=${worktree}`, `ORQ_BASE=${base}`,
   "claude", "--model", model, `/orqestrai:task ${id}`,
