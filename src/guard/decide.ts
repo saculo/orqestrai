@@ -7,7 +7,7 @@
 //   G3 stay inside    file writes and git writes only inside the task worktree
 //   G4 destructive    rm -r / find -delete / git clean / git reset --hard only inside it
 import { resolve } from "node:path"
-import { parse } from "shell-quote"
+import { simpleCommands } from "./shell.ts"
 
 export interface HookInput {
   readonly tool_name: string
@@ -48,28 +48,10 @@ const SECRET = new RegExp(
 const SAFE = /\.env\.(example|sample|template)/g
 
 const WRITE_TOOLS = new Set(["Write", "Edit", "MultiEdit", "NotebookEdit"])
-const GIT_WRITES = new Set([
-  "commit",
-  "push",
-  "merge",
-  "rebase",
-  "reset",
-  "clean",
-  "checkout",
-  "switch",
-  "restore",
-  "stash",
-  "cherry-pick",
-  "revert",
-  "am",
-  "tag",
-  "branch",
-  "pull",
-])
-const ON_BASE = new Set(["commit", "merge", "rebase", "cherry-pick", "revert", "am", "pull", "push"])
-const SHELLS = new Set(["bash", "sh", "zsh", "dash"])
-const PREFIXES = new Set(["sudo", "command", "exec", "env", "nohup", "time"])
-const SEPARATORS = new Set(["&&", "||", ";", ";;", "|", "|&", "&", "(", ")"])
+const GIT_WRITES = new Set(
+  "commit push merge rebase reset clean checkout switch restore stash cherry-pick revert am tag branch pull".split(" "),
+)
+const ON_BASE = new Set("commit merge rebase cherry-pick revert am pull push".split(" "))
 
 export const decide = (input: HookInput, env: GuardEnv, branchOf: BranchOf): Verdict => {
   if (!env.task) return { allow: true }
@@ -149,51 +131,13 @@ const check = (input: HookInput, env: GuardEnv, branchOf: BranchOf) => {
     if (GIT_WRITES.has(sub) && !inside(gdir, wt)) block("G3", `git ${sub} outside the task worktree (${gdir}). Work only in ${wt}.`)
   }
 
-  const segment = (words: string[]) => {
-    let w = words
-    const isPrefix = (x: string) => /^[A-Za-z_][A-Za-z0-9_]*=/.test(x) || PREFIXES.has(x)
-    while (w[0] !== undefined && isPrefix(w[0])) w = w.slice(1)
-    const [cmd, ...args] = w
-    if (!cmd) return
-    if (SHELLS.has(cmd)) {
-      const inner = args[args.indexOf("-c") + 1]
-      if (args.includes("-c") && inner) command(inner)
-      return
-    }
-    if (cmd === "eval") return command(args.join(" "))
-    if (cmd === "git") return git(w)
+  for (const [cmd, ...args] of simpleCommands(str("command"))) {
+    if (cmd === "git") git([cmd, ...args])
     if (cmd === "gh") {
       if (args[0] === "pr" && args[1] === "merge") block("G1", "merging a PR is the user's gate.")
       if (args[0] === "repo" && args[1] === "delete") block("G4", "deleting a repository is not allowed.")
-      return
     }
-    if (cmd === "rm") {
-      const recursive = args.some((x) => x === "--recursive" || /^-[a-zA-Z]*[rR]/.test(x))
-      if (recursive) rmTargets("G4", args)
-      return
-    }
-    if (cmd === "find" && args.includes("-delete")) {
-      const start = args[0] && !args[0].startsWith("-") ? args[0] : "."
-      rmTargets("G4", [start])
-    }
+    if (cmd === "rm" && args.some((x) => x === "--recursive" || /^-[a-zA-Z]*[rR]/.test(x))) rmTargets("G4", args)
+    if (cmd === "find" && args.includes("-delete")) rmTargets("G4", [args[0] && !args[0].startsWith("-") ? args[0] : "."])
   }
-
-  const command = (text: string) => {
-    for (const line of text.split("\n")) {
-      // Keep $VAR as written, so a variable path can be refused instead of guessed.
-      const tokens = parse(line, (key) => `$${key}`)
-      let words: string[] = []
-      for (const t of tokens) {
-        if (typeof t === "string") words.push(t)
-        else if ("op" in t && t.op === "glob") words.push((t as { pattern: string }).pattern)
-        else if ("op" in t && SEPARATORS.has(t.op)) {
-          segment(words)
-          words = []
-        } else if ("comment" in t) break
-      }
-      segment(words)
-    }
-  }
-
-  command(str("command"))
 }
