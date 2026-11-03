@@ -43,17 +43,22 @@ const newTask = Command.make("new", { request: Argument.String("request") }, ({ 
     const base = yield* baseBranch(root)
     yield* requireRef(root, base)
 
-    const tid = yield* db.nextId
     const slug = slugify(request)
-    const branch = `orq/${tid}-${slug}`
-    const worktree = join(home, "worktrees", root.split("/").at(-1) ?? "repo", `${tid}-${slug}`)
+    const {
+      id: tid,
+      branch,
+      worktree,
+    } = yield* db.create((tid) => {
+      const branch = `orq/${tid}-${slug}`
+      const worktree = join(home, "worktrees", root.split("/").at(-1) ?? "repo", `${tid}-${slug}`)
+      return { id: tid, repo: root, title: request, branch, worktree, note: `${branch} from ${base}` }
+    })
 
-    yield* addWorktree(root, branch, worktree, base)
+    // The id is held; set up the worktree, and give the id back if that fails.
+    yield* addWorktree(root, branch, worktree, base).pipe(Effect.tapError(() => db.remove(tid)))
     const dir = join(worktree, ".orqestrai", "tasks", tid)
     mkdirSync(dir, { recursive: true })
     writeFileSync(join(dir, "REQUEST.md"), `---\nid: ${tid}\ncreated: ${new Date().toISOString()}\n---\n\n${request}\n`)
-
-    yield* db.insert({ id: tid, repo: root, title: request, branch, worktree, note: `${branch} from ${base}` })
     yield* Console.log(`${tid}  ${branch}  ${worktree}`)
     yield* Console.log(yield* openTab(tid, worktree, base))
     yield* warnIfNotOnPath
