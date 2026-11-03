@@ -88,6 +88,12 @@ describe("orq state", () => {
     expect(shown).toContain("2 questions")
   })
 
+  test("records a task dropped in triage", () => {
+    orq(["new", "x"])
+    expect(orq(["state", "T-0001", "triage", "DROPPED", "already built"]).code).toBe(0)
+    expect(orq(["show", "T-0001"]).out).toMatch(/status = DROPPED/)
+  })
+
   test("rejects an unknown step or status", () => {
     orq(["new", "x"])
     expect(orq(["state", "T-0001", "nope", "TODO"]).code).not.toBe(0)

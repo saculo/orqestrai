@@ -73,7 +73,7 @@ Automatic merge by risk: not in v1.
 
 ### 3.0 Grilling (triage and plan)
 
-Both interactive steps ask questions the same way:
+Both interactive steps ask questions the same way (`skills/grill`):
 
 - **Design tree.** Decisions depend on each other. A round asks the whole **frontier**:
   every open decision whose prerequisites are settled. An answer opens or removes
@@ -363,7 +363,7 @@ plain TS (no `bun:*` imports), because pi loads extensions under Node.
 - Content: Markdown files + git.
 - Index: one SQLite file. `tasks(id, repo, title, step, status, needs_me, pr_url,
   slack_thread, updated_at)` and `events(task_id, at, kind, detail)`.
-- Statuses: `TODO`, `IN PROGRESS`, `WAITING FOR ME`, `BLOCKED`, `MERGED`.
+- Statuses: `TODO`, `IN PROGRESS`, `WAITING FOR ME`, `BLOCKED`, `DROPPED` (triage decided not to do it), `MERGED`.
 - Dashboard: a small web app that reads the SQLite file, served over Tailscale only.
 
 ## 5. Verification environment

@@ -5,7 +5,7 @@ import { Data } from "effect"
 export const STEPS = ["triage", "plan", "impl", "verify", "learn", "ship"] as const
 export type Step = (typeof STEPS)[number]
 
-export const STATUSES = ["TODO", "IN PROGRESS", "WAITING FOR ME", "BLOCKED", "MERGED"] as const
+export const STATUSES = ["TODO", "IN PROGRESS", "WAITING FOR ME", "BLOCKED", "DROPPED", "MERGED"] as const
 export type Status = (typeof STATUSES)[number]
 
 export const TEMPLATES = ["BRIEF", "RESEARCH", "SPEC"] as const

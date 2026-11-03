@@ -26,7 +26,7 @@ the records true.
 
 | Step   | Skill                 | Writes                    | Done when                         | Next                     |
 |--------|-----------------------|---------------------------|-----------------------------------|--------------------------|
-| triage | `orqestrai:triage`    | `RESEARCH.md`, `BRIEF.md` | `BRIEF.md` has `status: approved` | plan, at once            |
+| triage | `orqestrai:triage`    | `RESEARCH.md`, `BRIEF.md` | `BRIEF.md` has `status: approved`, or the task is `DROPPED` | plan, at once; nothing if dropped |
 | plan   | `orqestrai:plan`      | `SPEC.md`                 | `SPEC.md` has `status: approved`  | impl, at once            |
 | impl   | not built yet         |                           |                                   |                          |
 | verify | not built yet         |                           |                                   |                          |
@@ -63,7 +63,7 @@ You never set `status: approved` by your own decision.
   continue.
 - Ask in plain text, not with a question tool, so the same question works in a terminal
   and in a Slack thread. Number the questions. Give your recommended answer and the reason
-  for each.
+  for each. Triage and plan ask in rounds, as `orqestrai:grill` says.
 - After you ask, set `WAITING FOR ME` and end your turn.
 - Report outcomes and decisions. Do not report progress or internal mechanics.
 

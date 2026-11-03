@@ -42,8 +42,11 @@ src/                     orq: TypeScript, Effect 4, Bun. Mechanics only.
 test/                    CLI tests (bun run test runs these and the guard tests)
 skills/task              the orchestrator for one task
 skills/triage, plan      steps
+skills/grill             how triage and plan ask questions (design tree, frontier)
+skills/problem-class, consistency-unit, context-distilling
+                         modeling tools that plan and grill load on signals
 skills/git               branch, staging, commit and push rules
-skills/principle-*       short principles that steps load
+skills/principle-*       short principles that steps load; test-behavior has GUIDELINES.md
 templates/               task files; `orq file <id> <NAME>` copies one into the task
 agents/researcher        neutral, read-only code research (triage)
 hooks/guard.sh           guards G1–G4 for task sessions; tests: hooks/test-guard.sh

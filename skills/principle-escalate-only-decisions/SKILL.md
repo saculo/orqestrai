@@ -20,5 +20,5 @@ Write the decision and its reason in the step's file, then continue.
 **Report** outcomes, decisions and risks. Do not report progress, retries or mechanics.
 Silence must never hide a failure: a blocked step is always reported.
 
-When you ask: plain text, numbered, at most 5 questions, each with your recommended answer
-and why.
+When you ask: plain text, numbered, each with your recommended answer and why. In triage
+and plan, a round asks the whole frontier of the design tree (`orqestrai:grill`).

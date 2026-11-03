@@ -7,17 +7,26 @@ status: draft
 
 **Category:** bug | feature | chore
 
+**Triage check:** <bug: confirmed with code path / not reproduced / not enough detail.
+Feature: not found (where you looked) / exists in …. Out-of-scope match: none / <file>.>
+
 **Current behavior:** <what happens now>
 
 **Desired behavior:** <what happens after; edge cases and errors>
 
-**Key interfaces:** <names of types, functions, endpoints, commands. No file paths.>
+**Who sees it:** <which users or systems notice the change, and when>
 
-**Acceptance criteria:**
-1. <observable, checkable on its own>
+**Scope:**
+- <what this task changes>
 
 **Out of scope:**
 - <what this task does not do>
 
+**Open decisions:** <the design tree while grilling: D<n> <decision> (depends on …).
+Empty when the brief is done.>
+
 **Decisions:**
-- <what the user settled, one line each>
+- Q1 <decision>: <answer>
+
+**Assumptions:**
+- <anything still assumed, for the user to see at the gate; "none" when none>
