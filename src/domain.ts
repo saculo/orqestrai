@@ -19,10 +19,19 @@ export interface Task {
   readonly worktree: string
   readonly step: Step
   readonly status: Status
-  readonly pr_url: string | null
-  readonly slack_thread: string | null
   readonly created_at: string
   readonly updated_at: string
+}
+
+/** Where a task came from (origin) or what it relates to: an issue, a ticket, a thread, a PR.
+ * The kind is open; the adapter that owns a kind is the only code that reads its ref. */
+export const LINK_ROLES = ["origin", "related"] as const
+export type LinkRole = (typeof LINK_ROLES)[number]
+
+export interface TaskLink {
+  readonly kind: string
+  readonly ref: string
+  readonly role: LinkRole
 }
 
 export interface TaskEvent {

@@ -316,7 +316,8 @@ Bun is needed at runtime (`bun:sqlite`).
 | `orq new "<request>"`      | task id, SQLite row, worktree, branch, zellij tab           |
 | `orq open <id>`            | opens the task's tab again (after a restart)                |
 | `orq state <id> <step> <status> [note]` | updates the SQLite row, adds an event          |
-| `orq show <id>`            | one task and its last events                                |
+| `orq show <id>`            | one task, its links and its last events                     |
+| `orq link <id> <kind> <ref> [origin\|related]` | links the task to an outside reference |
 | `orq file <id> <NAME>`     | new task file from `templates/`                             |
 | `orq ask <id> "<text>"`    | status → WAITING FOR ME, posts to the task's Slack thread   |
 | `orq send <id> "<text>"`   | types text into the task's zellij pane                      |
@@ -361,8 +362,13 @@ plain TS (no `bun:*` imports), because pi loads extensions under Node.
 ### State
 
 - Content: Markdown files + git.
-- Index: one SQLite file. `tasks(id, repo, title, step, status, needs_me, pr_url,
-  slack_thread, updated_at)` and `events(task_id, at, kind, detail)`.
+- Index: one SQLite file. `tasks(id, repo, title, branch, worktree, step, status,
+  created_at, updated_at)`, `events(task_id, at, kind, detail)` and
+  `task_links(task_id, kind, ref, role)`.
+- The task holds only what is orqestrai's own. Everything outside — the GitHub issue,
+  the Linear or Jira ticket, the Slack thread, the PR — is a **link**: an open `kind`, a
+  `ref` in that system, and a `role` (`origin` = where the request came from, `related`).
+  Only the adapter that owns a kind reads its refs, so a new trigger adds no column.
 - Statuses: `TODO`, `IN PROGRESS`, `WAITING FOR ME`, `BLOCKED`, `DROPPED` (triage decided not to do it), `MERGED`.
 - Dashboard: a small web app that reads the SQLite file, served over Tailscale only.
 

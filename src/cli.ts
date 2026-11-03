@@ -7,7 +7,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs"
 import { dirname, join } from "node:path"
 import { OrqConfig } from "./config.ts"
 import { Db } from "./db.ts"
-import { OrqError, STATUSES, STEPS, TEMPLATES, slugify } from "./domain.ts"
+import { LINK_ROLES, OrqError, STATUSES, STEPS, TEMPLATES, slugify } from "./domain.ts"
 import { addWorktree, baseBranch, requireRef, topLevel } from "./git.ts"
 import { openTab } from "./zellij.ts"
 
@@ -65,10 +65,25 @@ const show = Command.make("show", { id }, ({ id }) =>
     const task = yield* db.get(id)
     const width = Math.max(...Object.keys(task).map((k) => k.length))
     for (const [k, v] of Object.entries(task)) yield* Console.log(`${k.padStart(width)} = ${v ?? ""}`)
+    for (const l of yield* db.links(id)) yield* Console.log(`link ${l.kind} ${l.ref} (${l.role})`)
     yield* Console.log("")
     for (const e of yield* db.events(id, 10)) yield* Console.log(`${e.at}  ${e.kind.padEnd(22)}  ${e.detail ?? ""}`)
   }),
 ).pipe(Command.withDescription("one task and its last events"))
+
+const link = Command.make(
+  "link",
+  {
+    id,
+    kind: Argument.String("kind").pipe(Argument.withDescription("e.g. gh-issue, jira, slack-thread, gh-pr")),
+    ref: Argument.String("ref").pipe(Argument.withDescription("the reference in that system")),
+    role: Argument.Literals("role", LINK_ROLES).pipe(Argument.withDefault("related" as const)),
+  },
+  ({ id, kind, ref, role }) =>
+    Effect.gen(function* () {
+      yield* (yield* Db).link(id, kind, ref, role)
+    }),
+).pipe(Command.withDescription("link the task to an outside reference (origin | related)"))
 
 const ls = Command.make("ls", {}, () =>
   Effect.gen(function* () {
@@ -90,7 +105,7 @@ const file = Command.make("file", { id, name: Argument.Literals("name", TEMPLATE
 
 const orq = Command.make("orq").pipe(
   Command.withDescription("orqestrai mechanics. The workflow is in the skills."),
-  Command.withSubcommands([newTask, open, state, show, ls, file]),
+  Command.withSubcommands([newTask, open, state, show, link, ls, file]),
 )
 
 const AppLayer = Db.layer.pipe(Layer.provideMerge(OrqConfig.layer), Layer.provideMerge(BunServices.layer))

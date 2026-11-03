@@ -4,7 +4,7 @@ import { Context, Effect, Layer } from "effect"
 import { mkdirSync } from "node:fs"
 import { join } from "node:path"
 import { OrqConfig } from "./config.ts"
-import { OrqError, taskId, type Status, type Step, type Task, type TaskEvent } from "./domain.ts"
+import { OrqError, taskId, type LinkRole, type Status, type Step, type Task, type TaskEvent, type TaskLink } from "./domain.ts"
 
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS tasks(
@@ -15,15 +15,27 @@ CREATE TABLE IF NOT EXISTS tasks(
   worktree TEXT NOT NULL,
   step TEXT NOT NULL DEFAULT 'triage',
   status TEXT NOT NULL DEFAULT 'TODO',
-  pr_url TEXT,
-  slack_thread TEXT,
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
   updated_at TEXT NOT NULL DEFAULT (datetime('now')));
 CREATE TABLE IF NOT EXISTS events(
   task_id TEXT NOT NULL,
   at TEXT NOT NULL DEFAULT (datetime('now')),
   kind TEXT NOT NULL,
-  detail TEXT);`
+  detail TEXT);
+CREATE TABLE IF NOT EXISTS task_links(
+  task_id TEXT NOT NULL,
+  kind TEXT NOT NULL,
+  ref TEXT NOT NULL,
+  role TEXT NOT NULL,
+  PRIMARY KEY (task_id, kind, ref));`
+
+/** Columns that older databases have and the task no longer owns. */
+const DROPPED_COLUMNS = ["pr_url", "slack_thread"]
+
+const migrate = (d: Database) => {
+  const cols = (d.query("PRAGMA table_info(tasks)").all() as { name: string }[]).map((c) => c.name)
+  for (const c of DROPPED_COLUMNS) if (cols.includes(c)) d.exec(`ALTER TABLE tasks DROP COLUMN ${c}`)
+}
 
 export interface NewTask {
   readonly id: string
@@ -46,6 +58,8 @@ export class Db extends Context.Service<
     readonly setState: (id: string, step: Step, status: Status, note: string) => Effect.Effect<void, OrqError>
     readonly list: Effect.Effect<ReadonlyArray<Task>, OrqError>
     readonly events: (id: string, limit: number) => Effect.Effect<ReadonlyArray<TaskEvent>, OrqError>
+    readonly link: (id: string, kind: string, ref: string, role: LinkRole) => Effect.Effect<void, OrqError>
+    readonly links: (id: string) => Effect.Effect<ReadonlyArray<TaskLink>, OrqError>
   }
 >()("orq/Db") {
   static readonly layer = Layer.effect(
@@ -57,6 +71,7 @@ export class Db extends Context.Service<
           mkdirSync(home, { recursive: true })
           const d = new Database(join(home, "state.db"), { create: true, strict: true })
           d.exec(SCHEMA)
+          migrate(d)
           return d
         }),
         (d) => Effect.sync(() => d.close()),
@@ -99,6 +114,19 @@ export class Db extends Context.Service<
           attempt("events", () =>
             db.query("SELECT at, kind, detail FROM events WHERE task_id = $id ORDER BY rowid DESC LIMIT $limit").all({ id, limit }) as TaskEvent[],
           ),
+        link: (id, kind, ref, role) =>
+          get(id).pipe(
+            Effect.flatMap(() =>
+              attempt("link", () =>
+                db.transaction(() => {
+                  db.query("INSERT OR REPLACE INTO task_links(task_id, kind, ref, role) VALUES($id, $kind, $ref, $role)").run({ id, kind, ref, role })
+                  addEvent.run({ id, kind: "linked", detail: `${kind} ${ref} (${role})` })
+                })(),
+              ),
+            ),
+          ),
+        links: (id) =>
+          attempt("links", () => db.query("SELECT kind, ref, role FROM task_links WHERE task_id = $id ORDER BY rowid").all({ id }) as TaskLink[]),
       }
     }),
   )

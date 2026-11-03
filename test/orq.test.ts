@@ -1,4 +1,5 @@
 // orq through its seam: the command line. Each test gets a fresh repo and ORQ_HOME.
+import { Database } from "bun:sqlite"
 import { afterEach, beforeEach, describe, expect, test } from "bun:test"
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
@@ -132,6 +133,46 @@ describe("orq file", () => {
     const r = orq(["file", "T-0001", "BRIEF"], repo)
     expect(r.code).toBe(1)
     expect(r.err).toContain("are you in its worktree?")
+  })
+})
+
+describe("orq link", () => {
+  test("links a task to an outside reference, shown with the task", () => {
+    orq(["new", "x"])
+    expect(orq(["link", "T-0001", "gh-issue", "saculo/app#12", "origin"]).code).toBe(0)
+    expect(orq(["link", "T-0001", "slack-thread", "C01/1730.42"]).code).toBe(0)
+    const shown = orq(["show", "T-0001"]).out
+    expect(shown).toContain("link gh-issue saculo/app#12 (origin)")
+    expect(shown).toContain("link slack-thread C01/1730.42 (related)")
+  })
+
+  test("keeps outside references out of the task itself", () => {
+    orq(["new", "x"])
+    const shown = orq(["show", "T-0001"]).out
+    expect(shown).not.toContain("slack_thread")
+    expect(shown).not.toContain("pr_url")
+  })
+
+  test("rejects an unknown role and an unknown task", () => {
+    orq(["new", "x"])
+    expect(orq(["link", "T-0001", "jira", "APP-1", "owner"]).code).not.toBe(0)
+    const r = orq(["link", "T-0099", "jira", "APP-1"])
+    expect(r.code).toBe(1)
+    expect(r.err).toContain("orq: no task T-0099")
+  })
+
+  test("moves an existing database to the new task shape", () => {
+    mkdirSync(home, { recursive: true })
+    const old = new Database(join(home, "state.db"))
+    old.exec(`CREATE TABLE tasks(id TEXT PRIMARY KEY, repo TEXT NOT NULL, title TEXT NOT NULL,
+      branch TEXT NOT NULL, worktree TEXT NOT NULL, step TEXT NOT NULL DEFAULT 'triage',
+      status TEXT NOT NULL DEFAULT 'TODO', pr_url TEXT, slack_thread TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')), updated_at TEXT NOT NULL DEFAULT (datetime('now')));
+      INSERT INTO tasks(id, repo, title, branch, worktree, slack_thread) VALUES('T-0001', '/r', 'old', 'b', '/w', 'C01/1');`)
+    old.close()
+    const shown = orq(["show", "T-0001"]).out
+    expect(shown).toContain("title = old")
+    expect(shown).not.toContain("slack_thread")
   })
 })
 
