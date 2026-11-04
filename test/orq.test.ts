@@ -123,6 +123,13 @@ describe("orq file", () => {
     expect(brief).toContain("status: draft")
   })
 
+  test("creates VERIFY.md for the verify step", () => {
+    orq(["new", "x"])
+    const wt = worktreeOf("T-0001")
+    expect(orq(["file", "T-0001", "VERIFY"], wt).code).toBe(0)
+    expect(readFileSync(join(wt, ".orqestrai/tasks/T-0001/VERIFY.md"), "utf8")).toContain("round: 1")
+  })
+
   test("does not overwrite an existing file", () => {
     orq(["new", "x"])
     const wt = worktreeOf("T-0001")

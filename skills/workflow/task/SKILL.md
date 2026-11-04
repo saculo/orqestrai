@@ -28,8 +28,8 @@ the records true.
 |--------|-----------------------|---------------------------|-----------------------------------|--------------------------|
 | triage | `orq-triage`    | `RESEARCH.md`, `BRIEF.md` | `BRIEF.md` has `status: approved`, or the task is `DROPPED` | plan, at once; nothing if dropped |
 | plan   | `orq-plan`      | `SPEC.md`                 | `SPEC.md` has `status: approved`  | impl, at once            |
-| impl   | not built yet         |                           |                                   |                          |
-| verify | not built yet         |                           |                                   |                          |
+| impl   | `orq-impl`            | code, tests, one commit per task | every wave committed, tests green | verify, at once   |
+| verify | `orq-verify`          | `VERIFY.md`, `evidence/`  | `VERIFY.md` has `status: passed`  | learn, at once; back to impl when `failed`; wait for the user when `escalated` |
 | learn  | not built yet         |                           |                                   |                          |
 | ship   | not built yet         |                           |                                   |                          |
 
