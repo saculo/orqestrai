@@ -14,10 +14,15 @@ reviews:
   path_instructions:
     - path: "skills/**/*.md"
       instructions: >-
-        These are agent skills. Check: short sentences in plain, simplified English (ASD-STE100
-        style); at most ~150 lines per SKILL.md; frontmatter `name` starts with `orq-`; every
-        `orq-*` skill or agent it names exists in skills/ or agents/; no instructions that
-        contradict DESIGN.md. Flag vague wording an agent could read two ways.
+        Agent skills and their reference files. Check: short sentences in plain, simplified
+        English (ASD-STE100 style); every `orq-*` skill or agent it names exists in skills/ or
+        agents/; it never names or links a draft (anything under drafts/, by name or by path);
+        no instructions that contradict DESIGN.md. Flag vague wording an agent could read two
+        ways.
+    - path: "skills/**/SKILL.md"
+      instructions: >-
+        A skill manifest: frontmatter `name` starts with `orq-`, a `description` says when to
+        use it, at most ~150 lines.
     - path: "drafts/**/*.md"
       instructions: >-
         Draft skills, not installed by orq init. Review the idea and its examples, not polish.
