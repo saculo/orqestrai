@@ -116,6 +116,7 @@ describe("G4 destructive commands", () => {
     ["rm variable", 'rm -rf "$DIR"'],
     ["find -delete out", "find /home/u -name '*.log' -delete"],
     ["rm -rf inside sh -c", `sh -c 'rm -rf /home/u/projects'`],
+    ["orq clean", "orq clean T-0001"],
   ])("blocks %s", (_, cmd) => expect(bash(cmd)).toBe("G4"))
 
   test("blocks git clean outside", () => expect(bash(`git -C ${MAIN} clean -fdx`)).toBe("G4"))
