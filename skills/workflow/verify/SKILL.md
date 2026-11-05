@@ -1,6 +1,6 @@
 ---
 name: orq-verify
-description: orqestrai verify step. Runs the quality gate from config.toml, then the verifier and the reviewer in fresh contexts, writes VERIFY.md, and sends failures back to impl at most 3 rounds. Loaded by orq-task; do not run it alone.
+description: orqestrai verify step. Runs the quality gate from config.toml, then the verifier (through the verify-<surface> skills) and the reviewer in fresh contexts, writes VERIFY.md, and sends failures back to impl at most 3 rounds. Loaded by orq-task; do not run it alone.
 ---
 
 # orqestrai: verify
@@ -33,19 +33,21 @@ worktree, in this order: `types`, `lint`, `test`, then any other keys.
 
 Start both subagents in one message. Each gets only what is listed here.
 
-**`orq-verifier`**, if the project has a verify skill (`.claude/skills/verify-*`):
+**`orq-verifier`**: one subagent for all automated checks. Group the checks by
+**Surface**. Each surface has a driver skill, `.claude/skills/verify-<surface>/`.
 
 ```
-Verify skill: <verify-name>
+Verify skills: verify-<surface> (V1, V2), verify-<surface> (V3)
 Evidence folder: .orqestrai/tasks/<id>/evidence/
 Checks (from SPEC.md, Verification plan):
-<each row: Check, Claim, Kind, How, Evidence expected>
+<each row: Check, Claim, Surface, Kind, How, Evidence expected>
 Acceptance criteria:
 <the AC lines the checks name>
 ```
 
-No code, no diff, no task list, no impl reports. With **no verify skill**, do not start
-the verifier: every check is `INCONCLUSIVE` with "no verify skill for this project".
+No code, no diff, no task list, no impl reports. A check whose surface has **no verify
+skill** is not sent: it is `INCONCLUSIVE` with "no verify-<surface> skill". With no
+skill for any surface, do not start the verifier.
 Manual checks (Kind = manual) are not sent; they wait for the user at the end.
 
 **`orq-reviewer`**:
