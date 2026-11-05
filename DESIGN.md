@@ -52,8 +52,8 @@ answer in the pane or in the Slack thread.
 | plan   | task session (interactive)   | Opus   | `BRIEF.md`, `RESEARCH.md`, code, ADRs | `SPEC.md`         |
 | impl   | subagent per task, in waves  | Sonnet | `SPEC.md`, code               | code + UT/IT/contract tests |
 | verify | 2–3 subagents in parallel    | Sonnet + Opus | see §3.4               | `VERIFY.md`               |
-| learn  | subagent                     | Opus   | all task files, diff          | `LEARN.md` (proposals)    |
-| ship   | task session                 | Sonnet | all task files                | PR                        |
+| learn  | subagent                     | Opus   | all task files, diff          | `LEARN.md` + the applied proposals |
+| ship   | task session                 | Sonnet | all task files                | `PR.md`, the PR           |
 
 ### Transitions (auto-advance)
 
@@ -227,7 +227,7 @@ Three gate tiers: **quality** (deterministic: build, types, lint, tests, scanner
 One step, subagents in parallel, one `VERIFY.md`:
 
 - **Verifier** (Sonnet). Does not read the source code (prompt rule). Runs the
-  verification plan against the running app, through the project's `verify-<app>` skill
+  verification plan against the running app, through the project's `verify-<surface>` skills
   (§5): every check, driven against the app. Writes nothing.
 - **E2E writer** (Sonnet), after the verifier, in the same slot. Turns each `VERIFIED`
   check marked "Committed? = yes" into a test in the project's e2e module, from the AC
@@ -270,21 +270,45 @@ needs them.
 
 ### 3.5 Learn
 
-Writes proposals to `LEARN.md` (the candidate learnings of the run; you pick which
-ones stay):
+One `orq-learner` subagent (Opus) reads all task files and the diff, and keeps what the
+next task needs to know. **At most 5 proposals, each with its evidence in this task** (a
+verify round, a finding, a decision). "No proposals" is a good result.
 
-- ADRs → `docs/adr/`.
-- Rejected concepts → `.orqestrai/out-of-scope/`.
-- Glossary changes → `GLOSSARY.md`.
-- Feature-map updates for `verify-<app>`.
-- Lines for `CLAUDE.md` / `AGENTS.md`.
+| Signal in the task | Goes to |
+|--------------------|---------|
+| a decision hard to reverse, surprising, a real trade-off | ADR in `docs/adr/` |
+| a new term, or one term in two meanings | `GLOSSARY.md` |
+| the user rejected a concept | `.orqestrai/out-of-scope/<concept>.md` |
+| a root cause that came back, a rule the reviewer repeated | `CLAUDE.md` / `AGENTS.md` |
+| a flaky test, a hard-to-test pattern, a missing helper | `.orqestrai/testing.md` |
+| the verifier could not start, seed or drive the app as the skill says | `verify-<surface>` |
 
-You accept them by merging the PR (they are part of the diff).
+Each proposal is **applied in the task branch** and listed in `LEARN.md`. You accept it by
+merging the PR, or ask at the PR to drop it. No gate. The task session checks the
+learner's work: no evidence, generic, or already known → reverted.
 
 ### 3.6 Ship
 
-Commit and PR messages follow the writing skill (ASD-STE100). The PR body contains the
-summary, the `VERIFY.md` verdicts, the open non-critical findings and the learn proposals.
+1. Rebase onto the base branch (`git fetch`, `git rebase origin/<base>`). A conflict that
+   changes behavior → `WAITING FOR ME`.
+2. The quality gate again. A failure → `WAITING FOR ME`, no PR.
+3. `PR.md` from the task files: what and why (brief), each AC with its verdict and
+   evidence, the manual checks for you, verify rounds, open findings, learn proposals,
+   decisions, risk. Copied, not invented.
+4. Push the task branch, `gh pr create --body-file PR.md`, `orq link <id> gh-pr <url>`,
+   `WAITING FOR ME`.
+
+After that: **merge is yours.** `orq ls` / `orq show` ask `gh` for the state of each open
+task's PR and set `MERGED` when it is merged (no webhook, no daemon; when `gh` fails, the
+task stays as it is). Changes you ask for at the PR go through impl → verify → ship again,
+which updates the body with `gh pr edit`.
+
+`orq clean <id>` (you run it; the guard blocks it in a task session) removes the
+worktree and the local branch of a `MERGED` or `DROPPED` task. The task row, its links and
+its events stay. It refuses when the worktree has uncommitted changes, or when the branch
+has commits the PR does not have. A merged task's files are in the base branch already;
+a dropped task's files are first copied to `~/.orqestrai/archive/<repo>/<id>/`, where
+triage looks for earlier drops.
 
 ### 3.7 Modeling toolbox (on signals)
 
@@ -352,9 +376,10 @@ is generated. A rerun replaces its own `orq-*` files and keeps the rest.
 | `orq file <id> <NAME>`     | new task file from `templates/`                             |
 | `orq ask <id> "<text>"`    | status → WAITING FOR ME, posts to the task's Slack thread   |
 | `orq send <id> "<text>"`   | types text into the task's zellij pane                      |
-| `orq ls`                   | lists tasks and status                                      |
+| `orq ls`                   | lists tasks and status; reads merged PRs from `gh`          |
+| `orq clean <id>`           | removes a merged or dropped task's worktree and branch      |
 
-`orq ask` and `orq send` come with the Slack bridge (slice 4).
+`orq ask` and `orq send` come with the Slack bridge (after slice 4).
 
 ### Slack bridge
 
@@ -379,11 +404,13 @@ generated file says it is generated (edit it in orqestrai).
     BRIEF.md
     SPEC.md
     VERIFY.md
+    evidence/
     LEARN.md
+    PR.md
 ```
 
 Project-wide knowledge stays where tools expect it: `docs/adr/`, `GLOSSARY.md`,
-`CLAUDE.md` / `AGENTS.md`, `.claude/skills/verify-<app>/`.
+`CLAUDE.md` / `AGENTS.md`, `.claude/skills/verify-<surface>/`.
 
 ### Harnesses
 
@@ -401,14 +428,23 @@ plain TS (no `bun:*` imports), because pi loads extensions under Node.
   `ref` in that system, and a `role` (`origin` = where the request came from, `related`).
   Only the adapter that owns a kind reads its refs, so a new trigger adds no column.
 - Statuses: `TODO`, `IN PROGRESS`, `WAITING FOR ME`, `BLOCKED`, `DROPPED` (triage decided not to do it), `MERGED`.
+- Archive: `~/.orqestrai/archive/<repo>/<id>/`, the files of dropped tasks after
+  `orq clean`.
 - Dashboard: a small web app that reads the SQLite file, served over Tailscale only.
 
 ## 5. Verification environment
 
-### The `verify-<app>` skill (one per project)
+### The `verify-<surface>` skills (one per surface)
 
-Generated once with the approach of pstack `create-verification-skill`, maintained by
-learn. One skill combines:
+A surface is a part of the app that a check drives: `api`, `web`, `cli`. A project with
+one surface has one skill (`verify-app`). Each check in the verification plan names its
+surface; the verifier loads only the skills of the surfaces in the task. The skill is a
+**driver's manual, not a test list**: what to check is in the task's `SPEC.md`, the
+committed e2e tests are in the project's e2e module. Plan asks you when a surface in the
+plan has no skill yet. Learn changes a skill only when the way to drive the app changed.
+
+Generated with the approach of pstack `create-verification-skill` (later; written by
+hand for now). One skill combines:
 
 - **Launch / Doctor / Cleanup**: start the app from empty data, check it is usable,
   tear down what the run started.
@@ -431,7 +467,7 @@ learn. One skill combines:
   pull-request generator). Until then, the same compose files can also run there with
   `DOCKER_HOST=ssh://verify-box`. No change to the skills.
 
-The `verify-<app>` skill is generated when a project is onboarded into orqestrai, not
+The `verify-<surface>` skills are generated when a project is onboarded into orqestrai, not
 before.
 
 ## 6. Security (no sandbox in v1)
@@ -486,7 +522,7 @@ Settled 2026-11-01:
 
 - Task files live in `.orqestrai/` in the project (§4).
 - Claude Code first, pi after (§4).
-- No external project yet: orqestrai itself is built first. `verify-<app>` comes at
+- No external project yet: orqestrai itself is built first. `verify-<surface>` comes at
   onboarding (§5).
 
 Settled 2026-11-02:
@@ -505,9 +541,11 @@ Open:
    2026-11-04): impl, plus verify with the quality gate, the verifier and the reviewer,
    and the loop back to impl. Tried first on a small local sandbox project (a Bun HTTP
    API with SQLite), with a `verify-sandbox` skill written by hand; the generator for
-   `verify-<app>` comes later. orqestrai is not run on itself; orqestrai expertise skills
-   come later. **Slice 3:** adversary, e2e writer, verify slots. Then ship, Slack, the
-   dashboard.
+   `verify-<surface>` comes later. orqestrai is not run on itself; orqestrai expertise
+   skills come later. **Slice 3** (settled 2026-11-05): learn and ship, `orq clean`,
+   `MERGED` read from `gh`, verify skills per surface. It comes before the adversary,
+   because without ship the whole flow cannot run on a real project. **Slice 4:**
+   adversary, e2e writer, verify slots. Then Slack, the dashboard.
 2. ~~Modeling toolbox~~: settled 2026-11-02 (§3.7).
 3. ~~Test guidelines~~: settled 2026-11-03 (§3.3), written in
    `skills/principles/test-behavior/GUIDELINES.md`.

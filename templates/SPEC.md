@@ -40,9 +40,12 @@ done.>
 - **W2.1** <what>. Touches: <files/modules>. Serves: AC2. Tests: B2.
 
 ## Verification plan
-| Check | Claim | Kind | How (what a user does and sees) | Committed? | Evidence |
-|-------|-------|------|---------------------------------|------------|----------|
-| V1    | AC1   | e2e  | <steps>                         | yes / no   | <screenshot, response> |
+| Check | Claim | Surface | Kind | How (what a user does and sees) | Committed? | Evidence |
+|-------|-------|---------|------|---------------------------------|------------|----------|
+| V1    | AC1   | api     | e2e  | <steps>                         | yes / no   | <screenshot, response> |
+
+<!-- Surface: the part of the app a check drives (api, web, cli, …). Each surface has a
+verify skill, .claude/skills/verify-<surface>/, that says how to drive it. -->
 
 ## Risk
 <level>: <reasons>. Blast radius: <what can break>. Priority: <why now>.

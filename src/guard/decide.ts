@@ -5,7 +5,7 @@
 //   G1 protect base   no push/merge/commit on the base branch, no force push, no PR merge
 //   G2 secrets        no reading or writing .env*, keys, credential files
 //   G3 stay inside    file writes and git writes only inside the task worktree
-//   G4 destructive    rm -r / find -delete / git clean / git reset --hard only inside it
+//   G4 destructive    rm -r / find -delete / git clean / git reset --hard only inside it; no orq clean
 import { resolve } from "node:path"
 import { parse } from "shell-quote"
 
@@ -167,6 +167,7 @@ const check = (input: HookInput, env: GuardEnv, branchOf: BranchOf) => {
       if (args[0] === "repo" && args[1] === "delete") block("G4", "deleting a repository is not allowed.")
       return
     }
+    if (cmd === "orq" && args[0] === "clean") block("G4", "orq clean removes a worktree and a branch. The user runs it.")
     if (cmd === "rm") {
       const recursive = args.some((x) => x === "--recursive" || /^-[a-zA-Z]*[rR]/.test(x))
       if (recursive) rmTargets("G4", args)

@@ -77,6 +77,10 @@ here. Anything not decided goes under **Assumptions**.
   describe each check by what a user does and sees. **Committed?** for each e2e check:
   yes keeps it as a regression test in the project's e2e module (the default for main
   journeys); no means driving the app is enough.
+  **Surface** for each automated check: the part of the app it drives (`api`, `web`,
+  `cli`, …). Each surface needs a driver skill, `.claude/skills/verify-<surface>/`. When
+  one is missing, add an open decision for the user: write that skill before impl, or
+  make those checks manual.
 - **Risk:** low, medium or high, with the reasons. High risk turns on the adversary in
   verify.
 

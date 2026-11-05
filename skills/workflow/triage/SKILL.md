@@ -24,7 +24,9 @@ Two checks:
 - **Already built?** Search for the requested behavior **by domain concept**, not by the
   request's words ("night theme" is the same concept as "dark mode"). Note where you looked.
 - **Rejected before?** Read `.orqestrai/out-of-scope/*.md`. Match by concept, not by
-  keyword.
+  keyword. Also read the briefs of dropped tasks:
+  `${ORQ_HOME:-~/.orqestrai}/archive/<repo folder name>/*/BRIEF.md` (`orq clean` keeps
+  them there).
 
 ## 2. Write neutral research questions
 
