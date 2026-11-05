@@ -30,11 +30,11 @@ the records true.
 | plan   | `orq-plan`      | `SPEC.md`                 | `SPEC.md` has `status: approved`  | impl, at once            |
 | impl   | `orq-impl`            | code, tests, one commit per task | every wave committed, tests green | verify, at once   |
 | verify | `orq-verify`          | `VERIFY.md`, `evidence/`  | `VERIFY.md` has `status: passed`  | learn, at once; back to impl when `failed`; wait for the user when `escalated` |
-| learn  | not built yet         |                           |                                   |                          |
-| ship   | not built yet         |                           |                                   |                          |
+| learn  | `orq-learn`           | `LEARN.md`, applied proposals | `LEARN.md` has `status: applied` | ship, at once     |
+| ship   | `orq-ship`            | `PR.md`, the PR, link `gh-pr` | the PR is open, task `WAITING FOR ME` | nothing: the user merges |
 
-When the next step has no skill yet, run `orq state <id> <step> TODO "not built"`, tell
-the user, and stop.
+After ship, the task waits for the merge. `orq show` reads the PR from GitHub and sets
+`MERGED` by itself. When the user asks for changes on the PR, `orq-ship` says what to do.
 
 ## Records
 
@@ -70,6 +70,7 @@ You never set `status: approved` by your own decision.
 ## Never
 
 - Work outside the task worktree, or on the base branch.
-- Merge, force-push, or push to the base branch.
+- Merge, force-push, or push to the base branch. Set `MERGED` yourself.
+- Run `orq clean`. The user runs it.
 - Read `.env*`, keys, or credential files.
 - Skip a gate, or change an approved file without telling the user.

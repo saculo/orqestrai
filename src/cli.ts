@@ -1,4 +1,4 @@
-// orq: the mechanics of orqestrai. Task ids, state, worktrees, zellij tabs, task files.
+// orq: the mechanics of orqestrai. Task ids, state, worktrees, zellij tabs, task files, PR state.
 // The workflow lives in skills/. This program does not decide. It only does.
 
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs"
@@ -6,11 +6,13 @@ import { dirname, join } from "node:path"
 import { BunRuntime, BunServices } from "@effect/platform-bun"
 import { Console, Effect, Layer } from "effect"
 import { Argument, CliError, Command } from "effect/cli"
+import { clean } from "./clean.ts"
 import { OrqConfig } from "./config.ts"
 import { Db } from "./db.ts"
 import { LINK_ROLES, OrqError, STATUSES, STEPS, slugify, TEMPLATES } from "./domain.ts"
 import { addWorktree, baseBranch, requireRef, topLevel } from "./git.ts"
 import { install } from "./init.ts"
+import { syncMerged } from "./pr.ts"
 import { openTab } from "./zellij.ts"
 
 /** The guard hook and the skills call `orq` by name. Without it on PATH the guards are off. */
@@ -90,6 +92,7 @@ const state = Command.make(
 const show = Command.make("show", { id }, ({ id }) =>
   Effect.gen(function* () {
     const db = yield* Db
+    yield* syncMerged([yield* db.get(id)])
     const task = yield* db.get(id)
     const width = Math.max(...Object.keys(task).map((k) => k.length))
     for (const [k, v] of Object.entries(task)) yield* Console.log(`${k.padStart(width)} = ${v ?? ""}`)
@@ -115,10 +118,19 @@ const link = Command.make(
 
 const ls = Command.make("ls", {}, () =>
   Effect.gen(function* () {
-    for (const t of yield* (yield* Db).list)
+    const db = yield* Db
+    yield* syncMerged(yield* db.list)
+    for (const t of yield* db.list)
       yield* Console.log(`${t.id}  ${t.step.padEnd(6)}  ${t.status.padEnd(14)}  ${t.title.slice(0, 50).padEnd(50)}  ${t.updated_at}`)
   }),
 ).pipe(Command.withDescription("all tasks"))
+
+const cleanTask = Command.make("clean", { id }, ({ id }) =>
+  Effect.gen(function* () {
+    for (const line of yield* clean(id)) yield* Console.log(line)
+    yield* Console.log(`close the zellij tab orq-${id} if it is still open`)
+  }),
+).pipe(Command.withDescription("remove a merged or dropped task's worktree and branch; the task stays in orq ls"))
 
 const file = Command.make("file", { id, name: Argument.Literals("name", TEMPLATES) }, ({ id, name }) =>
   Effect.gen(function* () {
@@ -133,7 +145,7 @@ const file = Command.make("file", { id, name: Argument.Literals("name", TEMPLATE
 
 const orq = Command.make("orq").pipe(
   Command.withDescription("orqestrai mechanics. The workflow is in the skills."),
-  Command.withSubcommands([init, newTask, open, state, show, link, ls, file]),
+  Command.withSubcommands([init, newTask, open, state, show, link, ls, file, cleanTask]),
 )
 
 const AppLayer = Db.layer.pipe(Layer.provideMerge(OrqConfig.layer), Layer.provideMerge(BunServices.layer))
