@@ -56,6 +56,23 @@ describe("orq new", () => {
     expect(r.out).toContain("'/orq-task T-0001'")
   })
 
+  test("gives two tasks started at the same moment different ids", async () => {
+    const env = { ...process.env, ORQ_HOME: home, ORQ_ZELLIJ_SESSION: "orq-test-none" } as Record<string, string | undefined>
+    delete env.ZELLIJ
+    const start = (request: string) => Bun.spawn(["bun", CLI, "new", request], { cwd: repo, env, stdout: "pipe", stderr: "pipe" })
+    const runs = [start("one"), start("two"), start("three")]
+    const codes = await Promise.all(runs.map((p) => p.exited))
+    expect(codes).toEqual([0, 0, 0])
+    const ids = orq(["ls"]).out.match(/T-\d{4}/g) ?? []
+    expect(new Set(ids).size).toBe(3)
+  })
+
+  test("leaves no task behind when its worktree cannot be created", () => {
+    sh(["git", "branch", "orq/T-0001-x"], repo) // the branch orq new wants already exists
+    expect(orq(["new", "x"]).code).not.toBe(0)
+    expect(orq(["ls"]).out).not.toContain("T-0001")
+  })
+
   test("gives the next id to each new task", () => {
     orq(["new", "one"])
     expect(orq(["new", "two"]).out).toContain("T-0002  orq/T-0002-two")

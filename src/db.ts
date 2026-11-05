@@ -52,8 +52,10 @@ const attempt = <A>(what: string, f: () => A) =>
 export class Db extends Context.Service<
   Db,
   {
-    readonly nextId: Effect.Effect<string, OrqError>
-    readonly insert: (task: NewTask) => Effect.Effect<void, OrqError>
+    /** Gives the next id and inserts the task in one transaction, so two runs never share an id. */
+    readonly create: (build: (id: string) => NewTask) => Effect.Effect<NewTask, OrqError>
+    /** Removes a task that could not be set up. */
+    readonly remove: (id: string) => Effect.Effect<void, OrqError>
     readonly get: (id: string) => Effect.Effect<Task, OrqError>
     readonly setState: (id: string, step: Step, status: Status, note: string) => Effect.Effect<void, OrqError>
     readonly list: Effect.Effect<ReadonlyArray<Task>, OrqError>
@@ -70,6 +72,7 @@ export class Db extends Context.Service<
         attempt("open", () => {
           mkdirSync(home, { recursive: true })
           const d = new Database(join(home, "state.db"), { create: true, strict: true })
+          d.exec("PRAGMA busy_timeout = 10000") // concurrent orq runs wait instead of failing
           d.exec(SCHEMA)
           migrate(d)
           return d
@@ -84,21 +87,29 @@ export class Db extends Context.Service<
         )
 
       return {
-        nextId: attempt("next id", () => {
-          const row = db.query("SELECT IFNULL(MAX(CAST(substr(id, 3) AS INTEGER)), 0) + 1 AS n FROM tasks").get() as { n: number }
-          return taskId(row.n)
-        }),
-        insert: (t) =>
-          attempt("insert", () =>
-            db.transaction(() => {
-              db.query("INSERT INTO tasks(id, repo, title, branch, worktree) VALUES($id, $repo, $title, $branch, $worktree)").run({
-                id: t.id,
-                repo: t.repo,
-                title: t.title,
-                branch: t.branch,
-                worktree: t.worktree,
+        create: (build) =>
+          attempt("create", () =>
+            db
+              .transaction(() => {
+                const row = db.query("SELECT IFNULL(MAX(CAST(substr(id, 3) AS INTEGER)), 0) + 1 AS n FROM tasks").get() as { n: number }
+                const t = build(taskId(row.n))
+                db.query("INSERT INTO tasks(id, repo, title, branch, worktree) VALUES($id, $repo, $title, $branch, $worktree)").run({
+                  id: t.id,
+                  repo: t.repo,
+                  title: t.title,
+                  branch: t.branch,
+                  worktree: t.worktree,
+                })
+                addEvent.run({ id: t.id, kind: "created", detail: t.note })
+                return t
               })
-              addEvent.run({ id: t.id, kind: "created", detail: t.note })
+              .immediate(),
+          ),
+        remove: (id) =>
+          attempt("remove", () =>
+            db.transaction(() => {
+              for (const table of ["task_links", "events"]) db.query(`DELETE FROM ${table} WHERE task_id = $id`).run({ id })
+              db.query("DELETE FROM tasks WHERE id = $id").run({ id })
             })(),
           ),
         get,
