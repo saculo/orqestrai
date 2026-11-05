@@ -49,3 +49,7 @@ done.>
 
 ## Assumptions
 - <anything still assumed; "none" when none>
+
+## Impl notes
+<Written in impl, after approval: reversible decisions the spec did not give.
+`<W1.2>: <decision>, because <reason>`. Empty at the gate.>

@@ -8,7 +8,7 @@ export type Step = (typeof STEPS)[number]
 export const STATUSES = ["TODO", "IN PROGRESS", "WAITING FOR ME", "BLOCKED", "DROPPED", "MERGED"] as const
 export type Status = (typeof STATUSES)[number]
 
-export const TEMPLATES = ["BRIEF", "RESEARCH", "SPEC"] as const
+export const TEMPLATES = ["BRIEF", "RESEARCH", "SPEC", "VERIFY"] as const
 export type TemplateName = (typeof TEMPLATES)[number]
 
 export interface Task {

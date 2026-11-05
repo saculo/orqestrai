@@ -158,6 +158,12 @@ rejected and does not go there.
 ### 3.3 Impl
 
 - One subagent per task, wave by wave, in the task's worktree.
+- **A subagent gets only its task:** the task block from `SPEC.md`, the ACs and behaviors
+  it serves, the seams, the Design decisions that apply, `GLOSSARY.md`, the test
+  guidelines and `.orqestrai/testing.md`. Not the brief, the research or the chat. When it
+  needs something the spec does not say, it reports the gap and stops; it does not guess.
+- **Subagents edit and test; they do not commit.** Tasks of one wave share the worktree's
+  git index. After the wave, the task session commits each task separately (`orq-git`).
 - TDD for unit, integration and contract tests: one test → its code → next.
   Red before green. Tests only at the seams from `SPEC.md`.
 - A test must fail when the behavior breaks, and keep passing when only the internals
@@ -241,7 +247,26 @@ One step, subagents in parallel, one `VERIFY.md`:
 
 Loop: a `NOT VERIFIED` check or a blocking finding goes back to impl. Max 3 rounds.
 A `root-cause-hash` (step + error class + first frames) stops the loop early when the
-same failure repeats. Non-critical findings go into the PR body, with no notification.
+same failure repeats. After the third failed round, or a repeated root cause, the task
+goes to `WAITING FOR ME` with a short summary from `VERIFY.md`. Non-critical findings go
+into the PR body, with no notification; until ship exists, they stay in `VERIFY.md`
+marked "for the PR body".
+
+The quality gate runs the commands in `.orqestrai/config.toml`:
+
+```toml
+[commands]
+types = "bun run check"
+lint  = "bunx biome ci ."
+test  = "bun test"
+```
+
+Any command not set is skipped and reported as "not configured". It is never guessed,
+and a missing command never fails the gate.
+
+**Models:** fixed in the agent files (`model:` in the frontmatter): implementer and
+verifier Sonnet, reviewer Opus. Per-project models in `config.toml` come when a project
+needs them.
 
 ### 3.5 Learn
 
@@ -347,7 +372,7 @@ generated file says it is generated (edit it in orqestrai).
 
 ```
 .orqestrai/
-  config.toml            base branch, test/lint commands, models per step
+  config.toml            base branch, [commands] for the quality gate
   out-of-scope/<concept>.md
   tasks/<id>/
     RESEARCH.md
@@ -476,8 +501,13 @@ Settled 2026-11-02:
 
 Open:
 
-1. **Build order.** Slice 1 (`orq new`, triage → plan) is done. Proposal: then impl +
-   verify, then ship, then Slack, then the dashboard.
+1. **Build order.** Slice 1 (`orq new`, triage → plan) is done. **Slice 2** (settled
+   2026-11-04): impl, plus verify with the quality gate, the verifier and the reviewer,
+   and the loop back to impl. Tried first on a small local sandbox project (a Bun HTTP
+   API with SQLite), with a `verify-sandbox` skill written by hand; the generator for
+   `verify-<app>` comes later. orqestrai is not run on itself; orqestrai expertise skills
+   come later. **Slice 3:** adversary, e2e writer, verify slots. Then ship, Slack, the
+   dashboard.
 2. ~~Modeling toolbox~~: settled 2026-11-02 (§3.7).
 3. ~~Test guidelines~~: settled 2026-11-03 (§3.3), written in
    `skills/principles/test-behavior/GUIDELINES.md`.

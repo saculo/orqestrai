@@ -3,7 +3,7 @@
 An orchestrated software factory with human gates:
 triage → plan → impl → verify → learn → ship. The design is in [DESIGN.md](DESIGN.md).
 
-Status: slice 1 — `orq new`, and a task session that runs triage and plan.
+Status: slice 2 — `orq new`, and a task session that runs triage, plan, impl and verify.
 
 ## Install (Claude Code)
 
@@ -48,13 +48,14 @@ State is in `~/.orqestrai/state.db`, worktrees in `~/.orqestrai/worktrees/<repo>
 bin/orq                  launcher for src/cli.ts
 src/                     orq: TypeScript, Effect 4, Bun. Mechanics only.
 test/                    CLI and guard tests (bun run test)
-skills/workflow/         task (the orchestrator), triage, plan (steps), grill (how they
-                         ask questions), git (branch, staging, commit and push rules)
+skills/workflow/         task (the orchestrator), triage, plan, impl, verify (steps), grill
+                         (how they ask questions), git (branch, staging, commit, push)
 skills/modeling/         problem-class, consistency-unit, context-distilling: tools that
                          plan and grill load on signals
 skills/principles/       short principles that steps load; test-behavior has GUIDELINES.md
 templates/               task files; `orq file <id> <NAME>` copies one into the task
-agents/researcher        neutral, read-only code research (triage)
+agents/                  researcher (neutral code research), implementer (one task, test
+                         first), verifier (drives the app, never reads code), reviewer
 src/guard/               `orq guard`: guards G1–G4 for task sessions (PreToolUse hook)
 ```
 

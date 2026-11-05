@@ -47,6 +47,7 @@ describe("orq init", () => {
   test("creates .orqestrai/config.toml with the base branch, and keeps an existing one", () => {
     orq(["init"])
     expect(read(".orqestrai/config.toml")).toContain('base_branch = "main"')
+    expect(read(".orqestrai/config.toml")).toContain("[commands]") // the quality gate's commands, to fill in
     writeFileSync(join(repo, ".orqestrai/config.toml"), 'base_branch = "develop"\n')
     orq(["init"])
     expect(read(".orqestrai/config.toml")).toBe('base_branch = "develop"\n')
