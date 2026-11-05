@@ -1,0 +1,41 @@
+# yaml-language-server: $schema=https://coderabbit.ai/integrations/schema.v2.json
+# AI review of pull requests. The rules it checks against live in this repo; it only points to them.
+language: en-US
+reviews:
+  profile: chill
+  request_changes_workflow: false
+  high_level_summary: true
+  poem: false
+  auto_review:
+    enabled: true
+    drafts: false
+  path_filters:
+    - "!bun.lock"
+  path_instructions:
+    - path: "skills/**/*.md"
+      instructions: >-
+        Agent skills and their reference files. Check: short sentences in plain, simplified
+        English (ASD-STE100 style); every `orq-*` skill or agent it names exists in skills/ or
+        agents/; it never names or links a draft (anything under drafts/, by name or by path);
+        no instructions that contradict DESIGN.md. Flag vague wording an agent could read two
+        ways.
+    - path: "skills/**/SKILL.md"
+      instructions: >-
+        A skill manifest: frontmatter `name` starts with `orq-`, a `description` says when to
+        use it, at most ~150 lines.
+    - path: "drafts/**/*.md"
+      instructions: >-
+        Draft skills, not installed by orq init. Review the idea and its examples, not polish.
+        No skill in skills/ may name a draft.
+    - path: "src/**/*.ts"
+      instructions: >-
+        orq does mechanics only (DESIGN.md §4): ids, state, worktrees, tabs, files. Flag any
+        workflow decision (step order, gates, routing) moved into code. src/guard/decide.ts must
+        stay plain TypeScript (no Effect, no bun:* imports). About 150 lines per module.
+    - path: "test/**/*.ts"
+      instructions: >-
+        Judge tests by skills/principles/test-behavior/GUIDELINES.md: assertions on observable
+        behavior, given state built through the CLI, real git instead of mocks. Flag a test that
+        would still pass when the behavior breaks.
+chat:
+  auto_reply: true
