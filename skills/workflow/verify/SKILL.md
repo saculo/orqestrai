@@ -97,7 +97,8 @@ yourself; a report is a claim.
 
 **Failing items:** each gate `fail`, each `NOT VERIFIED` check, each blocking finding.
 `INCONCLUSIVE` is not a pass: when it comes from the app not starting, it is a failing
-item; when a surface has no verify skill, report it to the user at the end.
+item. When a surface has no verify skill, the check was never run, and impl cannot fix
+that: it is a **missing skill**, see Decide.
 
 Non-blocking findings go to **For the PR body**. Do not notify the user about them.
 
@@ -107,6 +108,10 @@ round before.
 
 ## 6. Decide
 
+- **A missing skill** (any check, whatever else happened): the round cannot pass. Finish
+  the round as below, but instead of passing, run `orq state <id> verify "WAITING FOR ME"
+  "no verify-<surface> skill for V3"` and ask the user: write the skill (then run verify
+  again), or change the check to `manual` in `SPEC.md` (then it is theirs at the PR).
 - **No failing items:** `status: passed`. Continue with the next step in `orq-task`.
 - **Failing items, round < 3, and no root cause repeated from the round before:**
   `status: failed`, outcome "back to impl: <items>". Run
@@ -124,4 +129,5 @@ Commit `VERIFY.md` and the evidence: `docs(<id>): verify round <n>`.
 - Read the implementer's reports into the verifier's or the reviewer's prompt.
 - Fix code here. Verify finds; impl fixes.
 - Mark a check passed that the verifier did not mark `VERIFIED`.
+- Pass a round with a check that nobody ran.
 - Leave a slot taken when verify stops, except a kept one.

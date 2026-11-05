@@ -30,7 +30,9 @@ way forward: another impl round, or a fix you name. Stop.
 
 ## 3. Write the PR body
 
-Run `orq file <id> PR` and fill it from the task files. Copy, do not invent:
+Run `orq file <id> PR` and fill it from the task files. When `PR.md` exists (you ship
+again after changes), update it instead: the sections below, from the task files as they
+are now. Copy, do not invent:
 
 - **What and why:** from `BRIEF.md`.
 - **Acceptance criteria:** each AC from `SPEC.md`, with the verdict and one line of
@@ -65,8 +67,9 @@ of open findings. Stop.
   `orq clean <id>`.
 - **The user asks for changes** (in this session or as PR comments they point you to):
   treat them like verify findings. Run impl for them, then verify. Run learn only if the
-  change taught something new. Then ship again: rebase, gate, push, and update the body
-  with `gh pr edit <url> --body-file .orqestrai/tasks/<id>/PR.md`.
+  change taught something new. Then ship again: rebase, gate, push, update `PR.md` (do
+  not run `orq file` again), and the body with
+  `gh pr edit <url> --body-file .orqestrai/tasks/<id>/PR.md`.
 
 ## Never
 
