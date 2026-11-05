@@ -44,7 +44,8 @@ Work that does not depend on the gap may continue.
 - Read `.env*`, keys or credential files.
 - Delete or weaken a test to make it pass. A failing test that you think is wrong is a
   gap.
-- Write e2e tests. They are written in verify.
+- Write or change e2e tests (the project's e2e module). Verify owns them. A failing e2e
+  test that you think is wrong is a gap.
 
 ## Report
 

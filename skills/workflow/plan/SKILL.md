@@ -65,24 +65,25 @@ here. Anything not decided goes under **Assumptions**.
 - **Seams:** the public interfaces where tests go. Impl writes unit, integration and
   contract tests only there.
 - **Behaviors:** given / when / then, given state built through the API, level, seam,
-  pattern.
+  pattern. **One level per behavior.** A behavior at the e2e level is proven by an e2e
+  test in verify; no task writes it, and no lower-level test repeats it.
 - **Design:** only the decisions that shape the tasks. Link ADRs that apply. No essay.
 - **Tasks:** small, each ends in a state that can be checked. A task names the files or
   modules it touches, the ACs it serves and the behaviors it tests. Group tasks in waves.
   Two tasks in one wave must not touch the same files.
-- **Verification plan:** every AC is covered by a behavior test (impl), a check (verify),
-  or both. Check kinds: e2e journey (browser, CLI, API), visual comparison, security
-  scan, contract, performance, manual (the user). Use manual only when no automated check
-  can prove the claim. The verifier and the e2e writer will not read the code, so
-  describe each check by what a user does and sees. **Committed?** for each e2e check:
-  yes keeps it as a regression test in the project's e2e module (the default for main
-  journeys); no means driving the app is enough.
+- **Verification plan:** every AC is covered by a behavior test (impl) or a check
+  (verify). The verifier does not read the code, so describe each check by what a user
+  does and sees. **Kind:**
+  - `e2e` (the default): the verifier writes it as a test in the project's e2e module and
+    commits it.
+  - `driven`: the verifier drives the app by hand and keeps the evidence. Only when a test
+    cannot judge it (how a screen looks) or costs far more than it protects. Say why.
+  - `manual`: the user, at the PR. Only when no agent can judge it. Say why.
   **Surface** for each automated check: the part of the app it drives (`api`, `web`,
   `cli`, …). Each surface needs a driver skill, `.claude/skills/verify-<surface>/`. When
   one is missing, add an open decision for the user: write that skill before impl, or
   make those checks manual.
-- **Risk:** low, medium or high, with the reasons. High risk turns on the adversary in
-  verify.
+- **Risk:** low, medium or high, with the reasons, the blast radius and the priority.
 
 ## 5. Gate
 

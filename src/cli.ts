@@ -13,6 +13,8 @@ import { LINK_ROLES, OrqError, STATUSES, STEPS, slugify, TEMPLATES } from "./dom
 import { addWorktree, baseBranch, requireRef, topLevel } from "./git.ts"
 import { install } from "./init.ts"
 import { syncMerged } from "./pr.ts"
+import { slot } from "./slot-cli.ts"
+import { Slots } from "./slots.ts"
 import { openTab } from "./zellij.ts"
 
 /** The guard hook and the skills call `orq` by name. Without it on PATH the guards are off. */
@@ -145,10 +147,10 @@ const file = Command.make("file", { id, name: Argument.Literals("name", TEMPLATE
 
 const orq = Command.make("orq").pipe(
   Command.withDescription("orqestrai mechanics. The workflow is in the skills."),
-  Command.withSubcommands([init, newTask, open, state, show, link, ls, file, cleanTask]),
+  Command.withSubcommands([init, newTask, open, state, show, link, ls, file, cleanTask, slot]),
 )
 
-const AppLayer = Db.layer.pipe(Layer.provideMerge(OrqConfig.layer), Layer.provideMerge(BunServices.layer))
+const AppLayer = Layer.mergeAll(Db.layer, Slots.layer).pipe(Layer.provideMerge(OrqConfig.layer), Layer.provideMerge(BunServices.layer))
 
 Command.run(orq, { version: "0.1.0" }).pipe(
   Effect.tapError((e) =>

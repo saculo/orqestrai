@@ -7,7 +7,8 @@
 - [x] **AC1** <text>. V1 `VERIFIED`: <evidence in one line>.
 
 ## For you to check
-<The manual checks from the verification plan, each with its steps. "None" when none.>
+<The manual checks from the verification plan, each with its steps. "None" when none.
+When verify kept the app up: "The app runs on port <port> until <time> (verify slot).">
 - [ ] <check>: <steps>
 
 ## Verify
