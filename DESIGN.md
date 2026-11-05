@@ -331,8 +331,9 @@ which updates the body with `gh pr edit`.
 worktree and the local branch of a `MERGED` or `DROPPED` task. The task row, its links and
 its events stay. It refuses when the worktree has uncommitted changes, or when the branch
 has commits the PR does not have. A merged task's files are in the base branch already;
-a dropped task's files are first copied to `~/.orqestrai/archive/<repo>/<id>/`, where
-triage looks for earlier drops.
+a dropped task is never merged, so its task folder and the out-of-scope notes on its
+branch are first copied to `~/.orqestrai/archive/<repo>/<id>/`, where triage looks for
+earlier drops. It refuses a dropped branch that changes any other file.
 
 ### 3.7 Modeling toolbox (on signals)
 
@@ -462,7 +463,7 @@ plain TS (no `bun:*` imports), because pi loads extensions under Node.
 ### The `verify-<surface>` skills (one per surface)
 
 A surface is a part of the app that a check drives: `api`, `web`, `cli`. A project with
-one surface has one skill (`verify-app`). Each check in the verification plan names its
+one surface has one skill, named after that surface (`verify-api` for an API). Each check in the verification plan names its
 surface; the verifier loads only the skills of the surfaces in the task. The skill is a
 **driver's manual, not a test list**: what to check is in the task's `SPEC.md`, the
 committed e2e tests are in the project's e2e module. Plan asks you when a surface in the

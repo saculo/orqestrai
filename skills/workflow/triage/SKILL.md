@@ -24,9 +24,9 @@ Two checks:
 - **Already built?** Search for the requested behavior **by domain concept**, not by the
   request's words ("night theme" is the same concept as "dark mode"). Note where you looked.
 - **Rejected before?** Read `.orqestrai/out-of-scope/*.md`. Match by concept, not by
-  keyword. Also read the briefs of dropped tasks:
-  `${ORQ_HOME:-~/.orqestrai}/archive/<repo folder name>/*/BRIEF.md` (`orq clean` keeps
-  them there).
+  keyword. Also read what dropped tasks left in the archive (`orq clean` keeps it there):
+  `${ORQ_HOME:-~/.orqestrai}/archive/<repo folder name>/*/BRIEF.md` and
+  `.../archive/<repo folder name>/*/out-of-scope/*.md`.
 
 ## 2. Write neutral research questions
 
@@ -107,8 +107,8 @@ stale. Show the user a short summary of the brief and ask for approval. That is 
   ```
 
   If the file exists, add the task to **Requests**.
-- Commit the out-of-scope file on the task branch (it reaches the base branch when the
-  user merges that branch). Run `orq state <id> triage DROPPED "<reason>"` and tell the
+- Commit the out-of-scope file on the task branch. A dropped task is never merged:
+  `orq clean` copies the file to the archive, where the next triage reads it. Run `orq state <id> triage DROPPED "<reason>"` and tell the
   user. The task ends here.
 
 When a match in out-of-scope comes up and the user changes their mind, delete or update

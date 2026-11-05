@@ -47,7 +47,7 @@ beforeEach(() => {
   mkdirSync(fakeBin)
   writeFileSync(
     join(fakeBin, "gh"),
-    `#!/bin/sh\n[ -n "$FAKE_GH_FAIL" ] && exit 1\nprintf '{"state":"%s","headRefOid":"%s"}' "$FAKE_GH_STATE" "$FAKE_GH_HEAD"\n`,
+    `#!/bin/sh\n[ "$*" = "pr view https://github.com/o/r/pull/7 --json state,headRefOid" ] || { echo "unexpected: gh $*" >&2; exit 2; }\n[ -n "$FAKE_GH_FAIL" ] && exit 1\nprintf '{"state":"%s","headRefOid":"%s"}' "$FAKE_GH_STATE" "$FAKE_GH_HEAD"\n`,
   )
   chmodSync(join(fakeBin, "gh"), 0o755)
   git(["init", "-q", "-b", "main"], repo)
@@ -103,6 +103,17 @@ describe("orq clean", () => {
     expect(existsSync(worktree())).toBe(true)
   })
 
+  test("refuses when the branch has commits that are not in the PR, also without its worktree", () => {
+    shipped()
+    const gh = merged()
+    git(["commit", "-q", "--allow-empty", "-m", "late fix"], worktree())
+    git(["worktree", "remove", worktree()], repo)
+    const r = orq(["clean", "T-0001"], gh)
+    expect(r.code).toBe(1)
+    expect(r.err).toContain("some commits are not in the PR")
+    expect(branchExists()).toBe(true)
+  })
+
   test("refuses when the worktree has uncommitted changes", () => {
     shipped()
     writeFileSync(join(worktree(), "notes.txt"), "draft\n")
@@ -123,5 +134,30 @@ describe("orq clean", () => {
     expect(readFileSync(join(home, "archive/proj/T-0001/BRIEF.md"), "utf8")).toBe("we will not do this\n")
     expect(existsSync(worktree())).toBe(false)
     expect(branchExists()).toBe(false)
+  })
+
+  test("archives the out-of-scope note a dropped task wrote on its branch", () => {
+    orq(["new", "Add search"])
+    mkdirSync(join(worktree(), ".orqestrai/out-of-scope"), { recursive: true })
+    writeFileSync(join(worktree(), ".orqestrai/out-of-scope/search.md"), "# Search\n")
+    git(["add", "."], worktree())
+    git(["commit", "-q", "-m", "docs(T-0001): search is out of scope"], worktree())
+    orq(["state", "T-0001", "triage", "DROPPED"])
+    expect(orq(["clean", "T-0001"]).code).toBe(0)
+    expect(readFileSync(join(home, "archive/proj/T-0001/out-of-scope/search.md"), "utf8")).toBe("# Search\n")
+    expect(branchExists()).toBe(false)
+  })
+
+  test("refuses a dropped branch that changes other files, so they are not lost", () => {
+    orq(["new", "Add search"])
+    writeFileSync(join(worktree(), "search.ts"), "export {}\n")
+    git(["add", "."], worktree())
+    git(["commit", "-q", "-m", "wip"], worktree())
+    orq(["state", "T-0001", "triage", "DROPPED"])
+    const r = orq(["clean", "T-0001"])
+    expect(r.code).toBe(1)
+    expect(r.err).toContain("outside its task folder and .orqestrai/out-of-scope/: search.ts")
+    expect(existsSync(worktree())).toBe(true)
+    expect(branchExists()).toBe(true)
   })
 })
