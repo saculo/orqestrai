@@ -9,6 +9,7 @@ import { Db } from "./db.ts"
 import { OrqError, type Task } from "./domain.ts"
 import { prOf, syncMerged, viewPr } from "./pr.ts"
 import { exec, run } from "./proc.ts"
+import { Slots } from "./slots.ts"
 
 const refuse = (message: string) => Effect.fail(new OrqError({ message: `${message} Nothing was removed.` }))
 
@@ -45,6 +46,8 @@ export const clean = (id: string) =>
       return yield* refuse(`${id} is ${task.status}. orq clean removes only a merged or dropped task.`)
 
     const done: string[] = []
+    const slot = yield* (yield* Slots).free(id)
+    if (slot) done.push(`freed verify slot ${slot.n}`)
     if (existsSync(task.worktree)) {
       if (yield* exec("git", ["status", "--porcelain"], task.worktree))
         return yield* refuse(`${task.worktree} has uncommitted changes. Commit or remove them first.`)

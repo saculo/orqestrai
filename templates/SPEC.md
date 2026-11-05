@@ -27,7 +27,7 @@ done.>
 ## Behaviors
 - **B1 (AC1)** <one sentence in glossary words>.
   Given <state, built through the API>. When <action>. Then <what is observed>.
-  Level: unit | integration | contract | e2e. Seam: <seam>. Pattern: <hard-to-test pattern, or none>.
+  Level: unit | integration | contract | e2e (written in verify). Seam: <seam>. Pattern: <hard-to-test pattern, or none>.
 
 ## Design
 - <decision>, because <reason>. (ADR-xxxx if it applies)
@@ -40,9 +40,12 @@ done.>
 - **W2.1** <what>. Touches: <files/modules>. Serves: AC2. Tests: B2.
 
 ## Verification plan
-| Check | Claim | Surface | Kind | How (what a user does and sees) | Committed? | Evidence |
-|-------|-------|---------|------|---------------------------------|------------|----------|
-| V1    | AC1   | api     | e2e  | <steps>                         | yes / no   | <screenshot, response> |
+| Check | Claim | Surface | Kind | How (what a user does and sees) | Evidence |
+|-------|-------|---------|------|---------------------------------|----------|
+| V1    | AC1   | api     | e2e  | <steps>                         | <the e2e test; a response> |
+
+<!-- Kind: e2e (a committed test, the default) | driven (the verifier drives the app by
+hand; say why it cannot be a test) | manual (the user, at the PR; say why). -->
 
 <!-- Surface: the part of the app a check drives (api, web, cli, …). Each surface has a
 verify skill, .claude/skills/verify-<surface>/, that says how to drive it. -->

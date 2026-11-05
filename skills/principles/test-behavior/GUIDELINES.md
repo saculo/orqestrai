@@ -21,7 +21,10 @@ reviewer in verify (judges each assertion).
 - A behavior that needs storage is an integration test with the real store, not a unit
   test with a fake repository.
 - Impl writes unit, integration and contract tests, test first. E2E tests are written in
-  verify by the e2e writer, from verified checks.
+  verify by the verifier, which does not read the app's source. Impl never changes them.
+- **One level per behavior.** A behavior covered by an e2e test gets no second test at a
+  lower level. Lower levels are for what e2e cannot cover well: rule variants, edge
+  cases, failures of other systems.
 
 ## 2. Choosing the level
 

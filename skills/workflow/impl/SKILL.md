@@ -80,6 +80,9 @@ command that failed, each `NOT VERIFIED` check, each blocking finding.
   task block as in step 2 plus the failing items and their evidence. Not the reviewer's
   other findings, not the verifier's reasoning.
 - An item that shows the spec itself is wrong is not a fix: ask the user.
+- A failing e2e test is fixed in the app, never in the test. E2E tests (the `[e2e] dir`
+  in `.orqestrai/config.toml`) belong to verify. If an implementer reports that one is
+  wrong, write it into `VERIFY.md` under the round for the verifier to decide next round.
 - Commit as in step 3: `fix(<id>): <subject>`, the round and the items in the body.
 
 ## 5. Done

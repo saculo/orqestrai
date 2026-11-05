@@ -51,7 +51,7 @@ answer in the pane or in the Slack thread.
 | triage | task session (interactive)   | Opus   | request, code, ADRs, glossary | `RESEARCH.md`, `BRIEF.md` |
 | plan   | task session (interactive)   | Opus   | `BRIEF.md`, `RESEARCH.md`, code, ADRs | `SPEC.md`         |
 | impl   | subagent per task, in waves  | Sonnet | `SPEC.md`, code               | code + UT/IT/contract tests |
-| verify | 2–3 subagents in parallel    | Sonnet + Opus | see §3.4               | `VERIFY.md`               |
+| verify | 2 subagents in parallel      | Sonnet + Opus | see §3.4               | `VERIFY.md`, e2e tests    |
 | learn  | subagent                     | Opus   | all task files, diff          | `LEARN.md` + the applied proposals |
 | ship   | task session                 | Sonnet | all task files                | `PR.md`, the PR           |
 
@@ -145,15 +145,15 @@ rejected and does not go there.
 - **Verification plan**: how each AC is proven — a test written in impl, a check run in
   verify, or both. One row per check:
 
-  | Check | Claim | Kind | How | Committed? | Evidence |
-  |-------|-------|------|-----|------------|----------|
+  | Check | Claim | Surface | Kind | How | Evidence |
+  |-------|-------|---------|------|-----|----------|
 
-  Kinds: e2e journey (browser / CLI / API), visual comparison, security scan,
-  contract, performance, manual (you). **Committed?** is set for e2e checks: yes = a
-  test in the project's e2e module, kept as a regression test; no = the verifier only
-  drives the app ("clicking") and keeps the evidence.
-- **Risk**: low / medium / high, blast radius, priority. High risk turns on the
-  adversarial review.
+  Kinds: `e2e` (a committed test in the project's e2e module; the default), `driven`
+  (the verifier drives the app by hand: how a screen looks, or a test that costs far
+  more than it protects), `manual` (you, at the PR). `driven` and `manual` need a
+  reason. Each behavior has one level, so an e2e behavior is not tested again lower.
+- **Risk**: low / medium / high, blast radius, priority. High risk will turn on the
+  adversary (§3.4, later).
 
 ### 3.3 Impl
 
@@ -168,7 +168,7 @@ rejected and does not go there.
   Red before green. Tests only at the seams from `SPEC.md`.
 - A test must fail when the behavior breaks, and keep passing when only the internals
   change.
-- Impl does not write e2e tests; the e2e writer in verify does (§3.4).
+- Impl does not write or change e2e tests; the verifier in verify does (§3.4).
 
 Test guidelines, two layers:
 
@@ -221,48 +221,72 @@ finding).
 ### 3.4 Verify
 
 Three gate tiers: **quality** (deterministic: build, types, lint, tests, scanners),
-**review** (reviewer and adversary, fresh contexts, against `SPEC.md`), **acceptance**
+**review** (verifier and reviewer, fresh contexts, against `SPEC.md`), **acceptance**
 (you, at the PR). A gate is added only for a named risk.
 
-One step, subagents in parallel, one `VERIFY.md`:
+**E2E first.** A check that can be an e2e test *is* an e2e test: the test is the proof,
+and it stays in the project's e2e module as a regression test. A check that cannot be a
+test is driven by hand. Only what no agent can judge goes to you. Nothing is proven twice.
 
-- **Verifier** (Sonnet). Does not read the source code (prompt rule). Runs the
-  verification plan against the running app, through the project's `verify-<surface>` skills
-  (§5): every check, driven against the app. Writes nothing.
-- **E2E writer** (Sonnet), after the verifier, in the same slot. Turns each `VERIFIED`
-  check marked "Committed? = yes" into a test in the project's e2e module, from the AC
-  text, the verifier's evidence and the running app. Does not read the app's source;
-  reads only the e2e module and `.orqestrai/testing.md`. Runs each new test once: if it
-  fails while the check passed, it fixes the test, never the app. A `NOT VERIFIED`
-  check gets no test. Verdict per check: `VERIFIED` / `NOT VERIFIED` / `INCONCLUSIVE`, with evidence.
-  Also runs Semgrep, ast-grep and gitleaks.
+One round:
+
+```
+1. Quality gate     [commands] types, lint, test (unit / integration / contract); no app
+2. orq slot take    in the background, waits up to 15 min; then WAITING FOR ME
+3. In parallel:
+   Verifier (never reads source)            Reviewer (never runs the app)
+     starts the app once, in the slot         reads diff + SPEC
+     e2e:    writes the test (round 1) or     hypotheses first, Spec + Standards
+             reruns it (round 2+), runs it    ≥75 confidence, max 5
+     driven: drives the app, keeps evidence   round 2+: prior findings
+     manual: not run; goes to you at the PR
+4. Commit the e2e tests (failing ones too); keep or free the slot
+5. VERIFY.md: failing items → impl (max 3 rounds), else passed → learn
+```
+
+- **Verifier** (Sonnet). Does not read the app's source, its other tests or the diff
+  (prompt rule). Reads the `verify-<surface>` skills (§5), the e2e module and
+  `.orqestrai/testing.md`. When a new e2e test fails, it drives that step by hand once:
+  the app is wrong → `NOT VERIFIED`; the test is wrong → it fixes the test (at most 2
+  times); unclear → `INCONCLUSIVE`. Verdict per check: `VERIFIED` / `NOT VERIFIED` /
+  `INCONCLUSIVE`, with evidence. One app instance serves the e2e and the driven checks.
+- **E2E tests are the spec of the check.** Impl never changes them. When impl thinks one
+  is wrong, it reports a gap; the verifier decides in the next round, by driving the app.
 - **Reviewer** (Opus). Reads the diff and `SPEC.md`, not the builder's summary.
   - Writes 2–4 own hypotheses before it reads anything else.
   - Two axes, reported apart: **Standards** (repo rules + code smells) and **Spec**.
   - Reports only findings with confidence ≥ 75, at most 5.
   - Drops issues that already exist on the base branch.
   - In round 2+, first checks each prior finding: fixed / not fixed / no longer applies.
-- **Adversary** (only when risk is high). Tries to break the change. A finding counts
-  only when a run proves it (failing test, repro, command output).
+- **Adversary**: later, optional, only for risk `high`. It reads the diff, guesses where
+  the change breaks (empty input, two calls at once, a missing permission, a retry after
+  a timeout) and proves it with a run; its repros go to `evidence/adversary/`, never into
+  the test suite; a proven finding goes back to impl, which writes the regression test.
+  In round 2+ it reruns its repros only.
 
 Loop: a `NOT VERIFIED` check or a blocking finding goes back to impl. Max 3 rounds.
 A `root-cause-hash` (step + error class + first frames) stops the loop early when the
 same failure repeats. After the third failed round, or a repeated root cause, the task
 goes to `WAITING FOR ME` with a short summary from `VERIFY.md`. Non-critical findings go
-into the PR body, with no notification; until ship exists, they stay in `VERIFY.md`
-marked "for the PR body".
+into the PR body, with no notification.
 
-The quality gate runs the commands in `.orqestrai/config.toml`:
+The quality gate runs the commands in `.orqestrai/config.toml`, except `e2e`, which the
+verifier runs against the app:
 
 ```toml
 [commands]
 types = "bun run check"
 lint  = "bunx biome ci ."
 test  = "bun test"
+e2e   = "bun test e2e/"
+
+[e2e]
+dir = "e2e/"
 ```
 
 Any command not set is skipped and reported as "not configured". It is never guessed,
-and a missing command never fails the gate.
+and a missing command never fails the gate. With no `[e2e] dir`, e2e checks are driven
+by hand and the round says "no e2e module".
 
 **Models:** fixed in the agent files (`model:` in the frontmatter): implementer and
 verifier Sonnet, reviewer Opus. Per-project models in `config.toml` come when a project
@@ -378,6 +402,7 @@ is generated. A rerun replaces its own `orq-*` files and keeps the rest.
 | `orq send <id> "<text>"`   | types text into the task's zellij pane                      |
 | `orq ls`                   | lists tasks and status; reads merged PRs from `gh`          |
 | `orq clean <id>`           | removes a merged or dropped task's worktree and branch      |
+| `orq slot take\|keep\|free\|ls` | verify slots (§5)                                    |
 
 `orq ask` and `orq send` come with the Slack bridge (after slice 4).
 
@@ -457,12 +482,21 @@ hand for now). One skill combines:
 
 ### Running the app on one 16 GB VPS
 
-- **Verify slots.** Only verify needs a running app. A slot is a lock (in SQLite).
-  v1: 1 slot. Impl and the other steps do not take a slot, so they still run in parallel.
-- **Per slot:** `docker compose -p orq-<id> up` with `mem_limit` on each service.
-  Torn down when verify ends.
-- **Manual checks:** the slot stays up while the task is WAITING FOR ME, with a TTL
-  (e.g. 2 h). The URL is served only on Tailscale (`tailscale serve`).
+- **Verify slots.** Only verify needs a running app. A slot is a lock in SQLite:
+  `orq slot take <id> [--wait <s>]`, `keep`, `free`, `ls`. `ORQ_SLOTS` slots, default 1.
+  Impl and the other steps do not take a slot, so they still run in parallel.
+- **What a slot gives:** `ORQ_SLOT=<n>`, `ORQ_PORT_BASE` (4100, 4200, …; `ORQ_PORT_START`)
+  and `ORQ_PROJECT=orq-<id>`. orq keeps only the lock. How the app starts is the
+  `verify-<surface>` skill's job, for example `docker compose -p $ORQ_PROJECT up` with
+  `mem_limit` on each service.
+- **Expiry:** a slot expires after `ORQ_SLOT_TTL` (2 h). The next `take` stops an expired
+  slot's app and frees it, so a crashed session cannot hold it forever.
+- **Manual checks:** when the plan has them and the round passes, verify keeps the app up
+  (`orq slot keep <id> --stop "<cmd>" --port <p>`) until the slot expires or you run
+  `orq slot free <id>`, which runs the stop command. On the VPS, `ORQ_SERVE` serves the
+  port to you, for example `tailscale serve --bg --https={port} http://127.0.0.1:{port}`,
+  and `ORQ_UNSERVE` stops that (`tailscale serve --https={port} off`). Locally, leave
+  them unset. `orq clean` frees the task's slot too.
 - **Later: a second VPS with Argo CD** for preview environments per task (ApplicationSet,
   pull-request generator). Until then, the same compose files can also run there with
   `DOCKER_HOST=ssh://verify-box`. No change to the skills.
@@ -544,8 +578,11 @@ Open:
    `verify-<surface>` comes later. orqestrai is not run on itself; orqestrai expertise
    skills come later. **Slice 3** (settled 2026-11-05): learn and ship, `orq clean`,
    `MERGED` read from `gh`, verify skills per surface. It comes before the adversary,
-   because without ship the whole flow cannot run on a real project. **Slice 4:**
-   adversary, e2e writer, verify slots. Then Slack, the dashboard.
+   because without ship the whole flow cannot run on a real project. **Slice 4**
+   (settled 2026-11-05): e2e-first verify (the verifier writes and runs e2e tests; kinds
+   `e2e` / `driven` / `manual`; one level per behavior; impl never changes e2e tests),
+   verify slots with wait, expiry, keep and serve. The adversary is later and optional,
+   for risk `high` only. Then Slack, the dashboard.
 2. ~~Modeling toolbox~~: settled 2026-11-02 (§3.7).
 3. ~~Test guidelines~~: settled 2026-11-03 (§3.3), written in
    `skills/principles/test-behavior/GUIDELINES.md`.
