@@ -12,6 +12,7 @@ import { Db } from "./db.ts"
 import { LINK_ROLES, OrqError, STATUSES, STEPS, slugify, TEMPLATES } from "./domain.ts"
 import { addWorktree, baseBranch, requireRef, topLevel } from "./git.ts"
 import { install } from "./init.ts"
+import { Pg } from "./pg.ts"
 import { syncMerged } from "./pr.ts"
 import { slot } from "./slot-cli.ts"
 import { Slots } from "./slots.ts"
@@ -150,7 +151,11 @@ const orq = Command.make("orq").pipe(
   Command.withSubcommands([init, newTask, open, state, show, link, ls, file, cleanTask, slot]),
 )
 
-const AppLayer = Layer.mergeAll(Db.layer, Slots.layer).pipe(Layer.provideMerge(OrqConfig.layer), Layer.provideMerge(BunServices.layer))
+const AppLayer = Layer.mergeAll(Db.layer, Slots.layer).pipe(
+  Layer.provideMerge(Pg.layer),
+  Layer.provideMerge(OrqConfig.layer),
+  Layer.provideMerge(BunServices.layer),
+)
 
 Command.run(orq, { version: "0.1.0" }).pipe(
   Effect.tapError((e) =>

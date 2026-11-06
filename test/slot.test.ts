@@ -1,22 +1,26 @@
 // Verify slots through the command line: take, wait, keep, free, expiry.
 // ORQ_SERVE / ORQ_UNSERVE and the stop commands write marker files, so the test sees them run.
-import { afterEach, beforeEach, describe, expect, test } from "bun:test"
+import { afterEach, beforeAll, beforeEach, describe, expect, test } from "bun:test"
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join, resolve } from "node:path"
+import { freshDatabase, startPostgres } from "./pg.ts"
 
 const CLI = resolve(import.meta.dir, "..", "src", "cli.ts")
-let dir: string, repo: string, home: string
+let dir: string, repo: string, home: string, pg: Record<string, string>
 
 const orq = (args: string[], extra: Record<string, string> = {}) => {
-  const env = { ...process.env, ORQ_HOME: home, ORQ_ZELLIJ_SESSION: "orq-test-none", ...extra } as Record<string, string | undefined>
+  const env = { ...process.env, ORQ_HOME: home, ...pg, ORQ_ZELLIJ_SESSION: "orq-test-none", ...extra } as Record<string, string | undefined>
   delete env.ZELLIJ
   const p = Bun.spawnSync([process.execPath, CLI, ...args], { cwd: repo, env, stdout: "pipe", stderr: "pipe" })
   return { code: p.exitCode, out: p.stdout.toString(), err: p.stderr.toString() }
 }
 const marker = (name: string) => join(dir, name)
 
-beforeEach(() => {
+beforeAll(startPostgres, 120_000)
+
+beforeEach(async () => {
+  pg = await freshDatabase()
   dir = mkdtempSync(join(tmpdir(), "orq-slot-"))
   repo = join(dir, "proj")
   home = join(dir, "home")
@@ -48,6 +52,12 @@ describe("orq slot", () => {
     expect(orq(["slot", "take", "T-0001"]).out).toContain("ORQ_SLOT=1")
   })
 
+  test("each machine has its own slots in the shared database", () => {
+    orq(["slot", "take", "T-0001"], { ORQ_HOST: "vps" })
+    expect(orq(["slot", "take", "T-0002"], { ORQ_HOST: "laptop" }).out).toContain("ORQ_SLOT=1")
+    expect(orq(["slot", "ls"], { ORQ_HOST: "laptop" }).out).not.toContain("T-0001")
+  })
+
   test("when every slot is taken, take fails and names who holds it", () => {
     orq(["slot", "take", "T-0001"])
     const r = orq(["slot", "take", "T-0002"])
@@ -57,7 +67,7 @@ describe("orq slot", () => {
 
   test("take --wait gets the slot when it is freed while waiting", async () => {
     orq(["slot", "take", "T-0001"])
-    const env = { ...process.env, ORQ_HOME: home } as Record<string, string | undefined>
+    const env = { ...process.env, ORQ_HOME: home, ...pg } as Record<string, string | undefined>
     delete env.ZELLIJ
     const waiting = Bun.spawn([process.execPath, CLI, "slot", "take", "T-0002", "--wait", "20"], { cwd: repo, env, stdout: "pipe" })
     await Bun.sleep(1500)

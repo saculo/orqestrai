@@ -381,8 +381,8 @@ skills. Size budget: about 150 lines per module. `src/domain.ts` is the one defi
 steps, statuses and task fields. Tests drive the CLI (`test/`).
 
 Install: not a Claude Code plugin. Today: a checkout with `orq` on PATH, then `orq init`
-in each project. Later: an npm package run with Bun (`bunx orqestrai init`). Bun is
-needed at runtime (`bun:sqlite`).
+in each project. Later: an npm package run with Bun (`bunx orqestrai init`), released
+from CI. Bun is needed at runtime (its built-in Postgres client, `Bun.SQL`).
 
 `orq init` writes `.orqestrai/config.toml` (if missing) and, into `.claude/`, every skill
 from `skills/<group>/<name>/` flat as `skills/<name>/` (the frontmatter name, always
@@ -393,9 +393,9 @@ is generated. A rerun replaces its own `orq-*` files and keeps the rest.
 |----------------------------|-------------------------------------------------------------|
 | `orq init`                 | creates `.orqestrai/`, writes skills, agents and the guard hook into `.claude/` |
 | `orq guard`                | the PreToolUse guard hook (§6)                              |
-| `orq new "<request>"`      | task id, SQLite row, worktree, branch, zellij tab           |
+| `orq new "<request>"`      | task id, task row, worktree, branch, zellij tab             |
 | `orq open <id>`            | opens the task's tab again (after a restart)                |
-| `orq state <id> <step> <status> [note]` | updates the SQLite row, adds an event          |
+| `orq state <id> <step> <status> [note]` | updates the task row, adds an event            |
 | `orq show <id>`            | one task, its links and its last events                     |
 | `orq link <id> <kind> <ref> [origin\|related]` | links the task to an outside reference |
 | `orq file <id> <NAME>`     | new task file from `templates/`                             |
@@ -446,9 +446,21 @@ plain TS (no `bun:*` imports), because pi loads extensions under Node.
 ### State
 
 - Content: Markdown files + git.
-- Index: one SQLite file. `tasks(id, repo, title, branch, worktree, step, status,
-  created_at, updated_at)`, `events(task_id, at, kind, detail)` and
-  `task_links(task_id, kind, ref, role)`.
+- Index: one **shared Postgres** database for every machine (`src/pg.ts`).
+  `tasks(id, repo, title, branch, worktree, step, status, created_at, updated_at)`,
+  `events(seq, task_id, at, kind, detail)`, `task_links(seq, task_id, kind, ref, role)`
+  and `slots(host, n, task_id, …)`. Step and status are checked by the database too.
+  - The instance is Mikrus's shared `psql01.mikr.us` (PG 18). It runs beside the VPS, so
+    it takes none of its RAM or disk.
+  - orq reads libpq's `PG*` variables. On the VPS, `orqd-run` sets them from Bitwarden
+    (§6). TLS: `PGSSLMODE=verify-ca` with `PGSSLROOTCERT`, the instance's self-signed
+    certificate pinned; `require` (the default) only encrypts.
+  - Nothing connects until a command needs state, so `orq guard` and `orq init` work
+    without a database.
+  - The schema is created on first use, under an advisory lock. New ids and slot takes
+    each lock their table for one transaction, so two runs never share either.
+  - Tests use a real Postgres in a container (testcontainers), one empty database per
+    test. Never the shared instance.
 - The task holds only what is orqestrai's own. Everything outside — the GitHub issue,
   the Linear or Jira ticket, the Slack thread, the PR — is a **link**: an open `kind`, a
   `ref` in that system, and a `role` (`origin` = where the request came from, `related`).
@@ -456,7 +468,7 @@ plain TS (no `bun:*` imports), because pi loads extensions under Node.
 - Statuses: `TODO`, `IN PROGRESS`, `WAITING FOR ME`, `BLOCKED`, `DROPPED` (triage decided not to do it), `MERGED`.
 - Archive: `~/.orqestrai/archive/<repo>/<id>/`, the files of dropped tasks after
   `orq clean`.
-- Dashboard: a small web app that reads the SQLite file, served over Tailscale only.
+- Dashboard: a small web app that reads the database, served over Tailscale only.
 
 ## 5. Verification environment
 
@@ -483,8 +495,9 @@ hand for now). One skill combines:
 
 ### Running the app on one 16 GB VPS
 
-- **Verify slots.** Only verify needs a running app. A slot is a lock in SQLite:
-  `orq slot take <id> [--wait <s>]`, `keep`, `free`, `ls`. `ORQ_SLOTS` slots, default 1.
+- **Verify slots.** Only verify needs a running app. A slot is a row in the database:
+  `orq slot take <id> [--wait <s>]`, `keep`, `free`, `ls`. `ORQ_SLOTS` slots, default 1,
+  per machine (`ORQ_HOST`, default the hostname): the laptop and the VPS each have their own.
   Impl and the other steps do not take a slot, so they still run in parallel.
 - **What a slot gives:** `ORQ_SLOT=<n>`, `ORQ_PORT_BASE` (4100, 4200, …; `ORQ_PORT_START`)
   and `ORQ_PROJECT=orq-<id>`. orq keeps only the lock. How the app starts is the
@@ -507,8 +520,18 @@ before.
 
 ## 6. Security (no sandbox in v1)
 
-- Dedicated non-root user, no sudo.
-- SSH only over Tailscale. Inbound traffic denied by default.
+- **The VPS** (Mikrus `neil198`: an LXC container, 1 CPU, so `ORQ_SLOTS=1`):
+  - Claude and the task sessions run as `orq`: no sudo, rootless Docker (not in the
+    `docker` group). Tailscale; SSH with keys only (Mikrus keeps its public SSH port open).
+  - **Two users, so an agent cannot read a secret.** The Bitwarden Secrets Manager token
+    belongs to `orqd` (no login, `~orqd/.config/orqestrai/bws-token`, mode 600). The
+    sudoers rule lets `orq` run only fixed, root-owned programs as `orqd`. The one that
+    matters is `orqd-run`: it runs the root-installed orqestrai package (never the dev copy
+    in `~orq/Projects`) for state, push and PR operations, with `bws run` and
+    `pg-env.sh` mapping the secrets to `PG*`. It never runs a command an agent wrote.
+  - Bitwarden: EU cloud, machine account `vps`, project `vps`, secrets `PG_HOST`,
+    `PG_DB`, `PG_LOGIN`, `PG_PASSWORD` (later the GitHub and Slack tokens).
+  - The dev copy is only ever run with test databases (testcontainers).
 - GitHub: fine-grained token per repo. Branch protection on `main`; the token cannot
   bypass it.
 - Guard hook (`orq guard`, PreToolUse, `src/guard/`). `decide()` is plain TS (no Effect,

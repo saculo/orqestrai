@@ -3,10 +3,11 @@ import { Console, Effect } from "effect"
 import { Argument, Command, Flag } from "effect/cli"
 import { Db } from "./db.ts"
 import { OrqError } from "./domain.ts"
+import { stamp } from "./pg.ts"
 import { type Slot, Slots } from "./slots.ts"
 
 const id = Argument.String("id").pipe(Argument.withDescription("task id, e.g. T-0001"))
-const until = (s: Slot) => new Date(s.expires_at).toISOString().slice(0, 16).replace("T", " ")
+const until = (s: Slot) => stamp(s.expires_at).slice(0, 16)
 
 const take = Command.make(
   "take",
