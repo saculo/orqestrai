@@ -1,12 +1,13 @@
 // After ship, through the command line: the merged state read from GitHub, and orq clean.
 // A fake `gh` on PATH stands for GitHub: FAKE_GH_STATE and FAKE_GH_HEAD set its answer.
-import { afterEach, beforeEach, describe, expect, test } from "bun:test"
+import { afterEach, beforeAll, beforeEach, describe, expect, test } from "bun:test"
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join, resolve } from "node:path"
+import { freshDatabase, startPostgres } from "./pg.ts"
 
 const CLI = resolve(import.meta.dir, "..", "src", "cli.ts")
-let dir: string, repo: string, home: string, fakeBin: string
+let dir: string, repo: string, home: string, pg: Record<string, string>, fakeBin: string
 
 const sh = (cmd: string[], cwd: string) => {
   const p = Bun.spawnSync(cmd, { cwd, stdout: "pipe", stderr: "pipe" })
@@ -16,7 +17,7 @@ const sh = (cmd: string[], cwd: string) => {
 const git = (args: string[], cwd: string) => sh(["git", "-c", "user.name=t", "-c", "user.email=t@t", ...args], cwd)
 
 const orq = (args: string[], gh: Record<string, string> = {}) => {
-  const env = { ...process.env, ORQ_HOME: home, ORQ_ZELLIJ_SESSION: "orq-test-none", PATH: `${fakeBin}:${process.env.PATH}`, ...gh }
+  const env = { ...process.env, ORQ_HOME: home, ...pg, ORQ_ZELLIJ_SESSION: "orq-test-none", PATH: `${fakeBin}:${process.env.PATH}`, ...gh }
   delete (env as Record<string, string | undefined>).ZELLIJ
   const p = Bun.spawnSync([process.execPath, CLI, ...args], { cwd: repo, env, stdout: "pipe", stderr: "pipe" })
   return { code: p.exitCode, out: p.stdout.toString(), err: p.stderr.toString() }
@@ -38,7 +39,10 @@ const shipped = () => {
 }
 const merged = () => ({ FAKE_GH_STATE: "MERGED", FAKE_GH_HEAD: head() })
 
-beforeEach(() => {
+beforeAll(startPostgres, 120_000)
+
+beforeEach(async () => {
+  pg = await freshDatabase()
   dir = mkdtempSync(join(tmpdir(), "orq-clean-"))
   repo = join(dir, "proj")
   home = join(dir, "home")

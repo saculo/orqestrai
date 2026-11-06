@@ -1,35 +1,28 @@
-// Verify slots: a lock on this machine's room to run an app. A task takes a slot before verify
+// Verify slots: a lock on this machine's room to run an app. Slots are per host ($ORQ_HOST)
+// in the shared database. A task takes a slot before verify
 // starts its app, and gets a port range and a compose project name. orq keeps only the lock;
 // how the app starts and stops is the verify-<surface> skill's job. A slot expires, so a
 // crashed session cannot hold it forever: the next take stops that app and frees it.
-import { Database } from "bun:sqlite"
-import { mkdirSync } from "node:fs"
-import { join } from "node:path"
+import type { SQL } from "bun"
 import { Context, Effect, Layer } from "effect"
 import { ChildProcessSpawner } from "effect/process/ChildProcessSpawner"
 import { OrqConfig } from "./config.ts"
 import { OrqError } from "./domain.ts"
+import { Pg } from "./pg.ts"
 import { run } from "./proc.ts"
 
 export interface Slot {
   readonly n: number
   readonly task_id: string
   readonly worktree: string
-  readonly expires_at: number
-  /** 1 when the app stays up after verify, for the user's manual checks */
-  readonly kept: number
+  readonly expires_at: Date
+  /** true when the app stays up after verify, for the user's manual checks */
+  readonly kept: boolean
   readonly stop: string | null
   readonly port: number | null
 }
 
 export type Taken = { readonly slot: Slot } | { readonly busy: ReadonlyArray<Slot> }
-
-const SCHEMA = `CREATE TABLE IF NOT EXISTS slots(
-  n INTEGER PRIMARY KEY, task_id TEXT NOT NULL UNIQUE, worktree TEXT NOT NULL,
-  expires_at INTEGER NOT NULL, kept INTEGER NOT NULL DEFAULT 0, stop TEXT, port INTEGER)`
-
-const attempt = <A>(what: string, f: () => A) =>
-  Effect.try({ try: f, catch: (e) => new OrqError({ message: `slots: ${what}: ${String(e)}` }) })
 
 export class Slots extends Context.Service<
   Slots,
@@ -48,18 +41,10 @@ export class Slots extends Context.Service<
       const spawner = yield* ChildProcessSpawner
       const sh = (cmd: string, cwd?: string) =>
         run("sh", ["-c", cmd], cwd).pipe(Effect.ignore, Effect.provideService(ChildProcessSpawner, spawner))
-      const db = yield* Effect.acquireRelease(
-        attempt("open", () => {
-          mkdirSync(cfg.home, { recursive: true })
-          const d = new Database(join(cfg.home, "state.db"), { create: true, strict: true })
-          d.exec("PRAGMA busy_timeout = 10000")
-          d.exec(SCHEMA)
-          return d
-        }),
-        (d) => Effect.sync(() => d.close()),
-      )
-      const byTask = (task: string) => db.query("SELECT * FROM slots WHERE task_id = $task").get({ task }) as Slot | null
-      const expiry = () => Date.now() + cfg.slotTtl * 1000
+      const pg = yield* Pg
+      const host = cfg.host
+      const ttl = cfg.slotTtl
+      const byTask = async (sql: SQL, task: string) => ((await sql`SELECT * FROM slots WHERE task_id = ${task}`) as Slot[])[0]
 
       /** Stops a slot's app (if verify kept it up) and stops serving its port. Errors are reported, not fatal. */
       const release = (s: Slot) =>
@@ -70,29 +55,21 @@ export class Slots extends Context.Service<
 
       const take = (task: string, worktree: string) =>
         Effect.gen(function* () {
-          const result = yield* attempt("take", () =>
-            db
-              .transaction(() => {
-                const expired = db.query("SELECT * FROM slots WHERE expires_at < $now").all({ now: Date.now() }) as Slot[]
-                db.query("DELETE FROM slots WHERE expires_at < $now").run({ now: Date.now() })
-                const mine = byTask(task)
-                if (mine) {
-                  db.query("UPDATE slots SET expires_at = $at WHERE task_id = $task").run({ at: expiry(), task })
-                  return { expired, taken: { slot: byTask(task) as Slot } as Taken }
-                }
-                const used = new Set((db.query("SELECT n FROM slots").all() as { n: number }[]).map((r) => r.n))
-                const n = Array.from({ length: cfg.slots }, (_, i) => i + 1).find((i) => !used.has(i))
-                if (n === undefined)
-                  return { expired, taken: { busy: db.query("SELECT * FROM slots ORDER BY n").all() as Slot[] } as Taken }
-                db.query("INSERT INTO slots(n, task_id, worktree, expires_at) VALUES($n, $task, $worktree, $at)").run({
-                  n,
-                  task,
-                  worktree,
-                  at: expiry(),
-                })
-                return { expired, taken: { slot: byTask(task) as Slot } as Taken }
-              })
-              .immediate(),
+          const result = yield* pg.run("take", (sql) =>
+            sql.begin(async (tx) => {
+              await tx`LOCK TABLE slots IN SHARE ROW EXCLUSIVE MODE`
+              const expired: Slot[] = await tx`DELETE FROM slots WHERE host = ${host} AND expires_at < now() RETURNING *`
+              const extended: Slot[] = await tx`UPDATE slots SET expires_at = now() + make_interval(secs => ${ttl})
+                                                WHERE task_id = ${task} RETURNING *`
+              if (extended[0]) return { expired, taken: { slot: extended[0] } as Taken }
+              const used = new Set(((await tx`SELECT n FROM slots WHERE host = ${host}`) as { n: number }[]).map((r) => r.n))
+              const n = Array.from({ length: cfg.slots }, (_, i) => i + 1).find((i) => !used.has(i))
+              if (n === undefined)
+                return { expired, taken: { busy: await tx`SELECT * FROM slots WHERE host = ${host} ORDER BY n` } as Taken }
+              const [slot] = await tx`INSERT INTO slots(host, n, task_id, worktree, expires_at)
+                                      VALUES(${host}, ${n}, ${task}, ${worktree}, now() + make_interval(secs => ${ttl})) RETURNING *`
+              return { expired, taken: { slot } as Taken }
+            }),
           )
           yield* Effect.forEach(result.expired, release, { discard: true })
           return result.taken
@@ -100,15 +77,12 @@ export class Slots extends Context.Service<
 
       const keep = (task: string, stop: string, port: number) =>
         Effect.gen(function* () {
-          const s = yield* attempt("keep", () => {
-            db.query("UPDATE slots SET kept = 1, stop = $stop, port = $port, expires_at = $at WHERE task_id = $task").run({
-              task,
-              stop,
-              port,
-              at: expiry(),
-            })
-            return byTask(task)
-          })
+          const [s] = yield* pg.run(
+            "keep",
+            (sql) =>
+              sql`UPDATE slots SET kept = true, stop = ${stop}, port = ${port}, expires_at = now() + make_interval(secs => ${ttl})
+                         WHERE task_id = ${task} RETURNING *` as Promise<Slot[]>,
+          )
           if (!s) return yield* Effect.fail(new OrqError({ message: `${task} holds no slot; take one first` }))
           if (cfg.serve) yield* sh(cfg.serve.replaceAll("{port}", String(port)))
           return s
@@ -116,10 +90,10 @@ export class Slots extends Context.Service<
 
       const free = (task: string) =>
         Effect.gen(function* () {
-          const s = yield* attempt("free", () => byTask(task))
+          const s = yield* pg.run("free", (sql) => byTask(sql, task))
           if (!s) return undefined
           yield* release(s)
-          yield* attempt("free", () => db.query("DELETE FROM slots WHERE task_id = $task").run({ task }))
+          yield* pg.run("free", (sql) => sql`DELETE FROM slots WHERE task_id = ${task}`)
           return s
         })
 
@@ -127,7 +101,7 @@ export class Slots extends Context.Service<
         take,
         keep,
         free,
-        list: attempt("list", () => db.query("SELECT * FROM slots ORDER BY n").all() as Slot[]),
+        list: pg.run("list", (sql) => sql`SELECT * FROM slots WHERE host = ${host} ORDER BY n` as Promise<Slot[]>),
         portBase: (s: Slot) => cfg.portStart + (s.n - 1) * 100,
       }
     }),

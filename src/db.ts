@@ -1,41 +1,8 @@
-// The SQLite index of tasks. Content lives in Markdown and git; this is only the index.
-import { Database } from "bun:sqlite"
-import { mkdirSync } from "node:fs"
-import { join } from "node:path"
+// The index of tasks in Postgres (src/pg.ts). Content lives in Markdown and git; this is only the index.
+import type { SQL } from "bun"
 import { Context, Effect, Layer } from "effect"
-import { OrqConfig } from "./config.ts"
 import { type LinkRole, OrqError, type Status, type Step, type Task, type TaskEvent, type TaskLink, taskId } from "./domain.ts"
-
-const SCHEMA = `
-CREATE TABLE IF NOT EXISTS tasks(
-  id TEXT PRIMARY KEY,
-  repo TEXT NOT NULL,
-  title TEXT NOT NULL,
-  branch TEXT NOT NULL,
-  worktree TEXT NOT NULL,
-  step TEXT NOT NULL DEFAULT 'triage',
-  status TEXT NOT NULL DEFAULT 'TODO',
-  created_at TEXT NOT NULL DEFAULT (datetime('now')),
-  updated_at TEXT NOT NULL DEFAULT (datetime('now')));
-CREATE TABLE IF NOT EXISTS events(
-  task_id TEXT NOT NULL,
-  at TEXT NOT NULL DEFAULT (datetime('now')),
-  kind TEXT NOT NULL,
-  detail TEXT);
-CREATE TABLE IF NOT EXISTS task_links(
-  task_id TEXT NOT NULL,
-  kind TEXT NOT NULL,
-  ref TEXT NOT NULL,
-  role TEXT NOT NULL,
-  PRIMARY KEY (task_id, kind, ref));`
-
-/** Columns that older databases have and the task no longer owns. */
-const DROPPED_COLUMNS = ["pr_url", "slack_thread"]
-
-const migrate = (d: Database) => {
-  const cols = (d.query("PRAGMA table_info(tasks)").all() as { name: string }[]).map((c) => c.name)
-  for (const c of DROPPED_COLUMNS) if (cols.includes(c)) d.exec(`ALTER TABLE tasks DROP COLUMN ${c}`)
-}
+import { Pg, stamp } from "./pg.ts"
 
 export interface NewTask {
   readonly id: string
@@ -46,8 +13,9 @@ export interface NewTask {
   readonly note: string
 }
 
-const attempt = <A>(what: string, f: () => A) =>
-  Effect.try({ try: f, catch: (e) => new OrqError({ message: `database: ${what}: ${String(e)}` }) })
+type Row = Omit<Task, "created_at" | "updated_at"> & { created_at: Date; updated_at: Date }
+const toTask = (r: Row): Task => ({ ...r, created_at: stamp(r.created_at), updated_at: stamp(r.updated_at) })
+const noTask = (id: string) => new OrqError({ message: `no task ${id}` })
 
 export class Db extends Context.Service<
   Db,
@@ -67,97 +35,52 @@ export class Db extends Context.Service<
   static readonly layer = Layer.effect(
     Db,
     Effect.gen(function* () {
-      const { home } = yield* OrqConfig
-      const db = yield* Effect.acquireRelease(
-        attempt("open", () => {
-          mkdirSync(home, { recursive: true })
-          const d = new Database(join(home, "state.db"), { create: true, strict: true })
-          d.exec("PRAGMA busy_timeout = 10000") // concurrent orq runs wait instead of failing
-          d.exec(SCHEMA)
-          migrate(d)
-          return d
-        }),
-        (d) => Effect.sync(() => d.close()),
-      )
+      const { run } = yield* Pg
 
-      const addEvent = db.query("INSERT INTO events(task_id, kind, detail) VALUES($id, $kind, $detail)")
-      const get = (id: string) =>
-        attempt("get", () => db.query("SELECT * FROM tasks WHERE id = $id").get({ id }) as Task | null).pipe(
-          Effect.flatMap((t) => (t ? Effect.succeed(t) : Effect.fail(new OrqError({ message: `no task ${id}` })))),
-        )
+      /** Runs f in a transaction; false from f means the task does not exist. */
+      const onTask = (what: string, id: string, f: (tx: SQL) => Promise<boolean>) =>
+        run(what, (sql) => sql.begin(f)).pipe(Effect.flatMap((found) => (found ? Effect.void : Effect.fail(noTask(id)))))
 
       return {
         create: (build) =>
-          attempt("create", () =>
-            db
-              .transaction(() => {
-                const row = db.query("SELECT IFNULL(MAX(CAST(substr(id, 3) AS INTEGER)), 0) + 1 AS n FROM tasks").get() as { n: number }
-                const t = build(taskId(row.n))
-                db.query("INSERT INTO tasks(id, repo, title, branch, worktree) VALUES($id, $repo, $title, $branch, $worktree)").run({
-                  id: t.id,
-                  repo: t.repo,
-                  title: t.title,
-                  branch: t.branch,
-                  worktree: t.worktree,
-                })
-                addEvent.run({ id: t.id, kind: "created", detail: t.note })
-                return t
-              })
-              .immediate(),
+          run("create", (sql) =>
+            sql.begin(async (tx) => {
+              await tx`LOCK TABLE tasks IN SHARE ROW EXCLUSIVE MODE`
+              const [{ n }] = await tx`SELECT coalesce(max(substr(id, 3)::int), 0) + 1 AS n FROM tasks`
+              const t = build(taskId(n))
+              await tx`INSERT INTO tasks(id, repo, title, branch, worktree)
+                       VALUES(${t.id}, ${t.repo}, ${t.title}, ${t.branch}, ${t.worktree})`
+              await tx`INSERT INTO events(task_id, kind, detail) VALUES(${t.id}, 'created', ${t.note})`
+              return t
+            }),
           ),
-        remove: (id) =>
-          attempt("remove", () =>
-            db.transaction(() => {
-              for (const table of ["task_links", "events"]) db.query(`DELETE FROM ${table} WHERE task_id = $id`).run({ id })
-              db.query("DELETE FROM tasks WHERE id = $id").run({ id })
-            })(),
+        remove: (id) => run("remove", (sql) => sql`DELETE FROM tasks WHERE id = ${id}`).pipe(Effect.asVoid),
+        get: (id) =>
+          run("get", (sql) => sql`SELECT * FROM tasks WHERE id = ${id}`).pipe(
+            Effect.flatMap(([r]) => (r ? Effect.succeed(toTask(r)) : Effect.fail(noTask(id)))),
           ),
-        get,
         setState: (id, step, status, note) =>
-          get(id).pipe(
-            Effect.flatMap(() =>
-              attempt("set state", () =>
-                db.transaction(() => {
-                  db.query("UPDATE tasks SET step = $step, status = $status, updated_at = datetime('now') WHERE id = $id").run({
-                    id,
-                    step,
-                    status,
-                  })
-                  addEvent.run({ id, kind: `${step}: ${status}`, detail: note })
-                })(),
-              ),
-            ),
-          ),
-        list: attempt("list", () => db.query("SELECT * FROM tasks ORDER BY id").all() as Task[]),
+          onTask("set state", id, async (tx) => {
+            const updated = await tx`UPDATE tasks SET step = ${step}, status = ${status}, updated_at = now() WHERE id = ${id} RETURNING id`
+            if (!updated.length) return false
+            await tx`INSERT INTO events(task_id, kind, detail) VALUES(${id}, ${`${step}: ${status}`}, ${note})`
+            return true
+          }),
+        list: run("list", (sql) => sql`SELECT * FROM tasks ORDER BY id`).pipe(Effect.map((rs: Row[]) => rs.map(toTask))),
         events: (id, limit) =>
-          attempt(
-            "events",
-            () =>
-              db
-                .query("SELECT at, kind, detail FROM events WHERE task_id = $id ORDER BY rowid DESC LIMIT $limit")
-                .all({ id, limit }) as TaskEvent[],
+          run("events", (sql) => sql`SELECT at, kind, detail FROM events WHERE task_id = ${id} ORDER BY seq DESC LIMIT ${limit}`).pipe(
+            Effect.map((rs: { at: Date; kind: string; detail: string | null }[]) => rs.map((e) => ({ ...e, at: stamp(e.at) }))),
           ),
         link: (id, kind, ref, role) =>
-          get(id).pipe(
-            Effect.flatMap(() =>
-              attempt("link", () =>
-                db.transaction(() => {
-                  db.query("INSERT OR REPLACE INTO task_links(task_id, kind, ref, role) VALUES($id, $kind, $ref, $role)").run({
-                    id,
-                    kind,
-                    ref,
-                    role,
-                  })
-                  addEvent.run({ id, kind: "linked", detail: `${kind} ${ref} (${role})` })
-                })(),
-              ),
-            ),
-          ),
-        links: (id) =>
-          attempt(
-            "links",
-            () => db.query("SELECT kind, ref, role FROM task_links WHERE task_id = $id ORDER BY rowid").all({ id }) as TaskLink[],
-          ),
+          onTask("link", id, async (tx) => {
+            const [task] = await tx`SELECT id FROM tasks WHERE id = ${id} FOR UPDATE`
+            if (!task) return false
+            await tx`INSERT INTO task_links(task_id, kind, ref, role) VALUES(${id}, ${kind}, ${ref}, ${role})
+                     ON CONFLICT (task_id, kind, ref) DO UPDATE SET role = EXCLUDED.role`
+            await tx`INSERT INTO events(task_id, kind, detail) VALUES(${id}, 'linked', ${`${kind} ${ref} (${role})`})`
+            return true
+          }),
+        links: (id) => run("links", (sql) => sql`SELECT kind, ref, role FROM task_links WHERE task_id = ${id} ORDER BY seq`),
       }
     }),
   )
