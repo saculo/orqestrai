@@ -1,6 +1,6 @@
 // The Postgres database that holds orq's state: tasks, events, links and verify slots.
 // One shared instance serves every machine. Settings are libpq's PG* variables; on the VPS,
-// orqd-run sets them from Bitwarden. PGSSLMODE as in libpq: require (default) encrypts,
+// `bws run` sets them from Bitwarden. PGSSLMODE as in libpq: require (default) encrypts,
 // verify-ca also checks the server against PGSSLROOTCERT (the shared instance's self-signed
 // certificate, pinned), disable is for local tests only.
 // Nothing connects until a command needs state, so `orq guard` and `orq init` never do.
@@ -115,7 +115,7 @@ export class Pg extends Context.Service<
               })
               return sql
             })
-          : Effect.fail(new OrqError({ message: "no database: PGHOST is not set (on the VPS, orq runs through orqd-run)" })),
+          : Effect.fail(new OrqError({ message: "no database: PGHOST is not set (on the VPS, run orq under `bws run`)" })),
       )
 
       return {

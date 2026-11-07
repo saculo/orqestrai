@@ -368,10 +368,24 @@ Code is DDD-ish where it pays: one bounded context = its own files and glossary.
 
 ### Topology
 
-- One **zellij tab per task**, on the VPS (or locally — same core). In it: an
-  interactive `claude` or `pi` running `/orq <task>`. That session orchestrates its own
-  task. No fleet-level agent in v1.
+Two machines, joined by Tailscale; nothing is public.
+
+```
+VPS1  Mikrus LXC, 1 CPU                  VPS2  OVH VPS-3, KVM, 6 vCPU / 12 GB
+  bridge (outside the sandbox):            k3s + Argo CD
+    Slack, push, PR, CI                    preview-pr-<n>: a namespace per PR
+  task sessions (Claude Code sandbox):     OpenBao + External Secrets Operator
+    impl, unit + integration tests         Tailscale operator: private URLs
+    e2e, driven checks  ─── tailscale ───► the preview of the task's PR
+  rootless Docker as user `dock`
+    (testcontainers)
+```
+
+- One **zellij tab per task** for interactive work, or a headless turn per Slack reply
+  (`claude -p --resume`). Either way the session orchestrates its own task. No
+  fleet-level agent in v1.
 - Each task has its own **git worktree**, created before any step.
+- GitHub builds images (GitHub-hosted runners) into GHCR; Argo CD deploys them to VPS2.
 
 ### The `orq` CLI
 
@@ -409,11 +423,23 @@ is generated. A rerun replaces its own `orq-*` files and keeps the rest.
 
 ### Slack bridge
 
-A small bot on the VPS (Socket Mode, no open port, no LLM):
+One long-running process on VPS1, `bws run -- orq bridge` (Socket Mode, no open port, no
+LLM). It runs **outside** the sandbox and is the only holder of the Slack and GitHub
+tokens.
 
-- message "new: …" → `orq new`, reply with the task thread;
-- `orq ask` → post in the thread;
-- your reply in the thread → `orq send`.
+- `/orq new "<title>"` → `orq new`; the task gets one Slack thread.
+- `/orq ls`, `/orq show <id>` answer in Slack.
+- Your reply in the thread → the next turn: `claude -p --resume <session>` in the task's
+  worktree, sandboxed, with a clean environment.
+- `orq ask` (from a session) → posted in the thread, status WAITING FOR ME.
+- **Git and GitHub for the agent:** a session commits; the bridge pushes the branch,
+  opens or updates the draft PR, marks it ready at ship, watches CI (`gh run watch`),
+  downloads CI's report into `evidence/ci/` and sends the result to the session as its
+  next turn. The agent never holds a GitHub token.
+- `orq attach <id>` opens the same session interactively in zellij (over Tailscale SSH);
+  the bridge pauses that thread meanwhile. orq pre-trusts each worktree, so the folder
+  trust dialog never blocks.
+- Only your Slack user may talk to the bot.
 
 ### Files in a project
 
@@ -452,8 +478,8 @@ plain TS (no `bun:*` imports), because pi loads extensions under Node.
   and `slots(host, n, task_id, …)`. Step and status are checked by the database too.
   - The instance is Mikrus's shared `psql01.mikr.us` (PG 18). It runs beside the VPS, so
     it takes none of its RAM or disk.
-  - orq reads libpq's `PG*` variables. On the VPS, `orqd-run` sets them from Bitwarden
-    (§6). TLS: `PGSSLMODE=verify-ca` with `PGSSLROOTCERT`, the instance's self-signed
+  - orq reads libpq's `PG*` variables. On the VPS, `bws run` with the `session` machine
+    account sets them (§6). TLS: `PGSSLMODE=verify-ca` with `PGSSLROOTCERT`, the instance's self-signed
     certificate pinned; `require` (the default) only encrypts.
   - Nothing connects until a command needs state, so `orq guard` and `orq init` work
     without a database.
@@ -493,45 +519,65 @@ hand for now). One skill combines:
 - **Feature map**: one file per user-facing feature — how to reach it, how to drive it,
   which end state proves it works.
 
-### Running the app on one 16 GB VPS
+### Preview environments (VPS2)
 
-- **Verify slots.** Only verify needs a running app. A slot is a row in the database:
-  `orq slot take <id> [--wait <s>]`, `keep`, `free`, `ls`. `ORQ_SLOTS` slots, default 1,
-  per machine (`ORQ_HOST`, default the hostname): the laptop and the VPS each have their own.
-  Impl and the other steps do not take a slot, so they still run in parallel.
-- **What a slot gives:** `ORQ_SLOT=<n>`, `ORQ_PORT_BASE` (4100, 4200, …; `ORQ_PORT_START`)
-  and `ORQ_PROJECT=orq-<id>`. orq keeps only the lock. How the app starts is the
-  `verify-<surface>` skill's job, for example `docker compose -p $ORQ_PROJECT up` with
-  `mem_limit` on each service.
-- **Expiry:** a slot expires after `ORQ_SLOT_TTL` (2 h). The next `take` stops an expired
-  slot's app and frees it, so a crashed session cannot hold it forever.
-- **Manual checks:** when the plan has them and the round passes, verify keeps the app up
-  (`orq slot keep <id> --stop "<cmd>" --port <p>`) until the slot expires or you run
-  `orq slot free <id>`, which runs the stop command. On the VPS, `ORQ_SERVE` serves the
-  port to you, for example `tailscale serve --bg --https={port} http://127.0.0.1:{port}`,
-  and `ORQ_UNSERVE` stops that (`tailscale serve --https={port} off`). Locally, leave
-  them unset. `orq clean` frees the task's slot too.
-- **Later: a second VPS with Argo CD** for preview environments per task (ApplicationSet,
-  pull-request generator). Until then, the same compose files can also run there with
-  `DOCKER_HOST=ssh://verify-box`. No change to the skills.
+The app under test runs on VPS2, one **preview per PR**. VPS1 only runs the tests.
+
+- **Trigger:** verify needs a running app, so the bridge pushes the branch and opens a
+  **draft PR**. The project's CI builds `ghcr.io/<owner>/<app>:<sha>`.
+- **Deploy:** an Argo CD ApplicationSet with the pull-request generator creates
+  `preview-pr-<n>` from the project's chart (Helm or Kustomize) with that image, and
+  removes it when the PR closes.
+- **Reach:** the Tailscale operator gives the preview a private URL,
+  `https://<app>-pr-<n>.<tailnet>.ts.net`. Nothing is public.
+- **Right version:** the app serves `/version` with its git SHA. Verify waits until it
+  equals the task's commit, so it never tests an old deploy.
+- **Secrets of the app:** OpenBao on VPS2, pulled into each namespace by External Secrets
+  Operator. Previews use test or sandbox keys only. VPS1 never sees them.
+- **Who runs e2e:**
+  - **verify:** the verifier on VPS1 runs and fixes the e2e tests and the driven checks
+    against the preview URL (Playwright, through the sandbox proxy). The evidence is
+    written straight into `.orqestrai/tasks/<id>/evidence/`.
+  - **ship:** marking the PR ready runs the committed e2e suite in CI against the
+    preview. That is the merge gate; nobody can skip it.
+- **Size:** k3s, Argo CD, OpenBao, ESO and the operator take ~4 GB; a small app with its
+  database ~0.5 GB, a JVM app ~1.5 GB. 12 GB holds the 2–3 tasks in flight with room.
+- **What a project needs for previews** (added when it is onboarded): a Dockerfile, a
+  chart, a `/version` endpoint, a CI workflow that builds the image, and its entry in the
+  ApplicationSet.
+- **Until VPS2 exists:** the verify slots of slice 4 stay (`orq slot take|keep|free|ls`, a
+  row per `ORQ_HOST` in the database, the app started by the `verify-<surface>` skill).
+  They go away once previews work.
 
 The `verify-<surface>` skills are generated when a project is onboarded into orqestrai, not
 before.
 
-## 6. Security (no sandbox in v1)
+## 6. Security
 
-- **The VPS** (Mikrus `neil198`: an LXC container, 1 CPU, so `ORQ_SLOTS=1`):
-  - Claude and the task sessions run as `orq`: no sudo, rootless Docker (not in the
-    `docker` group). Tailscale; SSH with keys only (Mikrus keeps its public SSH port open).
-  - **Two users, so an agent cannot read a secret.** The Bitwarden Secrets Manager token
-    belongs to `orqd` (no login, `~orqd/.config/orqestrai/bws-token`, mode 600). The
-    sudoers rule lets `orq` run only fixed, root-owned programs as `orqd`. The one that
-    matters is `orqd-run`: it runs the root-installed orqestrai package (never the dev copy
-    in `~orq/Projects`) for state, push and PR operations, with `bws run` and
-    `pg-env.sh` mapping the secrets to `PG*`. It never runs a command an agent wrote.
-  - Bitwarden: EU cloud, machine account `vps`, project `vps`, secrets `PG_HOST`,
-    `PG_DB`, `PG_LOGIN`, `PG_PASSWORD` (later the GitHub and Slack tokens).
-  - The dev copy is only ever run with test databases (testcontainers).
+The rule: **an agent can use what it needs but cannot read a secret.** On Linux, anything
+running as the same user as a secret can read it, so the wall is the **Claude Code
+sandbox** (bubblewrap): every task session runs in it, the bridge does not.
+
+- **VPS1 users** (Mikrus `neil198`: LXC, 1 CPU; Tailscale; SSH with keys only — Mikrus
+  keeps its public SSH port open):
+  - `orq`: the bridge and the task sessions. No sudo.
+  - `dock`: owns rootless Docker and nothing else. Sessions reach its socket (allowed in
+    the sandbox) for testcontainers. A container can mount only what `dock` can read,
+    which is no secret. (Docker as the same user would mount the token file and climb
+    over any sandbox.)
+- **Secrets:** Bitwarden Secrets Manager (EU cloud), two machine accounts:
+  - `bridge`: Slack and GitHub tokens. Its token file is denied in the sandbox
+    (filesystem) and in the Claude Code permission rules (Read/Edit tools).
+  - `session`: only the Postgres login for orq's own index (`PG_HOST`, `PG_DB`,
+    `PG_LOGIN`, `PG_PASSWORD`). Sessions get it on purpose: the worst misuse is a messed
+    up task index. TLS to the shared instance pins its self-signed certificate
+    (`PGSSLMODE=verify-ca`).
+- **Sandbox network:** allowed are GitHub, Anthropic, the shared Postgres, `dock`'s Docker
+  socket and the preview URLs on VPS2. Everything else is blocked.
+- **To prove on VPS1 first:** inside the sandbox, a test reaches its testcontainers port
+  and the shared Postgres.
+- **VPS2:** no agent runs there. OpenBao holds the apps' test secrets (it starts sealed;
+  unsealing after a reboot is part of its setup).
 - GitHub: fine-grained token per repo. Branch protection on `main`; the token cannot
   bypass it.
 - Guard hook (`orq guard`, PreToolUse, `src/guard/`). `decide()` is plain TS (no Effect,
@@ -541,15 +587,14 @@ before.
   `orq new` / `orq open` do for task sessions; other sessions are not affected.
   - G1 protect base: no push, merge or commit on the base branch; no force push; no
     `gh pr merge`.
-  - G2 secrets: no reading or writing `.env*`, keys, credential files.
+  - G2 secrets: no reading or writing `.env*`, keys, credential files, the bws tokens.
   - G3 stay inside: file writes and git writes only inside the task worktree; no
     `git worktree add/remove`.
   - G4 destructive: `rm -r`, `find -delete`, `git clean`, `git reset --hard` only inside
     the worktree.
   - They stop mistakes; they are not a security boundary.
-- Second lock on the VPS: deny rules for secret files in the user settings
-  (`~/.claude/settings.json`). Claude Code enforces them itself, in every session, also
-  outside task sessions.
+- Deny rules for secret files in the user settings (`~/.claude/settings.json`). Claude
+  Code enforces them itself, in every session, also outside task sessions.
 - Later: a check for API keys written into files (gitleaks covers it in verify).
 
 ## 7. Evals (after the first manual run)
@@ -562,7 +607,7 @@ Later, promptfoo or similar tools for prompt-level comparisons.
 ## 8. Not in v1
 
 Fleet-level orchestrator, automatic merge, formal verification, metrics/tracing,
-playbooks per work type, self-improvement, Kubernetes preview environments, TesterArmy
+playbooks per work type, self-improvement, TesterArmy
 `e2e` (experiment after Playwright works), pi support.
 
 Not now, maybe later:
