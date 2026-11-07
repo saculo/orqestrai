@@ -3,7 +3,7 @@
 // in .claude/skills/<name>/. Everything orq init writes starts with "orq-" and is replaced
 // on the next run; anything else in .claude/ is the project's and stays as it is.
 
-import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs"
+import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs"
 import { basename, join } from "node:path"
 import { Effect } from "effect"
 import { OrqError } from "./domain.ts"
@@ -26,21 +26,23 @@ const COMMANDS = `
 `
 const GUARD_MATCHER = "Bash|Read|Grep|Glob|Write|Edit|MultiEdit|NotebookEdit"
 
-/** The `name:` in a Markdown file's frontmatter. */
-const nameOf = (file: string) => /^---\n(?:[\s\S]*?\n)?name:\s*(\S+)/.exec(readFileSync(file, "utf8"))?.[1]
+const FRONTMATTER = /^---\n([\s\S]*?)\n---\n/
+
+/** The `name` in a Markdown file's YAML frontmatter. */
+const nameOf = (file: string): string | undefined => {
+  const yaml = FRONTMATTER.exec(readFileSync(file, "utf8"))?.[1]
+  const name = yaml === undefined ? undefined : (Bun.YAML.parse(yaml) as { name?: unknown } | null)?.name
+  return typeof name === "string" ? name : undefined
+}
 
 /** Puts the generated note after the frontmatter, or at the top when there is none. */
 const markGenerated = (file: string) => {
   const text = readFileSync(file, "utf8")
-  const fm = /^---\n[\s\S]*?\n---\n/.exec(text)
-  writeFileSync(file, fm ? `${fm[0]}${NOTE}\n${text.slice(fm[0].length)}` : `${NOTE}\n\n${text}`)
+  const fm = FRONTMATTER.exec(text)?.[0]
+  writeFileSync(file, fm ? `${fm}${NOTE}\n${text.slice(fm.length)}` : `${NOTE}\n\n${text}`)
 }
 
-const markdownIn = (dir: string): string[] =>
-  readdirSync(dir).flatMap((f) => {
-    const p = join(dir, f)
-    return statSync(p).isDirectory() ? markdownIn(p) : p.endsWith(".md") ? [p] : []
-  })
+const markdownIn = (dir: string) => [...new Bun.Glob("**/*.md").scanSync({ cwd: dir, absolute: true })]
 
 /** Every skill folder in the source: skills/<group>/<name>/SKILL.md. */
 const sourceSkills = (orqRoot: string) =>

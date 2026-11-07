@@ -1,14 +1,16 @@
 // orq slot: take, keep, free and list verify slots (src/slots.ts).
-import { Console, Effect } from "effect"
+import { Console, Data, Effect, Schedule } from "effect"
 import { Argument, Command, Flag } from "effect/cli"
 import { Db } from "./db.ts"
-import { OrqError } from "./domain.ts"
-import { stamp } from "./pg.ts"
+import { OrqError, stamp } from "./domain.ts"
 import { type Slot, Slots } from "./slots.ts"
 import { withState } from "./state.ts"
 
 const id = Argument.String("id").pipe(Argument.withDescription("task id, e.g. T-0001"))
 const until = (s: Slot) => stamp(s.expires_at).slice(0, 16)
+
+/** Every slot of this machine is held: worth waiting for when --wait is given. */
+class AllHeld extends Data.TaggedError("AllHeld")<{ readonly held: ReadonlyArray<Slot> }> {}
 
 const take = Command.make(
   "take",
@@ -17,19 +19,19 @@ const take = Command.make(
     Effect.gen(function* () {
       const slots = yield* Slots
       const task = yield* (yield* Db).get(id)
-      const deadline = Date.now() + wait * 1000
-      for (;;) {
-        const r = yield* slots.take(id, task.worktree)
-        if ("slot" in r) {
-          yield* Console.log(`ORQ_SLOT=${r.slot.n}\nORQ_PORT_BASE=${slots.portBase(r.slot)}\nORQ_PROJECT=orq-${id.toLowerCase()}`)
-          return
-        }
-        if (Date.now() >= deadline) {
-          const held = r.busy.map((s) => `${s.task_id} (until ${until(s)})`).join(", ")
-          return yield* new OrqError({ message: `no free verify slot; held by ${held}` })
-        }
-        yield* Effect.sleep("2 seconds")
-      }
+      const slot = yield* slots.take(id, task.worktree).pipe(
+        Effect.flatMap((r) => ("slot" in r ? Effect.succeed(r.slot) : Effect.fail(new AllHeld({ held: r.busy })))),
+        Effect.retry({
+          schedule: Schedule.spaced("2 seconds").pipe(Schedule.upTo({ duration: `${wait} seconds` })),
+          while: (e) => e._tag === "AllHeld",
+        }),
+        Effect.catchTag("AllHeld", ({ held }) =>
+          Effect.fail(
+            new OrqError({ message: `no free verify slot; held by ${held.map((s) => `${s.task_id} (until ${until(s)})`).join(", ")}` }),
+          ),
+        ),
+      )
+      yield* Console.log(`ORQ_SLOT=${slot.n}\nORQ_PORT_BASE=${slots.portBase(slot)}\nORQ_PROJECT=orq-${id.toLowerCase()}`)
     }),
 ).pipe(Command.withDescription("take a verify slot: prints ORQ_SLOT, ORQ_PORT_BASE, ORQ_PROJECT"), withState)
 

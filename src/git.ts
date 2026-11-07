@@ -2,21 +2,25 @@
 
 import { existsSync, readFileSync } from "node:fs"
 import { join } from "node:path"
-import { Effect } from "effect"
+import { Effect, Option, Schema } from "effect"
 import { OrqError } from "./domain.ts"
 import { exec, run } from "./proc.ts"
 
 export const topLevel = (cwd?: string) =>
   exec("git", ["rev-parse", "--show-toplevel"], cwd).pipe(Effect.mapError(() => new OrqError({ message: "not in a git repository" })))
 
+/** The part of .orqestrai/config.toml that orq reads; the rest is for the skills. */
+const ProjectConfig = Schema.Struct({ base_branch: Schema.optional(Schema.String) })
+const readProjectConfig = Schema.decodeUnknownOption(ProjectConfig)
+
 /** base_branch from .orqestrai/config.toml, else origin's HEAD, else "main". */
 export const baseBranch = (root: string) =>
   Effect.gen(function* () {
-    const cfg = join(root, ".orqestrai", "config.toml")
-    if (existsSync(cfg)) {
-      const m = /^base_branch\s*=\s*"([^"]+)"/m.exec(readFileSync(cfg, "utf8"))
-      if (m?.[1]) return m[1]
-    }
+    const file = join(root, ".orqestrai", "config.toml")
+    const configured = existsSync(file)
+      ? readProjectConfig(Bun.TOML.parse(readFileSync(file, "utf8"))).pipe(Option.flatMapNullishOr((c) => c.base_branch))
+      : Option.none()
+    if (Option.isSome(configured)) return configured.value
     const origin = yield* run("git", ["symbolic-ref", "--short", "refs/remotes/origin/HEAD"], root)
     return origin.code === 0 ? origin.stdout.trim().replace(/^origin\//, "") : "main"
   })

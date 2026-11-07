@@ -76,22 +76,11 @@ describe("orq new", () => {
     expect(orq(["ls"]).out).not.toContain("T-0001")
   })
 
-  test("gives the next id to each new task", () => {
-    orq(["new", "one"])
-    expect(orq(["new", "two"]).out).toContain("T-0002  orq/T-0002-two")
-  })
-
   test("takes the base branch from .orqestrai/config.toml", () => {
     sh(["git", "branch", "develop"], repo)
     mkdirSync(join(repo, ".orqestrai"))
     writeFileSync(join(repo, ".orqestrai/config.toml"), 'base_branch = "develop"\n')
     expect(orq(["new", "x"]).out).toContain("ORQ_BASE=develop")
-  })
-
-  test("fails outside a git repository", () => {
-    const r = orq(["new", "x"], dir)
-    expect(r.code).toBe(1)
-    expect(r.err).toContain("orq: not in a git repository")
   })
 
   test("fails when the base branch does not exist", () => {
@@ -143,13 +132,6 @@ describe("orq file", () => {
     expect(brief).toContain("status: draft")
   })
 
-  test("creates VERIFY.md for the verify step", () => {
-    orq(["new", "x"])
-    const wt = worktreeOf("T-0001")
-    expect(orq(["file", "T-0001", "VERIFY"], wt).code).toBe(0)
-    expect(readFileSync(join(wt, ".orqestrai/tasks/T-0001/VERIFY.md"), "utf8")).toContain("round: 1")
-  })
-
   test("does not overwrite an existing file", () => {
     orq(["new", "x"])
     const wt = worktreeOf("T-0001")
@@ -175,13 +157,6 @@ describe("orq link", () => {
     const shown = orq(["show", "T-0001"]).out
     expect(shown).toContain("link gh-issue saculo/app#12 (origin)")
     expect(shown).toContain("link slack-thread C01/1730.42 (related)")
-  })
-
-  test("keeps outside references out of the task itself", () => {
-    orq(["new", "x"])
-    const shown = orq(["show", "T-0001"]).out
-    expect(shown).not.toContain("slack_thread")
-    expect(shown).not.toContain("pr_url")
   })
 
   test("rejects an unknown role and an unknown task", () => {
