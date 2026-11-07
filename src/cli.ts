@@ -12,10 +12,9 @@ import { Db } from "./db.ts"
 import { LINK_ROLES, OrqError, STATUSES, STEPS, slugify, TEMPLATES } from "./domain.ts"
 import { addWorktree, baseBranch, requireRef, topLevel } from "./git.ts"
 import { install } from "./init.ts"
-import { Pg } from "./pg.ts"
 import { syncMerged } from "./pr.ts"
 import { slot } from "./slot-cli.ts"
-import { Slots } from "./slots.ts"
+import { withState } from "./state.ts"
 import { openTab } from "./zellij.ts"
 
 /** The guard hook and the skills call `orq` by name. Without it on PATH the guards are off. */
@@ -68,7 +67,7 @@ const newTask = Command.make("new", { request: Argument.String("request") }, ({ 
     yield* Console.log(yield* openTab(tid, worktree, base))
     yield* warnIfNotOnPath
   }),
-).pipe(Command.withDescription("new task: id, branch, worktree, zellij tab"))
+).pipe(Command.withDescription("new task: id, branch, worktree, zellij tab"), withState)
 
 const open = Command.make("open", { id }, ({ id }) =>
   Effect.gen(function* () {
@@ -76,7 +75,7 @@ const open = Command.make("open", { id }, ({ id }) =>
     if (!existsSync(task.worktree)) return yield* new OrqError({ message: `worktree ${task.worktree} is gone` })
     yield* Console.log(yield* openTab(id, task.worktree, yield* baseBranch(task.repo)))
   }),
-).pipe(Command.withDescription("open the task's tab again (after a restart)"))
+).pipe(Command.withDescription("open the task's tab again (after a restart)"), withState)
 
 const state = Command.make(
   "state",
@@ -90,7 +89,7 @@ const state = Command.make(
     Effect.gen(function* () {
       yield* (yield* Db).setState(id, step, status, note)
     }),
-).pipe(Command.withDescription("record step and status"))
+).pipe(Command.withDescription("record step and status"), withState)
 
 const show = Command.make("show", { id }, ({ id }) =>
   Effect.gen(function* () {
@@ -103,7 +102,7 @@ const show = Command.make("show", { id }, ({ id }) =>
     yield* Console.log("")
     for (const e of yield* db.events(id, 10)) yield* Console.log(`${e.at}  ${e.kind.padEnd(22)}  ${e.detail ?? ""}`)
   }),
-).pipe(Command.withDescription("one task and its last events"))
+).pipe(Command.withDescription("one task and its last events"), withState)
 
 const link = Command.make(
   "link",
@@ -117,7 +116,7 @@ const link = Command.make(
     Effect.gen(function* () {
       yield* (yield* Db).link(id, kind, ref, role)
     }),
-).pipe(Command.withDescription("link the task to an outside reference (origin | related)"))
+).pipe(Command.withDescription("link the task to an outside reference (origin | related)"), withState)
 
 const ls = Command.make("ls", {}, () =>
   Effect.gen(function* () {
@@ -126,14 +125,14 @@ const ls = Command.make("ls", {}, () =>
     for (const t of yield* db.list)
       yield* Console.log(`${t.id}  ${t.step.padEnd(6)}  ${t.status.padEnd(14)}  ${t.title.slice(0, 50).padEnd(50)}  ${t.updated_at}`)
   }),
-).pipe(Command.withDescription("all tasks"))
+).pipe(Command.withDescription("all tasks"), withState)
 
 const cleanTask = Command.make("clean", { id }, ({ id }) =>
   Effect.gen(function* () {
     for (const line of yield* clean(id)) yield* Console.log(line)
     yield* Console.log(`close the zellij tab orq-${id} if it is still open`)
   }),
-).pipe(Command.withDescription("remove a merged or dropped task's worktree and branch; the task stays in orq ls"))
+).pipe(Command.withDescription("remove a merged or dropped task's worktree and branch; the task stays in orq ls"), withState)
 
 const file = Command.make("file", { id, name: Argument.Literals("name", TEMPLATES) }, ({ id, name }) =>
   Effect.gen(function* () {
@@ -151,15 +150,15 @@ const orq = Command.make("orq").pipe(
   Command.withSubcommands([init, newTask, open, state, show, link, ls, file, cleanTask, slot]),
 )
 
-const AppLayer = Layer.mergeAll(Db.layer, Slots.layer).pipe(
-  Layer.provideMerge(Pg.layer),
-  Layer.provideMerge(OrqConfig.layer),
-  Layer.provideMerge(BunServices.layer),
-)
+const AppLayer = OrqConfig.layer.pipe(Layer.provideMerge(BunServices.layer))
 
 Command.run(orq, { version: "0.1.0" }).pipe(
   Effect.tapError((e) =>
-    e instanceof OrqError ? Console.error(`orq: ${e.message}`) : CliError.isCliError(e) ? Effect.void : Console.error(`orq: ${String(e)}`),
+    e instanceof OrqError
+      ? Console.error(`orq: ${e.message}`)
+      : CliError.isCliError(e)
+        ? Effect.void
+        : Console.error(`orq: ${e && typeof e === "object" && "message" in e ? `database: ${e.message}` : String(e)}`),
   ),
   Effect.provide(AppLayer),
   BunRuntime.runMain({ disableErrorReporting: true }),

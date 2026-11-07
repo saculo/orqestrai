@@ -396,7 +396,7 @@ steps, statuses and task fields. Tests drive the CLI (`test/`).
 
 Install: not a Claude Code plugin. Today: a checkout with `orq` on PATH, then `orq init`
 in each project. Later: an npm package run with Bun (`bunx orqestrai init`), released
-from CI. Bun is needed at runtime (its built-in Postgres client, `Bun.SQL`).
+from CI. Bun is needed at runtime. State goes through Effect's `SqlClient` (`@effect/sql-pg`).
 
 `orq init` writes `.orqestrai/config.toml` (if missing) and, into `.claude/`, every skill
 from `skills/<group>/<name>/` flat as `skills/<name>/` (the frontmatter name, always
@@ -483,8 +483,11 @@ plain TS (no `bun:*` imports), because pi loads extensions under Node.
     certificate pinned; `require` (the default) only encrypts.
   - Nothing connects until a command needs state, so `orq guard` and `orq init` work
     without a database.
-  - The schema is created on first use, under an advisory lock. New ids and slot takes
-    each lock their table for one transaction, so two runs never share either.
+  - The schema is **migrations**: numbered files in `src/migrations/` (`0001_init.ts`, …),
+    listed in `src/pg.ts`, run in order by Effect's Migrator and recorded in
+    `orq_migrations`. A merged migration is frozen; a change is a new file. The commands
+    that use state run pending migrations first; the migrator's table lock keeps parallel
+    runs apart. New ids and slot takes each lock their table for one transaction.
   - Tests use a real Postgres in a container (testcontainers), one empty database per
     test. Never the shared instance.
 - The task holds only what is orqestrai's own. Everything outside — the GitHub issue,
