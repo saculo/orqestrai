@@ -3,10 +3,12 @@ import { Console, Effect } from "effect"
 import { Argument, Command, Flag } from "effect/cli"
 import { Db } from "./db.ts"
 import { OrqError } from "./domain.ts"
+import { stamp } from "./pg.ts"
 import { type Slot, Slots } from "./slots.ts"
+import { withState } from "./state.ts"
 
 const id = Argument.String("id").pipe(Argument.withDescription("task id, e.g. T-0001"))
-const until = (s: Slot) => new Date(s.expires_at).toISOString().slice(0, 16).replace("T", " ")
+const until = (s: Slot) => stamp(s.expires_at).slice(0, 16)
 
 const take = Command.make(
   "take",
@@ -29,7 +31,7 @@ const take = Command.make(
         yield* Effect.sleep("2 seconds")
       }
     }),
-).pipe(Command.withDescription("take a verify slot: prints ORQ_SLOT, ORQ_PORT_BASE, ORQ_PROJECT"))
+).pipe(Command.withDescription("take a verify slot: prints ORQ_SLOT, ORQ_PORT_BASE, ORQ_PROJECT"), withState)
 
 const keep = Command.make(
   "keep",
@@ -43,21 +45,21 @@ const keep = Command.make(
       const s = yield* (yield* Slots).keep(id, stop, port)
       yield* Console.log(`slot ${s.n} kept for ${id} until ${until(s)}, port ${port}; orq slot free ${id} stops it`)
     }),
-).pipe(Command.withDescription("keep the app up after verify, for the user's manual checks"))
+).pipe(Command.withDescription("keep the app up after verify, for the user's manual checks"), withState)
 
 const free = Command.make("free", { id }, ({ id }) =>
   Effect.gen(function* () {
     const s = yield* (yield* Slots).free(id)
     yield* Console.log(s ? `freed slot ${s.n}${s.stop ? " and stopped the app" : ""}` : `${id} holds no slot`)
   }),
-).pipe(Command.withDescription("free the task's slot; stops a kept app"))
+).pipe(Command.withDescription("free the task's slot; stops a kept app"), withState)
 
 const ls = Command.make("ls", {}, () =>
   Effect.gen(function* () {
     for (const s of yield* (yield* Slots).list)
       yield* Console.log(`slot ${s.n}  ${s.task_id}  until ${until(s)}${s.kept ? `  kept, port ${s.port}` : ""}`)
   }),
-).pipe(Command.withDescription("verify slots in use"))
+).pipe(Command.withDescription("verify slots in use"), withState)
 
 export const slot = Command.make("slot").pipe(
   Command.withDescription("verify slots: one running app per slot"),

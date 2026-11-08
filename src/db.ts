@@ -1,41 +1,8 @@
-// The SQLite index of tasks. Content lives in Markdown and git; this is only the index.
-import { Database } from "bun:sqlite"
-import { mkdirSync } from "node:fs"
-import { join } from "node:path"
+// The index of tasks in Postgres (src/pg.ts). Content lives in Markdown and git; this is only the index.
 import { Context, Effect, Layer } from "effect"
-import { OrqConfig } from "./config.ts"
+import { SqlClient } from "effect/sql/SqlClient"
 import { type LinkRole, OrqError, type Status, type Step, type Task, type TaskEvent, type TaskLink, taskId } from "./domain.ts"
-
-const SCHEMA = `
-CREATE TABLE IF NOT EXISTS tasks(
-  id TEXT PRIMARY KEY,
-  repo TEXT NOT NULL,
-  title TEXT NOT NULL,
-  branch TEXT NOT NULL,
-  worktree TEXT NOT NULL,
-  step TEXT NOT NULL DEFAULT 'triage',
-  status TEXT NOT NULL DEFAULT 'TODO',
-  created_at TEXT NOT NULL DEFAULT (datetime('now')),
-  updated_at TEXT NOT NULL DEFAULT (datetime('now')));
-CREATE TABLE IF NOT EXISTS events(
-  task_id TEXT NOT NULL,
-  at TEXT NOT NULL DEFAULT (datetime('now')),
-  kind TEXT NOT NULL,
-  detail TEXT);
-CREATE TABLE IF NOT EXISTS task_links(
-  task_id TEXT NOT NULL,
-  kind TEXT NOT NULL,
-  ref TEXT NOT NULL,
-  role TEXT NOT NULL,
-  PRIMARY KEY (task_id, kind, ref));`
-
-/** Columns that older databases have and the task no longer owns. */
-const DROPPED_COLUMNS = ["pr_url", "slack_thread"]
-
-const migrate = (d: Database) => {
-  const cols = (d.query("PRAGMA table_info(tasks)").all() as { name: string }[]).map((c) => c.name)
-  for (const c of DROPPED_COLUMNS) if (cols.includes(c)) d.exec(`ALTER TABLE tasks DROP COLUMN ${c}`)
-}
+import { asOrqError, stamp } from "./pg.ts"
 
 export interface NewTask {
   readonly id: string
@@ -46,8 +13,10 @@ export interface NewTask {
   readonly note: string
 }
 
-const attempt = <A>(what: string, f: () => A) =>
-  Effect.try({ try: f, catch: (e) => new OrqError({ message: `database: ${what}: ${String(e)}` }) })
+type TaskRow = Omit<Task, "created_at" | "updated_at"> & { readonly created_at: Date; readonly updated_at: Date }
+const toTask = (r: TaskRow): Task => ({ ...r, created_at: stamp(r.created_at), updated_at: stamp(r.updated_at) })
+
+const noTask = (id: string) => new OrqError({ message: `no task ${id}` })
 
 export class Db extends Context.Service<
   Db,
@@ -67,97 +36,61 @@ export class Db extends Context.Service<
   static readonly layer = Layer.effect(
     Db,
     Effect.gen(function* () {
-      const { home } = yield* OrqConfig
-      const db = yield* Effect.acquireRelease(
-        attempt("open", () => {
-          mkdirSync(home, { recursive: true })
-          const d = new Database(join(home, "state.db"), { create: true, strict: true })
-          d.exec("PRAGMA busy_timeout = 10000") // concurrent orq runs wait instead of failing
-          d.exec(SCHEMA)
-          migrate(d)
-          return d
-        }),
-        (d) => Effect.sync(() => d.close()),
-      )
-
-      const addEvent = db.query("INSERT INTO events(task_id, kind, detail) VALUES($id, $kind, $detail)")
-      const get = (id: string) =>
-        attempt("get", () => db.query("SELECT * FROM tasks WHERE id = $id").get({ id }) as Task | null).pipe(
-          Effect.flatMap((t) => (t ? Effect.succeed(t) : Effect.fail(new OrqError({ message: `no task ${id}` })))),
+      const sql = yield* SqlClient
+      const addEvent = (id: string, kind: string, detail: string) => sql`INSERT INTO events ${sql.insert({ task_id: id, kind, detail })}`
+      /** Locks the task row for the rest of the transaction; fails when there is no such task. */
+      const lockTask = (id: string) =>
+        sql`SELECT id FROM tasks WHERE id = ${id} FOR UPDATE`.pipe(
+          Effect.flatMap((rows) => (rows.length ? Effect.void : Effect.fail(noTask(id)))),
         )
 
       return {
         create: (build) =>
-          attempt("create", () =>
-            db
-              .transaction(() => {
-                const row = db.query("SELECT IFNULL(MAX(CAST(substr(id, 3) AS INTEGER)), 0) + 1 AS n FROM tasks").get() as { n: number }
-                const t = build(taskId(row.n))
-                db.query("INSERT INTO tasks(id, repo, title, branch, worktree) VALUES($id, $repo, $title, $branch, $worktree)").run({
-                  id: t.id,
-                  repo: t.repo,
-                  title: t.title,
-                  branch: t.branch,
-                  worktree: t.worktree,
-                })
-                addEvent.run({ id: t.id, kind: "created", detail: t.note })
-                return t
-              })
-              .immediate(),
+          Effect.gen(function* () {
+            yield* sql`LOCK TABLE tasks IN SHARE ROW EXCLUSIVE MODE`
+            const [next] = yield* sql<{ n: number }>`SELECT coalesce(max(substr(id, 3)::int), 0) + 1 AS n FROM tasks`
+            const t = build(taskId(next?.n ?? 1))
+            yield* sql`INSERT INTO tasks ${sql.insert({ id: t.id, repo: t.repo, title: t.title, branch: t.branch, worktree: t.worktree })}`
+            yield* addEvent(t.id, "created", t.note)
+            return t
+          }).pipe(sql.withTransaction, asOrqError("create")),
+
+        remove: (id) => sql`DELETE FROM tasks WHERE id = ${id}`.pipe(Effect.asVoid, asOrqError("remove")),
+
+        get: (id) =>
+          sql<TaskRow>`SELECT * FROM tasks WHERE id = ${id}`.pipe(
+            Effect.flatMap(([r]) => (r ? Effect.succeed(toTask(r)) : Effect.fail(noTask(id)))),
+            asOrqError("get"),
           ),
-        remove: (id) =>
-          attempt("remove", () =>
-            db.transaction(() => {
-              for (const table of ["task_links", "events"]) db.query(`DELETE FROM ${table} WHERE task_id = $id`).run({ id })
-              db.query("DELETE FROM tasks WHERE id = $id").run({ id })
-            })(),
-          ),
-        get,
+
         setState: (id, step, status, note) =>
-          get(id).pipe(
-            Effect.flatMap(() =>
-              attempt("set state", () =>
-                db.transaction(() => {
-                  db.query("UPDATE tasks SET step = $step, status = $status, updated_at = datetime('now') WHERE id = $id").run({
-                    id,
-                    step,
-                    status,
-                  })
-                  addEvent.run({ id, kind: `${step}: ${status}`, detail: note })
-                })(),
-              ),
-            ),
-          ),
-        list: attempt("list", () => db.query("SELECT * FROM tasks ORDER BY id").all() as Task[]),
+          Effect.gen(function* () {
+            yield* lockTask(id)
+            yield* sql`UPDATE tasks SET step = ${step}, status = ${status}, updated_at = now() WHERE id = ${id}`
+            yield* addEvent(id, `${step}: ${status}`, note)
+          }).pipe(sql.withTransaction, asOrqError("set state")),
+
+        list: sql<TaskRow>`SELECT * FROM tasks ORDER BY id`.pipe(
+          Effect.map((rs) => rs.map(toTask)),
+          asOrqError("list"),
+        ),
+
         events: (id, limit) =>
-          attempt(
-            "events",
-            () =>
-              db
-                .query("SELECT at, kind, detail FROM events WHERE task_id = $id ORDER BY rowid DESC LIMIT $limit")
-                .all({ id, limit }) as TaskEvent[],
+          sql<{ at: Date; kind: string; detail: string | null }>`
+            SELECT at, kind, detail FROM events WHERE task_id = ${id} ORDER BY seq DESC LIMIT ${limit}`.pipe(
+            Effect.map((rs) => rs.map((e) => ({ ...e, at: stamp(e.at) }))),
+            asOrqError("events"),
           ),
+
         link: (id, kind, ref, role) =>
-          get(id).pipe(
-            Effect.flatMap(() =>
-              attempt("link", () =>
-                db.transaction(() => {
-                  db.query("INSERT OR REPLACE INTO task_links(task_id, kind, ref, role) VALUES($id, $kind, $ref, $role)").run({
-                    id,
-                    kind,
-                    ref,
-                    role,
-                  })
-                  addEvent.run({ id, kind: "linked", detail: `${kind} ${ref} (${role})` })
-                })(),
-              ),
-            ),
-          ),
-        links: (id) =>
-          attempt(
-            "links",
-            () => db.query("SELECT kind, ref, role FROM task_links WHERE task_id = $id ORDER BY rowid").all({ id }) as TaskLink[],
-          ),
+          Effect.gen(function* () {
+            yield* lockTask(id)
+            yield* sql`INSERT INTO task_links ${sql.insert({ task_id: id, kind, ref, role })}
+                       ON CONFLICT (task_id, kind, ref) DO UPDATE SET role = EXCLUDED.role`
+            yield* addEvent(id, "linked", `${kind} ${ref} (${role})`)
+          }).pipe(sql.withTransaction, asOrqError("link")),
+
+        links: (id) => sql<TaskLink>`SELECT kind, ref, role FROM task_links WHERE task_id = ${id} ORDER BY seq`.pipe(asOrqError("links")),
       }
     }),
   )

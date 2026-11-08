@@ -1,12 +1,12 @@
 // orq through its seam: the command line. Each test gets a fresh repo and ORQ_HOME.
-import { Database } from "bun:sqlite"
-import { afterEach, beforeEach, describe, expect, test } from "bun:test"
+import { afterEach, beforeAll, beforeEach, describe, expect, test } from "bun:test"
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join, resolve } from "node:path"
+import { freshDatabase, startPostgres } from "./pg.ts"
 
 const CLI = resolve(import.meta.dir, "..", "src", "cli.ts")
-let dir: string, repo: string, home: string
+let dir: string, repo: string, home: string, pg: Record<string, string>
 
 const sh = (cmd: string[], cwd: string) => {
   const p = Bun.spawnSync(cmd, { cwd, stdout: "pipe", stderr: "pipe" })
@@ -15,7 +15,7 @@ const sh = (cmd: string[], cwd: string) => {
 }
 
 const orq = (args: string[], cwd = repo) => {
-  const env = { ...process.env, ORQ_HOME: home, ORQ_ZELLIJ_SESSION: "orq-test-none" } as Record<string, string | undefined>
+  const env = { ...process.env, ORQ_HOME: home, ...pg, ORQ_ZELLIJ_SESSION: "orq-test-none" } as Record<string, string | undefined>
   delete env.ZELLIJ
   const p = Bun.spawnSync(["bun", CLI, ...args], { cwd, env, stdout: "pipe", stderr: "pipe" })
   return { code: p.exitCode, out: p.stdout.toString(), err: p.stderr.toString() }
@@ -27,7 +27,10 @@ const worktreeOf = (id: string) => {
   return m[1].trim()
 }
 
-beforeEach(() => {
+beforeAll(startPostgres, 120_000)
+
+beforeEach(async () => {
+  pg = await freshDatabase()
   dir = mkdtempSync(join(tmpdir(), "orq-test-"))
   repo = join(dir, "proj")
   home = join(dir, "home")
@@ -57,7 +60,7 @@ describe("orq new", () => {
   })
 
   test("gives two tasks started at the same moment different ids", async () => {
-    const env = { ...process.env, ORQ_HOME: home, ORQ_ZELLIJ_SESSION: "orq-test-none" } as Record<string, string | undefined>
+    const env = { ...process.env, ORQ_HOME: home, ...pg, ORQ_ZELLIJ_SESSION: "orq-test-none" } as Record<string, string | undefined>
     delete env.ZELLIJ
     const start = (request: string) => Bun.spawn(["bun", CLI, "new", request], { cwd: repo, env, stdout: "pipe", stderr: "pipe" })
     const runs = [start("one"), start("two"), start("three")]
@@ -188,20 +191,6 @@ describe("orq link", () => {
     expect(r.code).toBe(1)
     expect(r.err).toContain("orq: no task T-0099")
   })
-
-  test("moves an existing database to the new task shape", () => {
-    mkdirSync(home, { recursive: true })
-    const old = new Database(join(home, "state.db"))
-    old.exec(`CREATE TABLE tasks(id TEXT PRIMARY KEY, repo TEXT NOT NULL, title TEXT NOT NULL,
-      branch TEXT NOT NULL, worktree TEXT NOT NULL, step TEXT NOT NULL DEFAULT 'triage',
-      status TEXT NOT NULL DEFAULT 'TODO', pr_url TEXT, slack_thread TEXT,
-      created_at TEXT NOT NULL DEFAULT (datetime('now')), updated_at TEXT NOT NULL DEFAULT (datetime('now')));
-      INSERT INTO tasks(id, repo, title, branch, worktree, slack_thread) VALUES('T-0001', '/r', 'old', 'b', '/w', 'C01/1');`)
-    old.close()
-    const shown = orq(["show", "T-0001"]).out
-    expect(shown).toContain("title = old")
-    expect(shown).not.toContain("slack_thread")
-  })
 })
 
 describe("orq open", () => {
@@ -226,4 +215,19 @@ test("orq ls lists every task", () => {
   const out = orq(["ls"]).out
   expect(out).toContain("T-0001  triage  TODO")
   expect(out).toContain("second")
+})
+
+test("without a database, a state command says so and orq init still works", () => {
+  for (const k of Object.keys(pg)) delete pg[k]
+  const r = orq(["ls"])
+  expect(r.code).toBe(1)
+  expect(r.err).toContain("orq: no database: PGHOST is not set")
+  expect(orq(["init"]).code).toBe(0)
+})
+
+test("refuses a TLS mode it cannot honour, before it connects", () => {
+  pg.PGSSLMODE = "verify-full"
+  expect(orq(["ls"]).err).toContain("PGSSLMODE=verify-full is not supported; use disable, require or verify-ca")
+  pg.PGSSLMODE = "verify-ca"
+  expect(orq(["ls"]).err).toContain("PGSSLMODE=verify-ca needs PGSSLROOTCERT")
 })

@@ -39,8 +39,11 @@ guard hooks are active only when it is set.
 Inside zellij, `orq new` opens a new tab. Outside, it uses the zellij session
 `$ORQ_ZELLIJ_SESSION` (default `orq`) if it exists, or prints the command to run.
 
-State is in `~/.orqestrai/state.db`, worktrees in `~/.orqestrai/worktrees/<repo>/`
-(`ORQ_HOME` changes both). Task files are in `.orqestrai/tasks/<id>/` in the worktree.
+State is in Postgres: orq reads libpq's `PGHOST`, `PGPORT`, `PGDATABASE`, `PGUSER`,
+`PGPASSWORD` and `PGSSLMODE` (`require` by default; `verify-ca` with `PGSSLROOTCERT`).
+`orq guard` and `orq init` need no database. Worktrees are in
+`~/.orqestrai/worktrees/<repo>/` (`ORQ_HOME`). Tests start their own Postgres with
+testcontainers, so they need Docker. Task files are in `.orqestrai/tasks/<id>/` in the worktree.
 
 ## Layout
 
