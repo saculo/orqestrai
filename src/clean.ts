@@ -11,7 +11,7 @@ import { OrqError, type Task } from "./domain.ts"
 import { baseBranch } from "./git.ts"
 import { prOf, syncMerged, viewPr } from "./pr.ts"
 import { exec, run } from "./proc.ts"
-import { Slots } from "./slots.ts"
+import { freeSlot } from "./slot-cli.ts"
 
 const refuse = (message: string) => Effect.fail(new OrqError({ message: `${message} Nothing was removed.` }))
 const OUT_OF_SCOPE = ".orqestrai/out-of-scope/"
@@ -67,7 +67,7 @@ export const clean = (id: string) =>
       if (task.status === "MERGED") yield* requireInPr(task, tip.stdout.trim())
       else done.push(`archived ${yield* archive(task, home)}`)
     }
-    const slot = yield* (yield* Slots).free(id)
+    const slot = yield* freeSlot(id)
     if (slot) done.push(`freed verify slot ${slot.n}`)
     if (hasWorktree) {
       yield* exec("git", ["worktree", "remove", task.worktree], task.repo)
