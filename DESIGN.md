@@ -418,6 +418,13 @@ is generated. A rerun replaces its own `orq-*` files and keeps the rest.
 | `orq ls`                   | lists tasks and status; reads merged PRs from `gh`          |
 | `orq clean <id>`           | removes a merged or dropped task's worktree and branch      |
 | `orq slot take\|keep\|free\|ls` | verify slots (§5)                                    |
+| `orq serve [--stdio]`      | the state as MCP tools (below); the one process with the database password |
+
+`orq serve` offers `orq_show`, `orq_state`, `orq_link`, `orq_slot_take`, `orq_slot_keep`
+and `orq_slot_free` (`src/mcp.ts`, Effect's `McpServer`). On the VPS it runs as its own
+user, HTTP on `127.0.0.1:7420`, started by systemd; on a laptop Claude Code starts it with
+`--stdio`. The tools only touch the database and never run a command: a slot's stop and
+serve commands go back to the caller, which runs them as the session's user.
 
 `orq ask` and `orq send` come with the Slack bridge (after slice 4).
 
@@ -478,8 +485,8 @@ plain TS (no `bun:*` imports), because pi loads extensions under Node.
   and `slots(host, n, task_id, …)`. Step and status are checked by the database too.
   - The instance is Mikrus's shared `psql01.mikr.us` (PG 18). It runs beside the VPS, so
     it takes none of its RAM or disk.
-  - orq reads libpq's `PG*` variables. On the VPS, `bws run` with the `session` machine
-    account sets them (§6). TLS: `PGSSLMODE=verify-ca` with `PGSSLROOTCERT`, the instance's self-signed
+  - orq reads libpq's `PG*` variables. On the VPS only `orq serve` gets them (§6): it
+    runs as the user `orqdb`, and sessions reach the state through its MCP tools. TLS: `PGSSLMODE=verify-ca` with `PGSSLROOTCERT`, the instance's self-signed
     certificate pinned; `require` (the default) only encrypts.
   - Nothing connects until a command needs state, so `orq guard` and `orq init` work
     without a database.
@@ -564,6 +571,8 @@ sandbox** (bubblewrap): every task session runs in it, the bridge does not.
 - **VPS1 users** (Mikrus `neil198`: LXC, 1 CPU; Tailscale; SSH with keys only — Mikrus
   keeps its public SSH port open):
   - `orq`: the bridge and the task sessions. No sudo.
+  - `orqdb`: runs `orq serve` (systemd, `varlock run -- orq serve`) and nothing else. It
+    alone holds the Postgres login and the Bitwarden token that fetches it.
   - `dock`: owns rootless Docker and nothing else. Sessions reach its socket (allowed in
     the sandbox) for testcontainers. A container can mount only what `dock` can read,
     which is no secret. (Docker as the same user would mount the token file and climb
@@ -571,10 +580,12 @@ sandbox** (bubblewrap): every task session runs in it, the bridge does not.
 - **Secrets:** Bitwarden Secrets Manager (EU cloud), two machine accounts:
   - `bridge`: Slack and GitHub tokens. Its token file is denied in the sandbox
     (filesystem) and in the Claude Code permission rules (Read/Edit tools).
-  - `session`: only the Postgres login for orq's own index (`PG_HOST`, `PG_DB`,
-    `PG_LOGIN`, `PG_PASSWORD`). Sessions get it on purpose: the worst misuse is a messed
-    up task index. TLS to the shared instance pins its self-signed certificate
-    (`PGSSLMODE=verify-ca`).
+  - `session`: only the Postgres login for orq's own index. Only `orq serve`, as
+    `orqdb`, gets it. A session calls the server's tools at `127.0.0.1:7420` and never
+    holds the password: Linux keeps another user's files, environment and memory from it,
+    and the sandbox's `NoNewPrivs` keeps it from switching users. The tools run no command,
+    so a session cannot make the server run its code. TLS to the shared instance pins its
+    self-signed certificate (`PGSSLMODE=verify-ca`).
 - **Sandbox network:** allowed are GitHub, Anthropic, the shared Postgres, `dock`'s Docker
   socket and the preview URLs on VPS2. Everything else is blocked.
 - **To prove on VPS1 first:** inside the sandbox, a test reaches its testcontainers port

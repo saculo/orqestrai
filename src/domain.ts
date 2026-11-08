@@ -1,7 +1,7 @@
 // The words of orqestrai: steps, statuses, tasks, links, events, and the one error the CLI reports.
 // Every other module imports these; nothing defines them twice. The schemas check rows read
 // from the database.
-import { Data, Schema } from "effect"
+import { Schema } from "effect"
 
 export const STEPS = ["triage", "plan", "impl", "verify", "learn", "ship"] as const
 export const Step = Schema.Literals(STEPS)
@@ -38,8 +38,8 @@ export type TaskLink = typeof TaskLink.Type
 export const TaskEvent = Schema.Struct({ at: Schema.Date, kind: Schema.String, detail: Schema.NullOr(Schema.String) })
 export type TaskEvent = typeof TaskEvent.Type
 
-/** A failure the user can act on. The CLI prints its message and exits 1. */
-export class OrqError extends Data.TaggedError("OrqError")<{ readonly message: string }> {}
+/** A failure the user can act on. The CLI prints its message and exits 1; an MCP tool returns it as its error. */
+export class OrqError extends Schema.TaggedError<OrqError>()("OrqError", { message: Schema.String }) {}
 
 export const taskId = (n: number): string => `T-${String(n).padStart(4, "0")}`
 

@@ -3,15 +3,17 @@
 
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs"
 import { dirname, join } from "node:path"
-import { BunRuntime, BunServices } from "@effect/platform-bun"
+import { BunHttpServer, BunRuntime, BunServices, BunStdio } from "@effect/platform-bun"
 import { Console, Effect, Layer } from "effect"
-import { Argument, CliError, Command } from "effect/cli"
+import { Argument, CliError, Command, Flag } from "effect/cli"
+import { HttpRouter } from "effect/http"
 import { clean } from "./clean.ts"
 import { OrqConfig } from "./config.ts"
 import { Db } from "./db.ts"
 import { LINK_ROLES, OrqError, STATUSES, STEPS, slugify, stamp, TEMPLATES } from "./domain.ts"
 import { addWorktree, baseBranch, requireRef, topLevel } from "./git.ts"
 import { install } from "./init.ts"
+import { httpServer, stdioServer } from "./mcp.ts"
 import { syncMerged } from "./pr.ts"
 import { slot } from "./slot-cli.ts"
 import { withState } from "./state.ts"
@@ -146,9 +148,26 @@ const file = Command.make("file", { id, name: Argument.Literals("name", TEMPLATE
   }),
 ).pipe(Command.withDescription("new task file from templates/<name>.md"))
 
+const serve = Command.make(
+  "serve",
+  {
+    stdio: Flag.Boolean("stdio").pipe(
+      Flag.withDefault(false),
+      Flag.withDescription("serve over stdin/stdout, for Claude Code to start it"),
+    ),
+    port: Flag.Int("port").pipe(Flag.withDefault(7420), Flag.withDescription("HTTP port on 127.0.0.1")),
+  },
+  ({ stdio, port }) =>
+    Layer.launch(
+      stdio
+        ? stdioServer.pipe(Layer.provide(BunStdio.layer))
+        : HttpRouter.serve(httpServer).pipe(Layer.provide(BunHttpServer.layer({ hostname: "127.0.0.1", port }))),
+    ),
+).pipe(Command.withDescription("serve orq's state as MCP tools; the only process that needs the database password"), withState)
+
 const orq = Command.make("orq").pipe(
   Command.withDescription("orqestrai mechanics. The workflow is in the skills."),
-  Command.withSubcommands([init, newTask, open, state, show, link, ls, file, cleanTask, slot]),
+  Command.withSubcommands([init, newTask, open, state, show, link, ls, file, cleanTask, slot, serve]),
 )
 
 const AppLayer = OrqConfig.layer.pipe(Layer.provideMerge(BunServices.layer))
