@@ -1,7 +1,7 @@
-// orq's state as MCP tools, served by `orq serve`. The server is the only process that holds the
-// database password: a session talks to it and never sees the password (DESIGN.md, Security).
-// The tools only touch the database. They never run a command; anything that starts or stops a
-// program (a slot's app, git, zellij) stays in the CLI, run by the session's own user.
+// orq's state as MCP tools: `orq mcp`, which Claude Code starts over stdio. The tools use the same
+// Db and Slots as the CLI, so with ORQ_SERVER set they go through `orq serve` and the session never
+// holds the database password (DESIGN.md, Security). They never run a command: a slot's stop
+// command comes back in the result, for the session to run as its own user.
 import { Effect, Layer, Schema } from "effect"
 import { McpProtocol, McpServer, Tool, Toolkit } from "effect/ai"
 import { Db } from "./db.ts"
@@ -79,13 +79,8 @@ const handlers = OrqTools.toLayer(
   }),
 )
 
-const server = { name: "orq", version: "0.1.0", protocols: [McpProtocol.v2025_11_25, McpProtocol.v2025_06_18] } as const
-
-/** The tools, registered on whichever transport is chosen. */
-const tools = McpServer.toolkit(OrqTools).pipe(Layer.provide(handlers))
-
-/** Streamable HTTP at /mcp, for the session on the VPS. Bind it to localhost only. */
-export const httpServer = tools.pipe(Layer.provide(McpServer.layerHttp({ ...server, path: "/mcp" })))
-
-/** stdio, for a laptop: Claude Code starts `orq serve --stdio` itself. */
-export const stdioServer = tools.pipe(Layer.provide(McpServer.layerStdio(server)))
+/** The tools over stdin/stdout, for Claude Code to start. */
+export const mcpStdio = McpServer.toolkit(OrqTools).pipe(
+  Layer.provide(handlers),
+  Layer.provide(McpServer.layerStdio({ name: "orq", version: "0.1.0", protocols: [McpProtocol.v2025_11_25, McpProtocol.v2025_06_18] })),
+)

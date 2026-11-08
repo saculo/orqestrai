@@ -3,20 +3,20 @@
 
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs"
 import { dirname, join } from "node:path"
-import { BunHttpServer, BunRuntime, BunServices, BunStdio } from "@effect/platform-bun"
-import { Console, Effect, Layer } from "effect"
+import { BunRuntime, BunServices, BunStdio } from "@effect/platform-bun"
+import { Console, Effect, Layer, Option } from "effect"
 import { Argument, CliError, Command, Flag } from "effect/cli"
-import { HttpRouter } from "effect/http"
 import { clean } from "./clean.ts"
 import { OrqConfig } from "./config.ts"
 import { Db } from "./db.ts"
 import { LINK_ROLES, OrqError, STATUSES, STEPS, slugify, stamp, TEMPLATES } from "./domain.ts"
 import { addWorktree, baseBranch, requireRef, topLevel } from "./git.ts"
 import { install } from "./init.ts"
-import { httpServer, stdioServer } from "./mcp.ts"
+import { mcpStdio } from "./mcp.ts"
 import { syncMerged } from "./pr.ts"
+import { type Listen, serveApi } from "./server.ts"
 import { slot } from "./slot-cli.ts"
-import { withState } from "./state.ts"
+import { Direct, withState } from "./state.ts"
 import { openTab } from "./zellij.ts"
 
 /** The guard hook and the skills call `orq` by name. Without it on PATH the guards are off. */
@@ -49,16 +49,8 @@ const newTask = Command.make("new", { request: Argument.String("request") }, ({ 
     const base = yield* baseBranch(root)
     yield* requireRef(root, base)
 
-    const slug = slugify(request)
-    const {
-      id: tid,
-      branch,
-      worktree,
-    } = yield* db.create((tid) => {
-      const branch = `orq/${tid}-${slug}`
-      const worktree = join(home, "worktrees", root.split("/").at(-1) ?? "repo", `${tid}-${slug}`)
-      return { id: tid, repo: root, title: request, branch, worktree, note: `${branch} from ${base}` }
-    })
+    const worktrees = join(home, "worktrees", root.split("/").at(-1) ?? "repo")
+    const { id: tid, branch, worktree } = yield* db.create({ repo: root, title: request, slug: slugify(request), worktrees, base })
 
     // The id is held; set up the worktree, and give the id back if that fails.
     yield* addWorktree(root, branch, worktree, base).pipe(Effect.tapError(() => db.remove(tid)))
@@ -151,23 +143,28 @@ const file = Command.make("file", { id, name: Argument.Literals("name", TEMPLATE
 const serve = Command.make(
   "serve",
   {
-    stdio: Flag.Boolean("stdio").pipe(
-      Flag.withDefault(false),
-      Flag.withDescription("serve over stdin/stdout, for Claude Code to start it"),
-    ),
-    port: Flag.Int("port").pipe(Flag.withDefault(7420), Flag.withDescription("HTTP port on 127.0.0.1")),
+    socket: Flag.String("socket").pipe(Flag.optional, Flag.withDescription("listen on this Unix socket (the VPS)")),
+    port: Flag.Int("port").pipe(Flag.optional, Flag.withDescription("listen on this TCP port on 127.0.0.1")),
   },
-  ({ stdio, port }) =>
-    Layer.launch(
-      stdio
-        ? stdioServer.pipe(Layer.provide(BunStdio.layer))
-        : HttpRouter.serve(httpServer).pipe(Layer.provide(BunHttpServer.layer({ hostname: "127.0.0.1", port }))),
-    ),
-).pipe(Command.withDescription("serve orq's state as MCP tools; the only process that needs the database password"), withState)
+  ({ socket, port }) => {
+    const listen: Option.Option<Listen> = Option.isSome(socket)
+      ? Option.some({ unix: socket.value })
+      : Option.map(port, (port) => ({ port }))
+    return Option.isSome(listen)
+      ? Layer.launch(serveApi(listen.value)).pipe(Effect.mapError((e) => new OrqError({ message: `orq serve: ${e.message}` })))
+      : Effect.fail(new OrqError({ message: "orq serve needs --socket <path> or --port <n>" }))
+  },
+).pipe(Command.withDescription("serve orq's state over HTTP; the one process that needs the database password"), Command.provide(Direct))
+
+const mcp = Command.make("mcp", {}, () =>
+  Layer.launch(mcpStdio.pipe(Layer.provide(BunStdio.layer))).pipe(
+    Effect.mapError((e) => (e instanceof OrqError ? e : new OrqError({ message: `orq mcp: ${e.message}` }))),
+  ),
+).pipe(Command.withDescription("orq's state as MCP tools over stdio, for Claude Code to start"), withState)
 
 const orq = Command.make("orq").pipe(
   Command.withDescription("orqestrai mechanics. The workflow is in the skills."),
-  Command.withSubcommands([init, newTask, open, state, show, link, ls, file, cleanTask, slot, serve]),
+  Command.withSubcommands([init, newTask, open, state, show, link, ls, file, cleanTask, slot, serve, mcp]),
 )
 
 const AppLayer = OrqConfig.layer.pipe(Layer.provideMerge(BunServices.layer))

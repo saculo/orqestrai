@@ -41,8 +41,9 @@ Inside zellij, `orq new` opens a new tab. Outside, it uses the zellij session
 
 State is in Postgres: orq reads libpq's `PGHOST`, `PGPORT`, `PGDATABASE`, `PGUSER`,
 `PGPASSWORD` and `PGSSLMODE` (`require` by default; `verify-ca` with `PGSSLROOTCERT`).
-`orq guard` and `orq init` need no database. `orq serve` offers the same state as MCP tools
-(HTTP on `127.0.0.1:7420`, or `--stdio`), so a sandboxed session can use it without the password. Worktrees are in
+`orq guard` and `orq init` need no database. `orq serve --socket <path>` is the one
+process that connects: set `ORQ_SERVER` to that path and every other command goes through it,
+with no `PG*` variable. `orq mcp` offers the state as MCP tools over stdio, for Claude Code. Worktrees are in
 `~/.orqestrai/worktrees/<repo>/` (`ORQ_HOME`). Tests start their own Postgres with
 testcontainers, so they need Docker. Task files are in `.orqestrai/tasks/<id>/` in the worktree.
 

@@ -97,6 +97,15 @@ describe("orq clean", () => {
     expect(orq(["show", "T-0001"]).out).toMatch(/status = MERGED[\s\S]*link gh-pr[\s\S]*cleaned: removed worktree/)
   })
 
+  test("stops the app of a kept verify slot", () => {
+    shipped()
+    orq(["slot", "take", "T-0001"])
+    orq(["slot", "keep", "T-0001", "--stop", `touch ${join(dir, "stopped")}`, "--port", "4100"])
+    const r = orq(["clean", "T-0001"], merged())
+    expect(r.out).toContain("freed verify slot 1")
+    expect(existsSync(join(dir, "stopped"))).toBe(true)
+  })
+
   test("refuses when the branch has commits that are not in the PR", () => {
     shipped()
     const gh = merged()

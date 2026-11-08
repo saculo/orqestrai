@@ -24,8 +24,13 @@ export const Slot = Schema.Struct({
 })
 export type Slot = typeof Slot.Type
 
-/** The slot taken, or the slots that hold every place; and expired slots whose apps the caller stops. */
-export type Taken = ({ readonly slot: Slot } | { readonly busy: ReadonlyArray<Slot> }) & { readonly expired: ReadonlyArray<Slot> }
+/** The slot taken with its first port, or the slots that hold every place; and the expired
+ * slots freed on the way, whose apps the caller stops. */
+export const Taken = Schema.Union([
+  Schema.Struct({ slot: Slot, portBase: Schema.Int, expired: Schema.Array(Slot) }),
+  Schema.Struct({ busy: Schema.Array(Slot), expired: Schema.Array(Slot) }),
+])
+export type Taken = typeof Taken.Type
 
 export class Slots extends Context.Service<
   Slots,
@@ -35,7 +40,6 @@ export class Slots extends Context.Service<
     /** Frees the task's slot and returns it, so the caller can stop its app. */
     readonly free: (task: string) => Effect.Effect<Slot | undefined, OrqError>
     readonly list: Effect.Effect<ReadonlyArray<Slot>, OrqError>
-    readonly portBase: (slot: Slot) => number
   }
 >()("orq/Slots") {
   static readonly layer = Layer.effect(
@@ -46,6 +50,7 @@ export class Slots extends Context.Service<
       const host = cfg.host
       const until = sql`now() + make_interval(secs => ${cfg.slotTtl})`
       const slots = rows(Slot)
+      const portBase = (s: Slot) => cfg.portStart + (s.n - 1) * 100
       const ofHost = sql`SELECT * FROM slots WHERE host = ${host} ORDER BY n`.pipe(Effect.flatMap(slots))
 
       const take = (task: string, worktree: string) =>
@@ -53,14 +58,14 @@ export class Slots extends Context.Service<
           yield* sql`LOCK TABLE slots IN SHARE ROW EXCLUSIVE MODE`
           const expired = yield* sql`DELETE FROM slots WHERE host = ${host} AND expires_at < now() RETURNING *`.pipe(Effect.flatMap(slots))
           const [mine] = yield* sql`UPDATE slots SET expires_at = ${until} WHERE task_id = ${task} RETURNING *`.pipe(Effect.flatMap(slots))
-          if (mine) return { slot: mine, expired } satisfies Taken
+          if (mine) return { slot: mine, portBase: portBase(mine), expired } satisfies Taken
           const used = new Set((yield* ofHost).map((s) => s.n))
           const n = Array.from({ length: cfg.slots }, (_, i) => i + 1).find((i) => !used.has(i))
           if (n === undefined) return { busy: yield* ofHost, expired } satisfies Taken
           const [slot] = yield* sql`INSERT INTO slots (host, n, task_id, worktree, expires_at)
                                     VALUES (${host}, ${n}, ${task}, ${worktree}, ${until}) RETURNING *`.pipe(Effect.flatMap(slots))
           if (!slot) return yield* new OrqError({ message: "database: take: no row returned" })
-          return { slot, expired } satisfies Taken
+          return { slot, portBase: portBase(slot), expired } satisfies Taken
         }).pipe(sql.withTransaction, asOrqError("take"))
 
       const keep = (task: string, stop: string, port: number) =>
@@ -83,7 +88,6 @@ export class Slots extends Context.Service<
         keep,
         free,
         list: ofHost.pipe(asOrqError("list")),
-        portBase: (s: Slot) => cfg.portStart + (s.n - 1) * 100,
       }
     }),
   )
@@ -100,9 +104,9 @@ export const takeSlot = Effect.fnUntraced(function* (id: string, wait: number) {
   const slots = yield* Slots
   const task = yield* (yield* Db).get(id)
   const expired: Array<Slot> = []
-  const slot = yield* slots.take(id, task.worktree).pipe(
+  const { slot, portBase } = yield* slots.take(id, task.worktree).pipe(
     Effect.tap((r) => Effect.sync(() => expired.push(...r.expired))),
-    Effect.flatMap((r) => ("slot" in r ? Effect.succeed(r.slot) : Effect.fail(new AllHeld({ held: r.busy })))),
+    Effect.flatMap((r) => ("slot" in r ? Effect.succeed(r) : Effect.fail(new AllHeld({ held: r.busy })))),
     Effect.retry({
       schedule: Schedule.spaced("2 seconds").pipe(Schedule.upTo({ duration: `${wait} seconds` })),
       while: (e) => e._tag === "AllHeld",
@@ -113,5 +117,5 @@ export const takeSlot = Effect.fnUntraced(function* (id: string, wait: number) {
       ),
     ),
   )
-  return { slot, expired, portBase: slots.portBase(slot), project: `orq-${id.toLowerCase()}` }
+  return { slot, expired, portBase, project: `orq-${id.toLowerCase()}` }
 })

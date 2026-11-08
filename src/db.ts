@@ -1,25 +1,18 @@
 // The index of tasks in Postgres (src/pg.ts). Content lives in Markdown and git; this is only the index.
+import { join } from "node:path"
 import { Context, Effect, Layer } from "effect"
 import { SqlClient } from "effect/sql/SqlClient"
-import { type LinkRole, OrqError, type Status, type Step, Task, TaskEvent, TaskLink, taskId } from "./domain.ts"
+import { type LinkRole, type NewTask, OrqError, type Status, type Step, Task, TaskEvent, TaskLink, taskId } from "./domain.ts"
 import { asOrqError, rows } from "./pg.ts"
-
-export interface NewTask {
-  readonly id: string
-  readonly repo: string
-  readonly title: string
-  readonly branch: string
-  readonly worktree: string
-  readonly note: string
-}
 
 const noTask = (id: string) => new OrqError({ message: `no task ${id}` })
 
 export class Db extends Context.Service<
   Db,
   {
-    /** Gives the next id and inserts the task in one transaction, so two runs never share an id. */
-    readonly create: (build: (id: string) => NewTask) => Effect.Effect<NewTask, OrqError>
+    /** Gives the next id and inserts the task in one transaction, so two runs never share an id.
+     * The branch is `orq/<id>-<slug>`, the worktree `<worktrees>/<id>-<slug>`. */
+    readonly create: (task: NewTask) => Effect.Effect<Task, OrqError>
     /** Removes a task that could not be set up. */
     readonly remove: (id: string) => Effect.Effect<void, OrqError>
     readonly get: (id: string) => Effect.Effect<Task, OrqError>
@@ -51,15 +44,16 @@ export class Db extends Context.Service<
           asOrqError("get"),
         )
 
-      const create = (build: (id: string) => NewTask) =>
+      const create = ({ repo, title, slug, worktrees, base }: NewTask) =>
         Effect.gen(function* () {
           yield* sql`LOCK TABLE tasks IN SHARE ROW EXCLUSIVE MODE`
           const [next] = yield* sql<{ n: number }>`SELECT coalesce(max(substr(id, 3)::int), 0) + 1 AS n FROM tasks`
-          const task = build(taskId(next?.n ?? 1))
-          const { note, ...row } = task
+          const id = taskId(next?.n ?? 1)
+          const branch = `orq/${id}-${slug}`
+          const row = { id, repo, title, branch, worktree: join(worktrees, `${id}-${slug}`) }
           yield* sql`INSERT INTO tasks ${sql.insert(row)}`
-          yield* addEvent(task.id, "created", note)
-          return task
+          yield* addEvent(id, "created", `${branch} from ${base}`)
+          return yield* get(id)
         }).pipe(sql.withTransaction, asOrqError("create"))
 
       const setState = (id: string, step: Step, status: Status, note: string) =>

@@ -418,13 +418,22 @@ is generated. A rerun replaces its own `orq-*` files and keeps the rest.
 | `orq ls`                   | lists tasks and status; reads merged PRs from `gh`          |
 | `orq clean <id>`           | removes a merged or dropped task's worktree and branch      |
 | `orq slot take\|keep\|free\|ls` | verify slots (§5)                                    |
-| `orq serve [--stdio]`      | the state as MCP tools (below); the one process with the database password |
+| `orq serve --socket <path>` | the state over HTTP (below); the one process with the database password |
+| `orq mcp`                  | the state as MCP tools over stdio, for Claude Code to start  |
 
-`orq serve` offers `orq_show`, `orq_state`, `orq_link`, `orq_slot_take`, `orq_slot_keep`
-and `orq_slot_free` (`src/mcp.ts`, Effect's `McpServer`). On the VPS it runs as its own
-user, HTTP on `127.0.0.1:7420`, started by systemd; on a laptop Claude Code starts it with
-`--stdio`. The tools only touch the database and never run a command: a slot's stop and
-serve commands go back to the caller, which runs them as the session's user.
+**Server and clients.** `orq serve` is the only process that connects to the database. It
+offers the `Db` and `Slots` services as an HTTP API (`src/api.ts`, Effect's `HttpApi`) on
+a Unix socket, so file permissions decide who may call it. With `ORQ_SERVER` set (the
+socket path, or a URL), every other command uses the API's generated client
+(`src/remote.ts`) instead of the database, and needs no `PG*` variable. Without it, orq
+connects directly, as on a laptop. The server only touches the database and never runs a
+command: a slot's stop and serve commands go back to the client, which runs them as its
+own user. On the VPS, systemd runs it as the user `orqdb`.
+
+`orq mcp` offers `orq_show`, `orq_state`, `orq_link`, `orq_slot_take`, `orq_slot_keep`
+and `orq_slot_free` (`src/mcp.ts`, Effect's `McpServer`). Claude Code starts it over
+stdio; it uses the same `Db` and `Slots` as the CLI, so on the VPS it goes through the
+server too.
 
 `orq ask` and `orq send` come with the Slack bridge (after slice 4).
 
@@ -581,10 +590,10 @@ sandbox** (bubblewrap): every task session runs in it, the bridge does not.
   - `bridge`: Slack and GitHub tokens. Its token file is denied in the sandbox
     (filesystem) and in the Claude Code permission rules (Read/Edit tools).
   - `session`: only the Postgres login for orq's own index. Only `orq serve`, as
-    `orqdb`, gets it. A session calls the server's tools at `127.0.0.1:7420` and never
-    holds the password: Linux keeps another user's files, environment and memory from it,
-    and the sandbox's `NoNewPrivs` keeps it from switching users. The tools run no command,
-    so a session cannot make the server run its code. TLS to the shared instance pins its
+    `orqdb`, gets it. A session reaches the state through the server's socket (the CLI
+    and `orq mcp`) and never holds the password: Linux keeps another user's files, environment and memory from it,
+    and the sandbox's `NoNewPrivs` keeps it from switching users. The server runs no command,
+    so a session cannot make it run its code. TLS to the shared instance pins its
     self-signed certificate (`PGSSLMODE=verify-ca`).
 - **Sandbox network:** allowed are GitHub, Anthropic, the shared Postgres, `dock`'s Docker
   socket and the preview URLs on VPS2. Everything else is blocked.

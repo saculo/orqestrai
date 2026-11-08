@@ -22,6 +22,13 @@ const release = Effect.fnUntraced(function* (s: Slot) {
   if (s.port && unserve) yield* sh(withPort(unserve, s.port))
 })
 
+/** Frees the task's slot and stops its app. Returns the freed slot, if it held one. */
+export const freeSlot = Effect.fnUntraced(function* (id: string) {
+  const s = yield* (yield* Slots).free(id)
+  if (s) yield* release(s)
+  return s
+})
+
 const take = Command.make(
   "take",
   { id, wait: Flag.Int("wait").pipe(Flag.withDefault(0), Flag.withDescription("seconds to wait for a free slot")) },
@@ -51,8 +58,7 @@ const keep = Command.make(
 
 const free = Command.make("free", { id }, ({ id }) =>
   Effect.gen(function* () {
-    const s = yield* (yield* Slots).free(id)
-    if (s) yield* release(s)
+    const s = yield* freeSlot(id)
     yield* Console.log(s ? `freed slot ${s.n}${s.stop ? " and stopped the app" : ""}` : `${id} holds no slot`)
   }),
 ).pipe(Command.withDescription("free the task's slot; stops a kept app"), withState)
