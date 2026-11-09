@@ -5,7 +5,7 @@
 // crashed session cannot hold it forever: the next take frees it and hands back its app to stop.
 // This service only touches the database: it also runs inside `orq serve`, which must never run
 // a command. Stopping and serving apps is the caller's job (src/slot-cli.ts).
-import { Context, Data, Effect, Layer, Schedule, Schema } from "effect"
+import { Context, Data, Duration, Effect, Layer, Schedule, Schema } from "effect"
 import { SqlClient } from "effect/sql/SqlClient"
 import { OrqConfig } from "./config.ts"
 import { Db } from "./db.ts"
@@ -100,6 +100,15 @@ const until = (s: Slot) => stamp(s.expires_at).slice(0, 16)
 
 /** Takes a slot for the task, waiting up to `wait` seconds while every slot is held. Returns the
  * slot and every expired slot freed on the way, whose apps the caller stops. */
+/** Every 2 seconds for `seconds`, the last try at the limit, never after it. */
+const within = (seconds: number) =>
+  Schedule.spaced("2 seconds").pipe(
+    Schedule.upTo({ duration: Duration.seconds(seconds) }),
+    Schedule.modifyDelay(({ duration, elapsed }) =>
+      Effect.succeed(Duration.min(duration, Duration.millis(Math.max(0, seconds * 1000 - elapsed)))),
+    ),
+  )
+
 export const takeSlot = Effect.fnUntraced(function* (id: string, wait: number) {
   const slots = yield* Slots
   const task = yield* (yield* Db).get(id)
@@ -107,10 +116,7 @@ export const takeSlot = Effect.fnUntraced(function* (id: string, wait: number) {
   const { slot, portBase } = yield* slots.take(id, task.worktree).pipe(
     Effect.tap((r) => Effect.sync(() => expired.push(...r.expired))),
     Effect.flatMap((r) => ("slot" in r ? Effect.succeed(r) : Effect.fail(new AllHeld({ held: r.busy })))),
-    Effect.retry({
-      schedule: Schedule.spaced("2 seconds").pipe(Schedule.upTo({ duration: `${wait} seconds` })),
-      while: (e) => e._tag === "AllHeld",
-    }),
+    (taking) => (wait > 0 ? Effect.retry(taking, { schedule: within(wait), while: (e) => e._tag === "AllHeld" }) : taking),
     Effect.catchTag("AllHeld", ({ held }) =>
       Effect.fail(
         new OrqError({ message: `no free verify slot; held by ${held.map((s) => `${s.task_id} (until ${until(s)})`).join(", ")}` }),
