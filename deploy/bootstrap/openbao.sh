@@ -40,11 +40,12 @@ SH
   ;;
 db)
   token=$(ask_secret "root token")
-  json=$(jq -n --arg h "$(ask "PGHOST")" --arg p "$(ask "PGPORT [5432]")" --arg d "$(ask "PGDATABASE")" \
-    --arg u "$(ask "PGUSER")" --arg w "$(ask_secret "PGPASSWORD")" --arg m "$(ask "PGSSLMODE [verify-ca]")" \
-    --rawfile c "$(ask "path to the server's CA certificate (for verify-ca)")" \
-    '{PGHOST: $h, PGPORT: (if $p == "" then "5432" else $p end), PGDATABASE: $d, PGUSER: $u,
-      PGPASSWORD: $w, PGSSLMODE: (if $m == "" then "verify-ca" else $m end), "ca.crt": $c}')
+  host=$(ask "PGHOST") port=$(ask "PGPORT [5432]") db=$(ask "PGDATABASE") user=$(ask "PGUSER")
+  password=$(ask_secret "PGPASSWORD") mode=$(ask "PGSSLMODE [verify-ca]")
+  ca=$(ask "path to the server's CA certificate (for verify-ca; empty for none)")
+  json=$(jq -n --arg h "$host" --arg p "${port:-5432}" --arg d "$db" --arg u "$user" --arg w "$password" \
+    --arg m "${mode:-verify-ca}" --arg c "$([ -n "$ca" ] && cat "$ca")" \
+    '{PGHOST: $h, PGPORT: $p, PGDATABASE: $d, PGUSER: $u, PGPASSWORD: $w, PGSSLMODE: $m, "ca.crt": $c}')
   printf '%s\n%s\n' "$token" "$json" | in_bao "bao kv put -mount=secret orq/db - >/dev/null && echo stored secret/orq/db"
   ;;
 tailscale)
