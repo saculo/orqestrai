@@ -65,6 +65,20 @@ describe("orq slot", () => {
     expect(r.err).toContain("no free verify slot; held by T-0001")
   })
 
+  test("without --wait, take fails at once and does not retry", () => {
+    orq(["slot", "take", "T-0001"])
+    const started = Date.now()
+    expect(orq(["slot", "take", "T-0002"]).code).toBe(1)
+    expect(Date.now() - started).toBeLessThan(1500)
+  })
+
+  test("take --wait gives up after the time it was given", () => {
+    orq(["slot", "take", "T-0001"])
+    const started = Date.now()
+    expect(orq(["slot", "take", "T-0002", "--wait", "1"]).code).toBe(1)
+    expect(Date.now() - started).toBeLessThan(1900)
+  })
+
   test("take --wait gets the slot when it is freed while waiting", async () => {
     orq(["slot", "take", "T-0001"])
     const env = { ...process.env, ORQ_HOME: home, ...pg } as Record<string, string | undefined>

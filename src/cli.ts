@@ -9,7 +9,7 @@ import { Argument, CliError, Command } from "effect/cli"
 import { clean } from "./clean.ts"
 import { OrqConfig } from "./config.ts"
 import { Db } from "./db.ts"
-import { LINK_ROLES, OrqError, STATUSES, STEPS, slugify, TEMPLATES } from "./domain.ts"
+import { LINK_ROLES, OrqError, STATUSES, STEPS, slugify, stamp, TEMPLATES } from "./domain.ts"
 import { addWorktree, baseBranch, requireRef, topLevel } from "./git.ts"
 import { install } from "./init.ts"
 import { syncMerged } from "./pr.ts"
@@ -96,11 +96,12 @@ const show = Command.make("show", { id }, ({ id }) =>
     const db = yield* Db
     yield* syncMerged([yield* db.get(id)])
     const task = yield* db.get(id)
-    const width = Math.max(...Object.keys(task).map((k) => k.length))
-    for (const [k, v] of Object.entries(task)) yield* Console.log(`${k.padStart(width)} = ${v ?? ""}`)
+    const fields = Object.entries(task).map(([k, v]) => [k, v instanceof Date ? stamp(v) : String(v)] as const)
+    const width = Math.max(...fields.map(([k]) => k.length))
+    for (const [k, v] of fields) yield* Console.log(`${k.padStart(width)} = ${v}`)
     for (const l of yield* db.links(id)) yield* Console.log(`link ${l.kind} ${l.ref} (${l.role})`)
     yield* Console.log("")
-    for (const e of yield* db.events(id, 10)) yield* Console.log(`${e.at}  ${e.kind.padEnd(22)}  ${e.detail ?? ""}`)
+    for (const e of yield* db.events(id, 10)) yield* Console.log(`${stamp(e.at)}  ${e.kind.padEnd(22)}  ${e.detail ?? ""}`)
   }),
 ).pipe(Command.withDescription("one task and its last events"), withState)
 
@@ -123,7 +124,7 @@ const ls = Command.make("ls", {}, () =>
     const db = yield* Db
     yield* syncMerged(yield* db.list)
     for (const t of yield* db.list)
-      yield* Console.log(`${t.id}  ${t.step.padEnd(6)}  ${t.status.padEnd(14)}  ${t.title.slice(0, 50).padEnd(50)}  ${t.updated_at}`)
+      yield* Console.log(`${t.id}  ${t.step.padEnd(6)}  ${t.status.padEnd(14)}  ${t.title.slice(0, 50).padEnd(50)}  ${stamp(t.updated_at)}`)
   }),
 ).pipe(Command.withDescription("all tasks"), withState)
 
@@ -153,13 +154,7 @@ const orq = Command.make("orq").pipe(
 const AppLayer = OrqConfig.layer.pipe(Layer.provideMerge(BunServices.layer))
 
 Command.run(orq, { version: "0.1.0" }).pipe(
-  Effect.tapError((e) =>
-    e instanceof OrqError
-      ? Console.error(`orq: ${e.message}`)
-      : CliError.isCliError(e)
-        ? Effect.void
-        : Console.error(`orq: ${e && typeof e === "object" && "message" in e ? `database: ${e.message}` : String(e)}`),
-  ),
+  Effect.tapError((e) => (CliError.isCliError(e) ? Effect.void : Console.error(`orq: ${e.message}`))),
   Effect.provide(AppLayer),
   BunRuntime.runMain({ disableErrorReporting: true }),
 )
