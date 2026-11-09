@@ -3,12 +3,12 @@
 import { afterEach, beforeAll, beforeEach, describe, expect, test } from "bun:test"
 import { mkdirSync, mkdtempSync, rmSync } from "node:fs"
 import { tmpdir } from "node:os"
-import { join, resolve } from "node:path"
+import { join } from "node:path"
 import type { Subprocess } from "bun"
+import { ORQ } from "./orq.ts"
 import { freshDatabase, startPostgres } from "./pg.ts"
 import { startServer, withoutPg } from "./server.ts"
 
-const CLI = resolve(import.meta.dir, "..", "src", "cli.ts")
 let dir: string, repo: string, socket: string, server: Subprocess
 
 const env = () => {
@@ -24,7 +24,7 @@ const env = () => {
 
 /** A minimal MCP client over stdio: initialize, then one request at a time. */
 const connect = async () => {
-  const p = Bun.spawn([process.execPath, CLI, "mcp"], { cwd: repo, env: env(), stdin: "pipe", stdout: "pipe", stderr: "pipe" })
+  const p = Bun.spawn([...ORQ, "mcp"], { cwd: repo, env: env(), stdin: "pipe", stdout: "pipe", stderr: "pipe" })
   const reader = p.stdout.getReader()
   let buffered = ""
   let next = 1
@@ -66,7 +66,7 @@ beforeEach(async () => {
   ])
     Bun.spawnSync(["git", "-c", "user.name=t", "-c", "user.email=t@t", ...args], { cwd: repo })
   server = await startServer(socket, await freshDatabase())
-  Bun.spawnSync([process.execPath, CLI, "new", "one"], { cwd: repo, env: env() })
+  Bun.spawnSync([...ORQ, "new", "one"], { cwd: repo, env: env() })
 })
 afterEach(() => {
   server.kill()

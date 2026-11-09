@@ -2,10 +2,10 @@
 import { afterEach, beforeAll, beforeEach, describe, expect, test } from "bun:test"
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
-import { join, resolve } from "node:path"
+import { join } from "node:path"
+import { ORQ } from "./orq.ts"
 import { freshDatabase, startPostgres } from "./pg.ts"
 
-const CLI = resolve(import.meta.dir, "..", "src", "cli.ts")
 let dir: string, repo: string, home: string, pg: Record<string, string>
 
 const sh = (cmd: string[], cwd: string) => {
@@ -17,7 +17,7 @@ const sh = (cmd: string[], cwd: string) => {
 const orq = (args: string[], cwd = repo) => {
   const env = { ...process.env, ORQ_HOME: home, ...pg, ORQ_ZELLIJ_SESSION: "orq-test-none" } as Record<string, string | undefined>
   delete env.ZELLIJ
-  const p = Bun.spawnSync(["bun", CLI, ...args], { cwd, env, stdout: "pipe", stderr: "pipe" })
+  const p = Bun.spawnSync([...ORQ, ...args], { cwd, env, stdout: "pipe", stderr: "pipe" })
   return { code: p.exitCode, out: p.stdout.toString(), err: p.stderr.toString() }
 }
 
@@ -56,13 +56,13 @@ describe("orq new", () => {
     const r = orq(["new", "x"])
     expect(r.out).toContain("ORQ_TASK=T-0001")
     expect(r.out).toContain("ORQ_BASE=main")
-    expect(r.out).toContain("'/orq-task T-0001'")
+    expect(r.out).toContain("'/orq:task T-0001'")
   })
 
   test("gives two tasks started at the same moment different ids", async () => {
     const env = { ...process.env, ORQ_HOME: home, ...pg, ORQ_ZELLIJ_SESSION: "orq-test-none" } as Record<string, string | undefined>
     delete env.ZELLIJ
-    const start = (request: string) => Bun.spawn(["bun", CLI, "new", request], { cwd: repo, env, stdout: "pipe", stderr: "pipe" })
+    const start = (request: string) => Bun.spawn([...ORQ, "new", request], { cwd: repo, env, stdout: "pipe", stderr: "pipe" })
     const runs = [start("one"), start("two"), start("three")]
     const codes = await Promise.all(runs.map((p) => p.exited))
     expect(codes).toEqual([0, 0, 0])

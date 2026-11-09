@@ -1,0 +1,14 @@
+{
+  "name": "orqestrai",
+  "description": "orqestrai, an orchestrated software factory with human gates.",
+  "owner": {
+    "name": "saculo"
+  },
+  "plugins": [
+    {
+      "name": "orq",
+      "source": "./plugin",
+      "description": "orqestrai: the task workflow with human gates; skills, agents, the guard hook and orq's MCP tools."
+    }
+  ]
+}

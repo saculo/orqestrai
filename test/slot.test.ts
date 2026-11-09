@@ -3,16 +3,16 @@
 import { afterEach, beforeAll, beforeEach, describe, expect, test } from "bun:test"
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync } from "node:fs"
 import { tmpdir } from "node:os"
-import { join, resolve } from "node:path"
+import { join } from "node:path"
+import { ORQ } from "./orq.ts"
 import { freshDatabase, startPostgres } from "./pg.ts"
 
-const CLI = resolve(import.meta.dir, "..", "src", "cli.ts")
 let dir: string, repo: string, home: string, pg: Record<string, string>
 
 const orq = (args: string[], extra: Record<string, string> = {}) => {
   const env = { ...process.env, ORQ_HOME: home, ...pg, ORQ_ZELLIJ_SESSION: "orq-test-none", ...extra } as Record<string, string | undefined>
   delete env.ZELLIJ
-  const p = Bun.spawnSync([process.execPath, CLI, ...args], { cwd: repo, env, stdout: "pipe", stderr: "pipe" })
+  const p = Bun.spawnSync([...ORQ, ...args], { cwd: repo, env, stdout: "pipe", stderr: "pipe" })
   return { code: p.exitCode, out: p.stdout.toString(), err: p.stderr.toString() }
 }
 const marker = (name: string) => join(dir, name)
@@ -69,7 +69,7 @@ describe("orq slot", () => {
     orq(["slot", "take", "T-0001"])
     const env = { ...process.env, ORQ_HOME: home, ...pg } as Record<string, string | undefined>
     delete env.ZELLIJ
-    const waiting = Bun.spawn([process.execPath, CLI, "slot", "take", "T-0002", "--wait", "20"], { cwd: repo, env, stdout: "pipe" })
+    const waiting = Bun.spawn([...ORQ, "slot", "take", "T-0002", "--wait", "20"], { cwd: repo, env, stdout: "pipe" })
     await Bun.sleep(1500)
     orq(["slot", "free", "T-0001"])
     expect(await waiting.exited).toBe(0)

@@ -7,6 +7,7 @@ import { McpProtocol, McpServer, Tool, Toolkit } from "effect/ai"
 import { Db } from "./db.ts"
 import { LinkRole, OrqError, Status, Step, Task, TaskEvent, TaskLink } from "./domain.ts"
 import { Slot, Slots, takeSlot } from "./slots.ts"
+import { VERSION } from "./version.ts"
 
 const id = Schema.String.annotate({ description: "task id, e.g. T-0001" })
 
@@ -82,5 +83,5 @@ const handlers = OrqTools.toLayer(
 /** The tools over stdin/stdout, for Claude Code to start. */
 export const mcpStdio = McpServer.toolkit(OrqTools).pipe(
   Layer.provide(handlers),
-  Layer.provide(McpServer.layerStdio({ name: "orq", version: "0.1.0", protocols: [McpProtocol.v2025_11_25, McpProtocol.v2025_06_18] })),
+  Layer.provide(McpServer.layerStdio({ name: "orq", version: VERSION, protocols: [McpProtocol.v2025_11_25, McpProtocol.v2025_06_18] })),
 )

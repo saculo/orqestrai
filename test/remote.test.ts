@@ -4,12 +4,12 @@
 import { afterEach, beforeAll, beforeEach, describe, expect, test } from "bun:test"
 import { existsSync, mkdirSync, mkdtempSync, rmSync } from "node:fs"
 import { tmpdir } from "node:os"
-import { join, resolve } from "node:path"
+import { join } from "node:path"
 import type { Subprocess } from "bun"
+import { ORQ } from "./orq.ts"
 import { freshDatabase, startPostgres } from "./pg.ts"
 import { startServer, withoutPg } from "./server.ts"
 
-const CLI = resolve(import.meta.dir, "..", "src", "cli.ts")
 let dir: string, repo: string, socket: string, server: Subprocess
 
 const orq = (args: string[], extra: Record<string, string> = {}) => {
@@ -21,7 +21,7 @@ const orq = (args: string[], extra: Record<string, string> = {}) => {
     ...extra,
   }
   delete env.ZELLIJ
-  const p = Bun.spawnSync([process.execPath, CLI, ...args], { cwd: repo, env, stdout: "pipe", stderr: "pipe" })
+  const p = Bun.spawnSync([...ORQ, ...args], { cwd: repo, env, stdout: "pipe", stderr: "pipe" })
   return { code: p.exitCode, out: p.stdout.toString(), err: p.stderr.toString() }
 }
 const marker = (name: string) => join(dir, name)
@@ -88,6 +88,17 @@ describe("orq with ORQ_SERVER and no database login", () => {
     await Bun.sleep(1200)
     expect(orq(["slot", "take", "T-0002"]).out).toContain("ORQ_SLOT=1")
     expect(existsSync(marker("stopped"))).toBe(true)
+  })
+
+  test("a server on a TCP address, as on another machine", async () => {
+    const port = 20_000 + Math.floor(Math.random() * 20_000)
+    const tcp = await startServer(port, await freshDatabase())
+    try {
+      expect(orq(["new", "Over TCP"], { ORQ_SERVER: `http://127.0.0.1:${port}` }).out).toContain("T-0001")
+      expect(orq(["ls"], { ORQ_SERVER: `http://127.0.0.1:${port}` }).out).toContain("T-0001")
+    } finally {
+      tcp.kill()
+    }
   })
 
   test("a server that is not running is a clear error", () => {

@@ -36,6 +36,8 @@ jobs:
         run: bunx biome ci .
       - name: tests
         run: bun test
+      - name: the release binary builds and starts (the release job tests it fully)
+        run: bun run build && dist/orq --version
       - name: module size (warns above ~150 lines)
         run: |
           for f in src/*.ts src/**/*.ts; do

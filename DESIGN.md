@@ -20,7 +20,7 @@ compendium (see §10). Ideas are taken in our own words, never copied 1:1.
 
 ### Principle skills
 
-Short skills (`skills/principles/`, adapted from pstack, MIT). Each step skill names the
+Short skills (`plugin/skills/principles/`, adapted from pstack, MIT). Each step skill names the
 ones it loads, so an agent loads only what its step needs.
 
 | Principle                    | Loaded by                     |
@@ -73,7 +73,7 @@ Automatic merge by risk: not in v1.
 
 ### 3.0 Grilling (triage and plan)
 
-Both interactive steps ask questions the same way (`skills/workflow/grill`):
+Both interactive steps ask questions the same way (`plugin/skills/workflow/grill`):
 
 - **Design tree.** Decisions depend on each other. A round asks the whole **frontier**:
   every open decision whose prerequisites are settled. An answer opens or removes
@@ -163,7 +163,7 @@ rejected and does not go there.
   guidelines and `.orqestrai/testing.md`. Not the brief, the research or the chat. When it
   needs something the spec does not say, it reports the gap and stops; it does not guess.
 - **Subagents edit and test; they do not commit.** Tasks of one wave share the worktree's
-  git index. After the wave, the task session commits each task separately (`orq-git`).
+  git index. After the wave, the task session commits each task separately (`orq:git`).
 - TDD for unit, integration and contract tests: one test → its code → next.
   Red before green. Tests only at the seams from `SPEC.md`.
 - A test must fail when the behavior breaks, and keep passing when only the internals
@@ -172,7 +172,7 @@ rejected and does not go there.
 
 Test guidelines, two layers:
 
-- **General** (`skills/principles/test-behavior/GUIDELINES.md`): what and why;
+- **General** (`plugin/skills/principles/principle-test-behavior/GUIDELINES.md`): what and why;
   independent of language and framework.
 - **Per project** (`.orqestrai/testing.md`): with what — tools, commands, existing
   doubles and containers, examples of good tests in the repo. Created at onboarding,
@@ -294,7 +294,7 @@ needs them.
 
 ### 3.5 Learn
 
-One `orq-learner` subagent (Opus) reads all task files and the diff, and keeps what the
+One `orq:learner` subagent (Opus) reads all task files and the diff, and keeps what the
 next task needs to know. **At most 5 proposals, each with its evidence in this task** (a
 verify round, a finding, a decision). "No proposals" is a good result.
 
@@ -357,8 +357,8 @@ Drafts, outside the flow for now:
 | representation lens | the domain answers a question badly      | the question's operation → the model that makes it native; business and technical examples |
 | archetypes          | "have we seen this problem shape before?"| one card per archetype with business **and** technical words (availability = resource pool, plan vs actual = reconciliation loop, …) plus a pipeline card; checked one by one, default "doesn't fit" |
 
-Drafts live in `drafts/modeling/` in the orqestrai repo; `orq init` does not install them. A draft
-moves to `skills/modeling/` when a step names it. The in-flow skills are written with the next
+Drafts live in `drafts/modeling/` in the orqestrai repo; the plugin does not include them. A draft
+moves to `plugin/skills/modeling/` when a step names it. The in-flow skills are written with the next
 plan-skill rewrite; the drafts after the test guidelines. Size: the normal skill budget
 (~150 lines), not smaller — they need their examples.
 
@@ -394,18 +394,25 @@ ids, state, worktrees, tabs, Slack, slots. Routing, gates and step order stay in
 skills. Size budget: about 150 lines per module. `src/domain.ts` is the one definition of
 steps, statuses and task fields. Tests drive the CLI (`test/`).
 
-Install: not a Claude Code plugin. Today: a checkout with `orq` on PATH, then `orq init`
-in each project. Later: an npm package run with Bun (`bunx orqestrai init`), released
-from CI. Bun is needed at runtime. State goes through Effect's `SqlClient` (`@effect/sql-pg`).
+Install: two pieces from one repository, one version.
 
-`orq init` writes `.orqestrai/config.toml` (if missing) and, into `.claude/`, every skill
-from `skills/<group>/<name>/` flat as `skills/<name>/` (the frontmatter name, always
-`orq-*`), the agents, and the guard hook in `settings.json`. Each file it writes says it
-is generated. A rerun replaces its own `orq-*` files and keeps the rest.
+- **The `orq` program**: one executable (`bun build --compile`, Bun inside) with the CLI,
+  `orq mcp` and `orq serve`. A tag `v<version>` builds it, runs the whole test suite against
+  the file, and attaches it to a GitHub release (`.github/workflows/release.yml`). The same
+  file runs everywhere; only the command differs. One program, so client and server always
+  agree on the API (`src/api.ts`).
+- **The Claude Code plugin `orq`** (`plugin/`; the repository is its marketplace,
+  `.claude-plugin/marketplace.json`): the skills, the agents, the guard hook and the MCP
+  server (`orq mcp`). Installed once per machine, `claude plugin install orq@orqestrai`.
+  Skills and agents are named `orq:<name>` (`/orq:task`); the folder name is the name.
+  `test/plugin.test.ts` checks that every `orq:<name>` mentioned exists.
+
+`orq init` writes only what a project owns: `.orqestrai/config.toml`, if missing. State
+goes through Effect's `SqlClient` (`@effect/sql-pg`).
 
 | Command                    | Does                                                        |
 |----------------------------|-------------------------------------------------------------|
-| `orq init`                 | creates `.orqestrai/`, writes skills, agents and the guard hook into `.claude/` |
+| `orq init`                 | creates `.orqestrai/config.toml`                            |
 | `orq guard`                | the PreToolUse guard hook (§6)                              |
 | `orq new "<request>"`      | task id, task row, worktree, branch, zellij tab             |
 | `orq open <id>`            | opens the task's tab again (after a restart)                |
@@ -460,8 +467,7 @@ tokens.
 ### Files in a project
 
 Everything orqestrai keeps in a project is in one folder, committed with the project.
-`orq init` writes the generated skills, agents and hook settings into `.claude/`; each
-generated file says it is generated (edit it in orqestrai).
+The skills, agents and hook come from the plugin, not from files in the project.
 
 ```
 .orqestrai/
@@ -605,8 +611,7 @@ sandbox** (bubblewrap): every task session runs in it, the bridge does not.
   bypass it.
 - Guard hook (`orq guard`, PreToolUse, `src/guard/`). `decide()` is plain TS (no Effect,
   no `bun:*`) and decides allow / block; a shell parser splits commands, also inside
-  `bash -c`, `eval` and over several lines. `bin/orq` starts it without the Effect CLI,
-  so a call takes ~20 ms. Tests: `test/guard.test.ts`. Active only when `ORQ_TASK` is set, which
+  `bash -c`, `eval` and over several lines. `src/main.ts` starts it without the Effect CLI. Tests: `test/guard.test.ts`. Active only when `ORQ_TASK` is set, which
   `orq new` / `orq open` do for task sessions; other sessions are not affected.
   - G1 protect base: no push, merge or commit on the base branch; no force push; no
     `gh pr merge`.
@@ -623,7 +628,7 @@ sandbox** (bubblewrap): every task session runs in it, the bridge does not.
 ## 7. Evals (after the first manual run)
 
 Cases in `evals/`, each against a small fixture repo after `orq init`, with a baseline
-without orqestrai. The harness is open (`claude plugin eval` expects a plugin; orqestrai is not one). Priority 1: **principle skills load** when a step names them.
+without orqestrai. The harness: `claude plugin eval`, now that orqestrai is a plugin. Priority 1: **principle skills load** when a step names them.
 Then: neutral research, question format, no self-approval, approval moves on, git rules.
 Later, promptfoo or similar tools for prompt-level comparisons.
 
@@ -653,7 +658,8 @@ Settled 2026-11-01:
 
 Settled 2026-11-02:
 
-- Install with Bun + `orq init`, not a plugin; Claude Code only (§4).
+- Install with Bun + `orq init`, not a plugin; Claude Code only (§4). Changed 2026-11-09:
+  a compiled `orq` binary and a Claude Code plugin (§4).
 - Guard hook in TS (§6).
 - Triage: checks for existing work and the out-of-scope notes, a recommendation first, grilling
   as a design tree; no acceptance criteria in the brief (§3.0, §3.1).
@@ -677,7 +683,7 @@ Open:
    for risk `high` only. Then Slack, the dashboard.
 2. ~~Modeling toolbox~~: settled 2026-11-02 (§3.7).
 3. ~~Test guidelines~~: settled 2026-11-03 (§3.3), written in
-   `skills/principles/test-behavior/GUIDELINES.md`.
+   `plugin/skills/principles/principle-test-behavior/GUIDELINES.md`.
 4. **GitHub and CI.** orqestrai is public on GitHub (`saculo/orqestrai`, MIT), `main` is
    protected (CI must pass, no force push). `.github/workflows/ci.yml` runs on every pull
    request and push to `main`:
