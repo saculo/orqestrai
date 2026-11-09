@@ -1,0 +1,18 @@
+# The Tailscale operator's OAuth client, from OpenBao secret/tailscale/operator.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: tailscale
+---
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: operator-oauth
+  namespace: tailscale
+spec:
+  refreshInterval: 1h
+  secretStoreRef: { kind: ClusterSecretStore, name: openbao }
+  target: { name: operator-oauth }
+  data:
+    - { secretKey: client_id, remoteRef: { key: tailscale/operator, property: client_id } }
+    - { secretKey: client_secret, remoteRef: { key: tailscale/operator, property: client_secret } }

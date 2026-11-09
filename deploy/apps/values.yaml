@@ -1,0 +1,2 @@
+# The branch or tag of this repository that Argo CD deploys (set by deploy/root.yaml).
+revision: main
