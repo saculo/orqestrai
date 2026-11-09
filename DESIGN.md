@@ -429,13 +429,13 @@ goes through Effect's `SqlClient` (`@effect/sql-pg`).
 | `orq mcp`                  | the state as MCP tools over stdio, for Claude Code to start  |
 
 **Server and clients.** `orq serve` is the only process that connects to the database. It
-offers the `Db` and `Slots` services as an HTTP API (`src/api.ts`, Effect's `HttpApi`) on
-a Unix socket, so file permissions decide who may call it. With `ORQ_SERVER` set (the
+offers the `Db` and `Slots` services as an HTTP API (`src/api.ts`, Effect's `HttpApi`), on
+a Unix socket or a TCP address. With `ORQ_SERVER` set (the
 socket path, or a URL), every other command uses the API's generated client
 (`src/remote.ts`) instead of the database, and needs no `PG*` variable. Without it, orq
 connects directly, as on a laptop. The server only touches the database and never runs a
 command: a slot's stop and serve commands go back to the client, which runs them as its
-own user. On the VPS, systemd runs it as the user `orqdb`.
+own user. It runs on VPS2, in k3s (`deploy/`, §6), and VPS1 reaches it over Tailscale.
 
 `orq mcp` offers `orq_show`, `orq_state`, `orq_link`, `orq_slot_take`, `orq_slot_keep`
 and `orq_slot_free` (`src/mcp.ts`, Effect's `McpServer`). Claude Code starts it over
@@ -446,9 +446,9 @@ server too.
 
 ### Slack bridge
 
-One long-running process on VPS1, `bws run -- orq bridge` (Socket Mode, no open port, no
-LLM). It runs **outside** the sandbox and is the only holder of the Slack and GitHub
-tokens.
+One long-running process, `orq bridge` (Socket Mode, no open port, no LLM), the only holder
+of the Slack and GitHub tokens, from OpenBao like every credential (§6). Open: it starts
+sessions on VPS1, while the tokens live on VPS2.
 
 - `/orq new "<title>"` → `orq new`; the task gets one Slack thread.
 - `/orq ls`, `/orq show <id>` answer in Slack.
@@ -500,8 +500,8 @@ plain TS (no `bun:*` imports), because pi loads extensions under Node.
   and `slots(host, n, task_id, …)`. Step and status are checked by the database too.
   - The instance is Mikrus's shared `psql01.mikr.us` (PG 18). It runs beside the VPS, so
     it takes none of its RAM or disk.
-  - orq reads libpq's `PG*` variables. On the VPS only `orq serve` gets them (§6): it
-    runs as the user `orqdb`, and sessions reach the state through its MCP tools. TLS: `PGSSLMODE=verify-ca` with `PGSSLROOTCERT`, the instance's self-signed
+  - orq reads libpq's `PG*` variables. Only `orq serve`, on VPS2, gets them (§6); sessions
+    reach the state through it (the CLI and the MCP tools). TLS: `PGSSLMODE=verify-ca` with `PGSSLROOTCERT`, the instance's self-signed
     certificate pinned; `require` (the default) only encrypts.
   - Nothing connects until a command needs state, so `orq guard` and `orq init` work
     without a database.
@@ -579,29 +579,36 @@ before.
 
 ## 6. Security
 
-The rule: **an agent can use what it needs but cannot read a secret.** On Linux, anything
-running as the same user as a secret can read it, so the wall is the **Claude Code
-sandbox** (bubblewrap): every task session runs in it, the bridge does not.
+The rule: **an agent can use what it needs but cannot read a secret.** A process that uses
+a secret holds it in plain text, and anything running as the same user can read it. So the
+secrets live on another machine: agents run on VPS1, every credential and every process that
+uses one is on VPS2, and agents get actions (orq's API), never credentials. Task sessions
+also run in Fence (bubblewrap), which limits their network and files.
 
-- **VPS1 users** (Mikrus `neil198`: LXC, 1 CPU; Tailscale; SSH with keys only — Mikrus
-  keeps its public SSH port open):
-  - `orq`: the bridge and the task sessions. No sudo.
-  - `orqdb`: runs `orq serve` (systemd, `varlock run -- orq serve`) and nothing else. It
-    alone holds the Postgres login and the Bitwarden token that fetches it.
+- **VPS1** (Mikrus `neil198`: LXC, 1 CPU; Tailscale; SSH with keys only — Mikrus keeps its
+  public SSH port open) holds **no secret**. It runs the task sessions as `orq`, in Fence.
+  `orq` is a root-owned binary, so a session cannot replace it, and the Fence config is
+  read-only inside the sandbox (`deploy/vps1/`).
   - `dock`: owns rootless Docker and nothing else. Sessions reach its socket (allowed in
-    the sandbox) for testcontainers. A container can mount only what `dock` can read,
-    which is no secret. (Docker as the same user would mount the token file and climb
-    over any sandbox.)
-- **Secrets:** Bitwarden Secrets Manager (EU cloud), two machine accounts:
-  - `bridge`: Slack and GitHub tokens. Its token file is denied in the sandbox
-    (filesystem) and in the Claude Code permission rules (Read/Edit tools).
-  - `session`: only the Postgres login for orq's own index. Only `orq serve`, as
-    `orqdb`, gets it. A session reaches the state through the server's socket (the CLI
-    and `orq mcp`) and never holds the password: Linux keeps another user's files, environment and memory from it,
-    and the sandbox's `NoNewPrivs` keeps it from switching users. The server runs no command,
-    so a session cannot make it run its code. TLS to the shared instance pins its
-    self-signed certificate (`PGSSLMODE=verify-ca`).
-- **Sandbox network:** allowed are GitHub, Anthropic, the shared Postgres, `dock`'s Docker
+    the sandbox) for testcontainers. A container can mount only what `dock` can read.
+- **VPS2** (OVH) holds every credential, and no agent runs there. One k3s node, run by
+  Argo CD from `deploy/` in this repository (`deploy/README.md`):
+  - **OpenBao** stores the credentials. It unseals itself with a static key, kept in a
+    Kubernetes Secret, and k3s encrypts Secrets on disk. The recovery key and root token
+    stay with the user.
+  - **External Secrets** copies each credential into the Secret of the app that needs it.
+    It logs in to OpenBao with its service account, so no token is stored anywhere.
+  - **`orq serve`** gets the Postgres login, and nothing else does. It runs non-root and
+    read-only, without a Kubernetes token. A network policy lets it reach only psql01 and
+    DNS, and take calls only from the Tailscale proxy.
+  - The **Tailscale operator** puts `orq serve` on the tailnet as `orq-server`. The tailnet
+    policy (`deploy/tailscale-policy.hujson`) lets VPS1 reach only that port: not OpenBao,
+    Kubernetes, or VPS2's SSH.
+  - A firewall allows only SSH and Tailscale from outside.
+- So a session reaches orq's state through `orq serve` and never holds the password: it is
+  on another machine. The server runs no command, so a session cannot make it run its code.
+  TLS to the shared instance pins its self-signed certificate (`PGSSLMODE=verify-ca`).
+- **Sandbox network:** allowed are GitHub, Anthropic, `orq-server`, `dock`'s Docker
   socket and the preview URLs on VPS2. Everything else is blocked.
 - **To prove on VPS1 first:** inside the sandbox, a test reaches its testcontainers port
   and the shared Postgres.
@@ -615,7 +622,7 @@ sandbox** (bubblewrap): every task session runs in it, the bridge does not.
   `orq new` / `orq open` do for task sessions; other sessions are not affected.
   - G1 protect base: no push, merge or commit on the base branch; no force push; no
     `gh pr merge`.
-  - G2 secrets: no reading or writing `.env*`, keys, credential files, the bws tokens.
+  - G2 secrets: no reading or writing `.env*`, keys, credential files, token files.
   - G3 stay inside: file writes and git writes only inside the task worktree; no
     `git worktree add/remove`.
   - G4 destructive: `rm -r`, `find -delete`, `git clean`, `git reset --hard` only inside

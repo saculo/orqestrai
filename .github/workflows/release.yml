@@ -2,6 +2,7 @@ name: release
 
 # A tag v<version> (the version in package.json and plugin/.claude-plugin/plugin.json) builds orq
 # as one executable, runs the whole test suite against that file, and attaches it to a release.
+# It also pushes the image ghcr.io/saculo/orqestrai:<version> that VPS2 runs (deploy/orq).
 # The plugin needs no build: Claude Code reads it from the repository at the tag.
 on:
   push:
@@ -16,6 +17,7 @@ jobs:
     timeout-minutes: 15
     permissions:
       contents: write # create the release
+      packages: write # push the image
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
@@ -40,3 +42,14 @@ jobs:
           mv dist/orq dist/orq-linux-x64
           (cd dist && sha256sum orq-linux-x64 > orq-linux-x64.sha256)
           gh release create "$TAG" dist/orq-linux-x64 dist/orq-linux-x64.sha256 --title "$TAG" --generate-notes
+      - name: image
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+          ACTOR: ${{ github.actor }}
+        run: |
+          image="ghcr.io/saculo/orqestrai:${TAG#v}"
+          echo "$GH_TOKEN" | docker login ghcr.io -u "$ACTOR" --password-stdin
+          docker build -t "$image" .
+          docker run --rm "$image" --version
+          docker push "$image"
