@@ -1,0 +1,23 @@
+// Fence for Claude Code sessions on VPS1: run `fence -- claude`. Installed by
+// deploy/bootstrap/vps1.sh to ~orq/.config/fence/fence.jsonc.
+// Starts from the built-in "code" template (deny-by-default network, protected credential files).
+// No database here: orq reaches its state through orq serve on VPS2 (orq-server, Tailscale).
+{
+  "extends": "code",
+  "network": {
+    "allowedDomains": [
+      "*.anthropic.com", "claude.ai", "*.claude.ai", "claude.com", "*.claude.com",
+      "github.com", "*.github.com", "*.githubusercontent.com",
+      "registry.npmjs.org", "*.npmjs.org",
+      "orq-server"
+    ],
+    "allowLocalBinding": true,
+    "allowLocalOutbound": true,
+    // testcontainers talks to rootless Docker over its unix socket
+    "allowAllUnixSockets": true
+  },
+  "filesystem": {
+    "denyWrite": ["~/.config/fence/**"]
+  },
+  "allowPty": true
+}

@@ -31,6 +31,9 @@ From a checkout instead: `bun install`, `ln -s "$PWD/bin/orq" ~/.local/bin/orq`,
 `claude --plugin-dir ./plugin`. `bun run build` writes the binary to `dist/orq`. A tag
 `v<version>` (as in `package.json` and `plugin/.claude-plugin/plugin.json`) releases it.
 
+Servers: [deploy/README.md](deploy/README.md) sets up VPS2 (k3s, Argo CD, OpenBao, `orq serve`)
+and VPS1 (the sessions), step by step.
+
 ## Use
 
 In a project's git repository:
