@@ -1,0 +1,4 @@
+# The Argo CD Applications of VPS2, as a chart so that one value sets the revision they follow.
+apiVersion: v2
+name: orq-apps
+version: 0.1.0

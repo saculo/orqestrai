@@ -1,0 +1,13 @@
+# orq serve on the private network only: the Tailscale operator gives it the tailnet name
+# orq-server. VPS1 sets ORQ_SERVER=http://orq-server:7400.
+apiVersion: v1
+kind: Service
+metadata:
+  name: orq-serve
+  annotations:
+    tailscale.com/hostname: orq-server
+spec:
+  type: LoadBalancer
+  loadBalancerClass: tailscale
+  selector: { app: orq-serve }
+  ports: [{ name: http, port: 7400, targetPort: http }]
