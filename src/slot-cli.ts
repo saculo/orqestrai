@@ -1,5 +1,5 @@
 // orq slot: take, keep, free and list verify slots (src/slots.ts).
-import { Console, Data, Effect, Schedule } from "effect"
+import { Console, Data, Duration, Effect, Schedule } from "effect"
 import { Argument, Command, Flag } from "effect/cli"
 import { Db } from "./db.ts"
 import { OrqError, stamp } from "./domain.ts"
@@ -12,6 +12,15 @@ const until = (s: Slot) => stamp(s.expires_at).slice(0, 16)
 /** Every slot of this machine is held: worth waiting for when --wait is given. */
 class AllHeld extends Data.TaggedError("AllHeld")<{ readonly held: ReadonlyArray<Slot> }> {}
 
+/** Every 2 seconds for `seconds`, the last try at the limit, never after it. */
+const within = (seconds: number) =>
+  Schedule.spaced("2 seconds").pipe(
+    Schedule.upTo({ duration: Duration.seconds(seconds) }),
+    Schedule.modifyDelay(({ duration, elapsed }) =>
+      Effect.succeed(Duration.min(duration, Duration.millis(Math.max(0, seconds * 1000 - elapsed)))),
+    ),
+  )
+
 const take = Command.make(
   "take",
   { id, wait: Flag.Int("wait").pipe(Flag.withDefault(0), Flag.withDescription("seconds to wait for a free slot")) },
@@ -21,10 +30,7 @@ const take = Command.make(
       const task = yield* (yield* Db).get(id)
       const slot = yield* slots.take(id, task.worktree).pipe(
         Effect.flatMap((r) => ("slot" in r ? Effect.succeed(r.slot) : Effect.fail(new AllHeld({ held: r.busy })))),
-        Effect.retry({
-          schedule: Schedule.spaced("2 seconds").pipe(Schedule.upTo({ duration: `${wait} seconds` })),
-          while: (e) => e._tag === "AllHeld",
-        }),
+        (taking) => (wait > 0 ? Effect.retry(taking, { schedule: within(wait), while: (e) => e._tag === "AllHeld" }) : taking),
         Effect.catchTag("AllHeld", ({ held }) =>
           Effect.fail(
             new OrqError({ message: `no free verify slot; held by ${held.map((s) => `${s.task_id} (until ${until(s)})`).join(", ")}` }),

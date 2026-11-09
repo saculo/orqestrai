@@ -33,7 +33,11 @@ const sslFor = (mode: string, rootCert: string): Effect.Effect<boolean | Connect
       return Effect.succeed({ rejectUnauthorized: false })
     case "verify-ca":
       return rootCert
-        ? Effect.sync(() => ({ ca: readFileSync(rootCert, "utf8"), checkServerIdentity: () => undefined }))
+        ? Effect.try({
+            try: () => ({ ca: readFileSync(rootCert, "utf8"), checkServerIdentity: () => undefined }),
+            catch: (e) =>
+              new OrqError({ message: `database: cannot read PGSSLROOTCERT ${rootCert}: ${e instanceof Error ? e.message : String(e)}` }),
+          })
         : Effect.fail(new OrqError({ message: "database: PGSSLMODE=verify-ca needs PGSSLROOTCERT" }))
     default:
       return Effect.fail(new OrqError({ message: `database: PGSSLMODE=${mode} is not supported; use disable, require or verify-ca` }))

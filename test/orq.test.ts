@@ -83,6 +83,21 @@ describe("orq new", () => {
     expect(orq(["new", "x"]).out).toContain("ORQ_BASE=develop")
   })
 
+  test("an empty base_branch counts as not set", () => {
+    mkdirSync(join(repo, ".orqestrai"))
+    writeFileSync(join(repo, ".orqestrai/config.toml"), 'base_branch = ""\n')
+    expect(orq(["new", "x"]).out).toContain("ORQ_BASE=main")
+  })
+
+  test("a config.toml that is not valid TOML is an orq error that names the file", () => {
+    mkdirSync(join(repo, ".orqestrai"))
+    writeFileSync(join(repo, ".orqestrai/config.toml"), "base_branch = \n")
+    const r = orq(["new", "x"])
+    expect(r.code).toBe(1)
+    expect(r.err).toStartWith("orq: ")
+    expect(r.err).toContain(".orqestrai/config.toml")
+  })
+
   test("fails when the base branch does not exist", () => {
     mkdirSync(join(repo, ".orqestrai"))
     writeFileSync(join(repo, ".orqestrai/config.toml"), 'base_branch = "nope"\n')
@@ -205,4 +220,6 @@ test("refuses a TLS mode it cannot honour, before it connects", () => {
   expect(orq(["ls"]).err).toContain("PGSSLMODE=verify-full is not supported; use disable, require or verify-ca")
   pg.PGSSLMODE = "verify-ca"
   expect(orq(["ls"]).err).toContain("PGSSLMODE=verify-ca needs PGSSLROOTCERT")
+  pg.PGSSLROOTCERT = join(dir, "missing.pem")
+  expect(orq(["ls"]).err).toStartWith(`orq: database: cannot read PGSSLROOTCERT ${join(dir, "missing.pem")}`)
 })

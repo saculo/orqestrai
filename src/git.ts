@@ -10,7 +10,7 @@ export const topLevel = (cwd?: string) =>
   exec("git", ["rev-parse", "--show-toplevel"], cwd).pipe(Effect.mapError(() => new OrqError({ message: "not in a git repository" })))
 
 /** The part of .orqestrai/config.toml that orq reads; the rest is for the skills. */
-const ProjectConfig = Schema.Struct({ base_branch: Schema.optional(Schema.String) })
+const ProjectConfig = Schema.Struct({ base_branch: Schema.optional(Schema.NonEmptyString) })
 const readProjectConfig = Schema.decodeUnknownOption(ProjectConfig)
 
 /** base_branch from .orqestrai/config.toml, else origin's HEAD, else "main". */
@@ -18,7 +18,10 @@ export const baseBranch = (root: string) =>
   Effect.gen(function* () {
     const file = join(root, ".orqestrai", "config.toml")
     const configured = existsSync(file)
-      ? readProjectConfig(Bun.TOML.parse(readFileSync(file, "utf8"))).pipe(Option.flatMapNullishOr((c) => c.base_branch))
+      ? yield* Effect.try({
+          try: () => Bun.TOML.parse(readFileSync(file, "utf8")),
+          catch: (e) => new OrqError({ message: `${file}: ${e instanceof Error ? e.message : String(e)}` }),
+        }).pipe(Effect.map((toml) => readProjectConfig(toml).pipe(Option.flatMapNullishOr((c) => c.base_branch))))
       : Option.none()
     if (Option.isSome(configured)) return configured.value
     const origin = yield* run("git", ["symbolic-ref", "--short", "refs/remotes/origin/HEAD"], root)

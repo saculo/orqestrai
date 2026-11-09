@@ -42,7 +42,7 @@ const markGenerated = (file: string) => {
   writeFileSync(file, fm ? `${fm}${NOTE}\n${text.slice(fm.length)}` : `${NOTE}\n\n${text}`)
 }
 
-const markdownIn = (dir: string) => [...new Bun.Glob("**/*.md").scanSync({ cwd: dir, absolute: true })]
+const markdownIn = (dir: string) => [...new Bun.Glob("**/*.md").scanSync({ cwd: dir, absolute: true, dot: true })]
 
 /** Every skill folder in the source: skills/<group>/<name>/SKILL.md. */
 const sourceSkills = (orqRoot: string) =>
