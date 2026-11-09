@@ -42,10 +42,10 @@ const slots = HttpApiBuilder.group(
   }),
 )
 
-/** Where the server listens: a Unix socket path, or a TCP port on 127.0.0.1. */
-export type Listen = { readonly unix: string } | { readonly port: number }
+/** Where the server listens: a Unix socket path, or a TCP address and port. */
+export type Listen = { readonly unix: string } | { readonly host: string; readonly port: number }
 
 export const serveApi = (listen: Listen) =>
   HttpRouter.serve(HttpApiBuilder.layer(OrqApi).pipe(Layer.provide([tasks, slots])), { disableLogger: true }).pipe(
-    Layer.provide(BunHttpServer.layer("unix" in listen ? { unix: listen.unix } : { hostname: "127.0.0.1", port: listen.port })),
+    Layer.provide(BunHttpServer.layer("unix" in listen ? { unix: listen.unix } : { hostname: listen.host, port: listen.port })),
   )

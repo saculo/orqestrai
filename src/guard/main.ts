@@ -1,4 +1,4 @@
-// `orq guard`: the PreToolUse hook for Claude Code. bin/orq starts this file directly,
+// `orq guard`: the PreToolUse hook for Claude Code. src/main.ts starts it directly,
 // without the Effect CLI, because the hook runs before every tool call and must start fast.
 // Exit 2 blocks the call; the message on stderr goes back to the agent.
 import { spawnSync } from "node:child_process"
@@ -10,7 +10,7 @@ export const gitBranch: BranchOf = (dir) => {
   return p.status === 0 ? p.stdout.trim() : null
 }
 
-const main = async () => {
+export const main = async () => {
   const raw = await new Response(Bun.stdin.stream()).text() // read stdin first, also when we allow at once
   const env = {
     task: process.env.ORQ_TASK || undefined,
@@ -36,5 +36,3 @@ const main = async () => {
     process.exit(2)
   }
 }
-
-if (import.meta.main) await main()

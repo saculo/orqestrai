@@ -3,10 +3,10 @@
 import { afterEach, beforeAll, beforeEach, describe, expect, test } from "bun:test"
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
-import { join, resolve } from "node:path"
+import { join } from "node:path"
+import { ORQ } from "./orq.ts"
 import { freshDatabase, startPostgres } from "./pg.ts"
 
-const CLI = resolve(import.meta.dir, "..", "src", "cli.ts")
 let dir: string, repo: string, home: string, pg: Record<string, string>, fakeBin: string
 
 const sh = (cmd: string[], cwd: string) => {
@@ -19,7 +19,7 @@ const git = (args: string[], cwd: string) => sh(["git", "-c", "user.name=t", "-c
 const orq = (args: string[], gh: Record<string, string> = {}) => {
   const env = { ...process.env, ORQ_HOME: home, ...pg, ORQ_ZELLIJ_SESSION: "orq-test-none", PATH: `${fakeBin}:${process.env.PATH}`, ...gh }
   delete (env as Record<string, string | undefined>).ZELLIJ
-  const p = Bun.spawnSync([process.execPath, CLI, ...args], { cwd: repo, env, stdout: "pipe", stderr: "pipe" })
+  const p = Bun.spawnSync([...ORQ, ...args], { cwd: repo, env, stdout: "pipe", stderr: "pipe" })
   return { code: p.exitCode, out: p.stdout.toString(), err: p.stderr.toString() }
 }
 
