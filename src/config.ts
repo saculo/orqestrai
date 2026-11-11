@@ -1,6 +1,6 @@
 // Settings from the environment, read once at the boundary.
 import { homedir, hostname } from "node:os"
-import { join, resolve } from "node:path"
+import { join } from "node:path"
 import { Config, Context, Layer } from "effect"
 
 const settings = Config.all({
@@ -10,8 +10,6 @@ const settings = Config.all({
   session: Config.String("ORQ_ZELLIJ_SESSION").pipe(Config.withDefault("orq")),
   /** model for the interactive task session */
   model: Config.String("ORQ_SESSION_MODEL").pipe(Config.withDefault("opus")),
-  /** the orqestrai checkout (templates live here) */
-  root: Config.succeed(resolve(import.meta.dir, "..")),
   /** this machine's name for its verify slots */
   host: Config.String("ORQ_HOST").pipe(Config.withDefault(hostname())),
   /** verify slots on this machine */

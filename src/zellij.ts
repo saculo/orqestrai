@@ -12,7 +12,7 @@ export const sessionCommand = (id: string, worktree: string, base: string, model
   "claude",
   "--model",
   model,
-  `/orq-task ${id}`,
+  `/orq:task ${id}`,
 ]
 
 const shellQuote = (s: string) => (/^[\w@%+=:,./-]+$/.test(s) ? s : `'${s.replaceAll("'", `'\\''`)}'`)

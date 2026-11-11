@@ -1,0 +1,9 @@
+{
+  "name": "orq",
+  "version": "0.1.0",
+  "description": "orqestrai: the task workflow (triage, plan, impl, verify, learn, ship) with human gates. Needs the orq program on PATH.",
+  "author": { "name": "saculo" },
+  "repository": "https://github.com/saculo/orqestrai",
+  "license": "MIT",
+  "skills": ["./skills/workflow/", "./skills/principles/", "./skills/modeling/"]
+}

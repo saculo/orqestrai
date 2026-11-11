@@ -5,6 +5,7 @@
   "license": "MIT",
   "type": "module",
   "scripts": {
+    "build": "bun build --compile src/main.ts --outfile dist/orq",
     "test": "bun test",
     "check": "tsc --noEmit"
   },
