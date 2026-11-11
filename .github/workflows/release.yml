@@ -2,7 +2,7 @@ name: release
 
 # A tag v<version> (the version in package.json and plugin/.claude-plugin/plugin.json) builds orq
 # as one executable, runs the whole test suite against that file, and attaches it to a release.
-# It also pushes the image ghcr.io/saculo/orqestrai:<version> that VPS2 runs (deploy/orq).
+# It also pushes the image ghcr.io/saculo/orqestrai:<version>, which runs `orq serve`.
 # The plugin needs no build: Claude Code reads it from the repository at the tag.
 on:
   push:

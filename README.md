@@ -31,8 +31,19 @@ From a checkout instead: `bun install`, `ln -s "$PWD/bin/orq" ~/.local/bin/orq`,
 `claude --plugin-dir ./plugin`. `bun run build` writes the binary to `dist/orq`. A tag
 `v<version>` (as in `package.json` and `plugin/.claude-plugin/plugin.json`) releases it.
 
-Servers: [deploy/README.md](deploy/README.md) sets up VPS2 (k3s, Argo CD, OpenBao, `orq serve`)
-and VPS1 (the sessions), step by step.
+### Running `orq serve`
+
+On one machine, orq connects to Postgres itself, from libpq's `PG*` variables. To keep the
+login away from the sessions, run `orq serve` with them instead, and give the clients (the
+CLI, `orq mcp`) only `ORQ_SERVER`:
+
+```bash
+PG...=... orq serve --socket /run/orq.sock               # same machine: ORQ_SERVER=/run/orq.sock
+PG...=... orq serve --host 10.0.0.2 --port 7400          # another machine: ORQ_SERVER=http://10.0.0.2:7400
+```
+
+`--host` defaults to `127.0.0.1`; listen only on a private address. The image
+`ghcr.io/saculo/orqestrai:<version>` runs `orq serve --host 0.0.0.0 --port 7400`.
 
 ## Use
 

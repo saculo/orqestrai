@@ -79,12 +79,8 @@ jobs:
             --config rules/typescript --config rules/javascript --config rules/bash --config rules/yaml/github-actions \
             --exclude-rule "rules.javascript.lang.correctness.no-replaceall" \
             "$W/src" "$W/test" "$W/bin" "$W/.github"
-      - name: deploy (shellcheck, helm, kustomize)
-        run: |
-          shellcheck bin/orq deploy/bootstrap/*.sh
-          helm lint deploy/apps
-          helm template apps deploy/apps > /dev/null
-          kubectl kustomize deploy/orq > /dev/null
+      - name: shell (shellcheck)
+        run: shellcheck bin/orq
       - name: workflows (actionlint)
         uses: docker://rhysd/actionlint@sha256:b1934ee5f1c509618f2508e6eb47ee0d3520686341fec936f3b79331f9315667 # 1.7.12
         with:

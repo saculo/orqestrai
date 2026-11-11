@@ -1,7 +1,0 @@
-apiVersion: kustomize.config.k8s.io/v1beta1
-kind: Kustomization
-namespace: orq
-resources: [namespace.yaml, db-secret.yaml, deployment.yaml, service.yaml, network.yaml]
-images:
-  - name: ghcr.io/saculo/orqestrai
-    newTag: 0.1.0 # the release; bump it to deploy a new one

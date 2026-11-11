@@ -1,4 +1,4 @@
-# orq as an image, for `orq serve` on VPS2 (deploy/). The release job builds and pushes it as
+# orq as an image, for `orq serve`. The release job builds and pushes it as
 # ghcr.io/saculo/orqestrai:<version>. The image holds the one compiled binary and nothing else.
 FROM oven/bun:1.3.10@sha256:b86c67b531d87b4db11470d9b2bd0c519b1976eee6fcd71634e73abfa6230d2e AS build
 WORKDIR /src
