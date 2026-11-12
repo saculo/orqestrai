@@ -20,7 +20,7 @@ compendium (see §10). Ideas are taken in our own words, never copied 1:1.
 
 ### Principle skills
 
-Short skills (`skills/principles/`, adapted from pstack, MIT). Each step skill names the
+Short skills (`plugin/skills/principles/`, adapted from pstack, MIT). Each step skill names the
 ones it loads, so an agent loads only what its step needs.
 
 | Principle                    | Loaded by                     |
@@ -73,7 +73,7 @@ Automatic merge by risk: not in v1.
 
 ### 3.0 Grilling (triage and plan)
 
-Both interactive steps ask questions the same way (`skills/workflow/grill`):
+Both interactive steps ask questions the same way (`plugin/skills/workflow/grill`):
 
 - **Design tree.** Decisions depend on each other. A round asks the whole **frontier**:
   every open decision whose prerequisites are settled. An answer opens or removes
@@ -163,7 +163,7 @@ rejected and does not go there.
   guidelines and `.orqestrai/testing.md`. Not the brief, the research or the chat. When it
   needs something the spec does not say, it reports the gap and stops; it does not guess.
 - **Subagents edit and test; they do not commit.** Tasks of one wave share the worktree's
-  git index. After the wave, the task session commits each task separately (`orq-git`).
+  git index. After the wave, the task session commits each task separately (`orq:git`).
 - TDD for unit, integration and contract tests: one test → its code → next.
   Red before green. Tests only at the seams from `SPEC.md`.
 - A test must fail when the behavior breaks, and keep passing when only the internals
@@ -172,7 +172,7 @@ rejected and does not go there.
 
 Test guidelines, two layers:
 
-- **General** (`skills/principles/test-behavior/GUIDELINES.md`): what and why;
+- **General** (`plugin/skills/principles/principle-test-behavior/GUIDELINES.md`): what and why;
   independent of language and framework.
 - **Per project** (`.orqestrai/testing.md`): with what — tools, commands, existing
   doubles and containers, examples of good tests in the repo. Created at onboarding,
@@ -294,7 +294,7 @@ needs them.
 
 ### 3.5 Learn
 
-One `orq-learner` subagent (Opus) reads all task files and the diff, and keeps what the
+One `orq:learner` subagent (Opus) reads all task files and the diff, and keeps what the
 next task needs to know. **At most 5 proposals, each with its evidence in this task** (a
 verify round, a finding, a decision). "No proposals" is a good result.
 
@@ -357,8 +357,8 @@ Drafts, outside the flow for now:
 | representation lens | the domain answers a question badly      | the question's operation → the model that makes it native; business and technical examples |
 | archetypes          | "have we seen this problem shape before?"| one card per archetype with business **and** technical words (availability = resource pool, plan vs actual = reconciliation loop, …) plus a pipeline card; checked one by one, default "doesn't fit" |
 
-Drafts live in `drafts/modeling/` in the orqestrai repo; `orq init` does not install them. A draft
-moves to `skills/modeling/` when a step names it. The in-flow skills are written with the next
+Drafts live in `drafts/modeling/` in the orqestrai repo; the plugin does not include them. A draft
+moves to `plugin/skills/modeling/` when a step names it. The in-flow skills are written with the next
 plan-skill rewrite; the drafts after the test guidelines. Size: the normal skill budget
 (~150 lines), not smaller — they need their examples.
 
@@ -368,24 +368,24 @@ Code is DDD-ish where it pays: one bounded context = its own files and glossary.
 
 ### Topology
 
-Two machines, joined by Tailscale; nothing is public.
+orq does not care where it runs. The pieces:
 
-```
-VPS1  Mikrus LXC, 1 CPU                  VPS2  OVH VPS-3, KVM, 6 vCPU / 12 GB
-  bridge (outside the sandbox):            k3s + Argo CD
-    Slack, push, PR, CI                    preview-pr-<n>: a namespace per PR
-  task sessions (Claude Code sandbox):     OpenBao + External Secrets Operator
-    impl, unit + integration tests         Tailscale operator: private URLs
-    e2e, driven checks  ─── tailscale ───► the preview of the task's PR
-  rootless Docker as user `dock`
-    (testcontainers)
-```
+- **Task sessions**: Claude Code with the `orq` plugin, one per task, sandboxed (Fence),
+  on the machine you work from or on a server. They hold no credential.
+- **`orq serve`**: the one process with the database login. Clients reach it through
+  `ORQ_SERVER`. It can run on the same machine (a Unix socket) or on another one (TCP over a
+  private network).
+- **The Slack bridge**, beside the sessions, outside the sandbox.
+- **Previews** of the app under test, deployed by whatever hosts them (below).
 
-- One **zellij tab per task** for interactive work, or a headless turn per Slack reply
-  (`claude -p --resume`). Either way the session orchestrates its own task. No
-  fleet-level agent in v1.
+On a laptop all of this is one machine. How I host it (two VPSes, k3s, Argo CD, OpenBao,
+Tailscale) is in its own repository, saculo/orqestrai-infra, with the machine setup kept
+private; orqestrai itself ships only the binary, the plugin and an image of `orq serve`
+(`ghcr.io/saculo/orqestrai`).
+
+- One **zellij tab per task**: the session orchestrates its own task, and you can attach
+  to it at any time. No fleet-level agent in v1.
 - Each task has its own **git worktree**, created before any step.
-- GitHub builds images (GitHub-hosted runners) into GHCR; Argo CD deploys them to VPS2.
 
 ### The `orq` CLI
 
@@ -394,18 +394,24 @@ ids, state, worktrees, tabs, Slack, slots. Routing, gates and step order stay in
 skills. Size budget: about 150 lines per module. `src/domain.ts` is the one definition of
 steps, statuses and task fields. Tests drive the CLI (`test/`).
 
-Install: not a Claude Code plugin. Today: a checkout with `orq` on PATH, then `orq init`
-in each project. Later: an npm package run with Bun (`bunx orqestrai init`), released
-from CI. Bun is needed at runtime. State goes through Effect's `SqlClient` (`@effect/sql-pg`).
+Install: two pieces from one repository, one version.
 
-`orq init` writes `.orqestrai/config.toml` (if missing) and, into `.claude/`, every skill
-from `skills/<group>/<name>/` flat as `skills/<name>/` (the frontmatter name, always
-`orq-*`), the agents, and the guard hook in `settings.json`. Each file it writes says it
-is generated. A rerun replaces its own `orq-*` files and keeps the rest.
+- **The `orq` program**: one executable (`bun build --compile`, Bun inside) with the CLI
+  and `orq serve`. A tag `v<version>` builds it, runs the whole test suite against
+  the file, and attaches it to a GitHub release (`.github/workflows/release.yml`). The same
+  file runs everywhere; only the command differs. One program, so client and server always
+  agree on the API (`src/api.ts`).
+- **The Claude Code plugin `orq`** (`plugin/`; the repository is its marketplace,
+  `.claude-plugin/marketplace.json`): the skills, the agents and the guard hook. Installed once per machine, `claude plugin install orq@orqestrai`.
+  Skills and agents are named `orq:<name>` (`/orq:task`); the folder name is the name.
+  `test/plugin.test.ts` checks that every `orq:<name>` mentioned exists.
+
+`orq init` writes only what a project owns: `.orqestrai/config.toml`, if missing. State
+goes through Effect's `SqlClient` (`@effect/sql-pg`).
 
 | Command                    | Does                                                        |
 |----------------------------|-------------------------------------------------------------|
-| `orq init`                 | creates `.orqestrai/`, writes skills, agents and the guard hook into `.claude/` |
+| `orq init`                 | creates `.orqestrai/config.toml`                            |
 | `orq guard`                | the PreToolUse guard hook (§6)                              |
 | `orq new "<request>"`      | task id, task row, worktree, branch, zellij tab             |
 | `orq open <id>`            | opens the task's tab again (after a restart)                |
@@ -418,34 +424,47 @@ is generated. A rerun replaces its own `orq-*` files and keeps the rest.
 | `orq ls`                   | lists tasks and status; reads merged PRs from `gh`          |
 | `orq clean <id>`           | removes a merged or dropped task's worktree and branch      |
 | `orq slot take\|keep\|free\|ls` | verify slots (§5)                                    |
+| `orq serve --socket <path>` | the state over HTTP (below); the one process with the database password |
+
+**Server and clients.** `orq serve` is the only process that connects to the database. It
+offers the `Db` and `Slots` services as an HTTP API (`src/api.ts`, Effect's `HttpApi`), on
+a Unix socket or a TCP address. With `ORQ_SERVER` set (the
+socket path, or a URL), every other command uses the API's generated client
+(`src/remote.ts`) instead of the database, and needs no `PG*` variable. Without it, orq
+connects directly, as on a laptop. The server only touches the database and never runs a
+command: a slot's stop and serve commands go back to the client, which runs them as its
+own user. The client also sends its `ORQ_HOST` with a slot take and list, so the slots are
+the sessions' machine's, not the server's; the number of slots, their ports and how long they
+last (`ORQ_SLOTS`, `ORQ_PORT_START`, `ORQ_SLOT_TTL`) are set on the server. Where it runs is
+up to the hosting (§4 Topology).
+
+Skills and agents reach orq only through the CLI, over Bash. There is no MCP server: one way
+in keeps the slot commands, the guard and the tests the same for every caller.
 
 `orq ask` and `orq send` come with the Slack bridge (after slice 4).
 
 ### Slack bridge
 
-One long-running process on VPS1, `bws run -- orq bridge` (Socket Mode, no open port, no
-LLM). It runs **outside** the sandbox and is the only holder of the Slack and GitHub
-tokens.
+One long-running process, `orq bridge` (Socket Mode, no open port, no LLM), on the
+sessions' machine, outside the sandbox. It holds the Slack token; the sandbox cannot read
+it (Fence hides the file, and sessions cannot see other processes).
 
-- `/orq new "<title>"` → `orq new`; the task gets one Slack thread.
-- `/orq ls`, `/orq show <id>` answer in Slack.
-- Your reply in the thread → the next turn: `claude -p --resume <session>` in the task's
-  worktree, sandboxed, with a clean environment.
-- `orq ask` (from a session) → posted in the thread, status WAITING FOR ME.
-- **Git and GitHub for the agent:** a session commits; the bridge pushes the branch,
-  opens or updates the draft PR, marks it ready at ship, watches CI (`gh run watch`),
-  downloads CI's report into `evidence/ci/` and sends the result to the session as its
-  next turn. The agent never holds a GitHub token.
-- `orq attach <id>` opens the same session interactively in zellij (over Tailscale SSH);
-  the bridge pauses that thread meanwhile. orq pre-trusts each worktree, so the folder
-  trust dialog never blocks.
+- `@bot <request>` in a project's channel → `orq new`: a zellij tab with Claude Code, the
+  request typed in. The task gets one Slack thread.
+- `orq ask <id> "<text>"` (from a session) → the bridge posts it in the thread, status
+  WAITING FOR ME. Claude gets an action, never the token.
+- Your reply in the thread → the bridge types it into the task's tab (`orq send`). If the
+  tab is closed, it reopens the session (`claude --resume`) first.
+- `/orq ls`, `/orq show <id>` answer in Slack. Artifacts are read in the dashboard.
+- **Git and GitHub:** a fine-grained token per repo, used by `gh` and `git push` outside the
+  sandbox; Fence hides `~/.config/gh` from sessions.
+- orq pre-trusts each worktree, so the folder trust dialog never blocks.
 - Only your Slack user may talk to the bot.
 
 ### Files in a project
 
 Everything orqestrai keeps in a project is in one folder, committed with the project.
-`orq init` writes the generated skills, agents and hook settings into `.claude/`; each
-generated file says it is generated (edit it in orqestrai).
+The skills, agents and hook come from the plugin, not from files in the project.
 
 ```
 .orqestrai/
@@ -476,10 +495,9 @@ plain TS (no `bun:*` imports), because pi loads extensions under Node.
   `tasks(id, repo, title, branch, worktree, step, status, created_at, updated_at)`,
   `events(seq, task_id, at, kind, detail)`, `task_links(seq, task_id, kind, ref, role)`
   and `slots(host, n, task_id, …)`. Step and status are checked by the database too.
-  - The instance is Mikrus's shared `psql01.mikr.us` (PG 18). It runs beside the VPS, so
-    it takes none of its RAM or disk.
-  - orq reads libpq's `PG*` variables. On the VPS, `bws run` with the `session` machine
-    account sets them (§6). TLS: `PGSSLMODE=verify-ca` with `PGSSLROOTCERT`, the instance's self-signed
+  - Mine is a shared hosted Postgres 18, so it takes none of the servers' RAM or disk.
+  - orq reads libpq's `PG*` variables. Only `orq serve` gets them (§6); sessions
+    reach the state through it (the CLI). TLS: `PGSSLMODE=verify-ca` with `PGSSLROOTCERT`, the instance's self-signed
     certificate pinned; `require` (the default) only encrypts.
   - Nothing connects until a command needs state, so `orq guard` and `orq init` work
     without a database.
@@ -522,34 +540,29 @@ hand for now). One skill combines:
 - **Feature map**: one file per user-facing feature — how to reach it, how to drive it,
   which end state proves it works.
 
-### Preview environments (VPS2)
+### Preview environments
 
-The app under test runs on VPS2, one **preview per PR**. VPS1 only runs the tests.
+The app under test runs as a **preview per PR**, deployed by the hosting, not by orq.
 
-- **Trigger:** verify needs a running app, so the bridge pushes the branch and opens a
-  **draft PR**. The project's CI builds `ghcr.io/<owner>/<app>:<sha>`.
-- **Deploy:** an Argo CD ApplicationSet with the pull-request generator creates
-  `preview-pr-<n>` from the project's chart (Helm or Kustomize) with that image, and
-  removes it when the PR closes.
-- **Reach:** the Tailscale operator gives the preview a private URL,
-  `https://<app>-pr-<n>.<tailnet>.ts.net`. Nothing is public.
+- **Trigger:** verify needs a running app, so the branch is pushed and a **draft PR**
+  opened. The project's CI builds its image.
+- **Deploy:** the hosting deploys the PR's image and removes it when the PR closes (mine:
+  an Argo CD ApplicationSet with the pull-request generator, in orqestrai-infra).
+- **Where:** a naming convention in the project's `.orqestrai/config.toml`, e.g.
+  `preview_url = "https://app-pr-{pr}.<tailnet>.ts.net"`. orq fills in the PR number.
 - **Right version:** the app serves `/version` with its git SHA. Verify waits until it
   equals the task's commit, so it never tests an old deploy.
-- **Secrets of the app:** OpenBao on VPS2, pulled into each namespace by External Secrets
-  Operator. Previews use test or sandbox keys only. VPS1 never sees them.
+- **Secrets of the app:** the hosting's (test or sandbox keys only); sessions never see them.
 - **Who runs e2e:**
-  - **verify:** the verifier on VPS1 runs and fixes the e2e tests and the driven checks
-    against the preview URL (Playwright, through the sandbox proxy). The evidence is
-    written straight into `.orqestrai/tasks/<id>/evidence/`.
+  - **verify:** the verifier runs and fixes the e2e tests and the driven checks against
+    the preview URL (Playwright, through the sandbox proxy). The evidence is written
+    straight into `.orqestrai/tasks/<id>/evidence/`.
   - **ship:** marking the PR ready runs the committed e2e suite in CI against the
     preview. That is the merge gate; nobody can skip it.
-- **Size:** k3s, Argo CD, OpenBao, ESO and the operator take ~4 GB; a small app with its
-  database ~0.5 GB, a JVM app ~1.5 GB. 12 GB holds the 2–3 tasks in flight with room.
-- **What a project needs for previews** (added when it is onboarded): a Dockerfile, a
-  chart, a `/version` endpoint, a CI workflow that builds the image, and its entry in the
-  ApplicationSet.
-- **Until VPS2 exists:** the verify slots of slice 4 stay (`orq slot take|keep|free|ls`, a
-  row per `ORQ_HOST` in the database, the app started by the `verify-<surface>` skill).
+- **What a project needs for previews:** a Dockerfile, a `/version` endpoint, a CI
+  workflow that builds the image, `preview_url`, and its entry in the hosting.
+- **Until previews exist:** the verify slots of slice 4 stay (`orq slot take|keep|free|ls`,
+  a row per `ORQ_HOST` in the database, the app started by the `verify-<surface>` skill).
   They go away once previews work.
 
 The `verify-<surface>` skills are generated when a project is onboarded into orqestrai, not
@@ -557,40 +570,34 @@ before.
 
 ## 6. Security
 
-The rule: **an agent can use what it needs but cannot read a secret.** On Linux, anything
-running as the same user as a secret can read it, so the wall is the **Claude Code
-sandbox** (bubblewrap): every task session runs in it, the bridge does not.
+The rule: **an agent can use what it needs but cannot read a secret.** A process that uses
+a secret holds it in plain text, and anything running as the same user can read it. So
+agents get actions (orq's API), never credentials, and the database login is only in
+`orq serve`, best on another machine than the sessions.
 
-- **VPS1 users** (Mikrus `neil198`: LXC, 1 CPU; Tailscale; SSH with keys only — Mikrus
-  keeps its public SSH port open):
-  - `orq`: the bridge and the task sessions. No sudo.
-  - `dock`: owns rootless Docker and nothing else. Sessions reach its socket (allowed in
-    the sandbox) for testcontainers. A container can mount only what `dock` can read,
-    which is no secret. (Docker as the same user would mount the token file and climb
-    over any sandbox.)
-- **Secrets:** Bitwarden Secrets Manager (EU cloud), two machine accounts:
-  - `bridge`: Slack and GitHub tokens. Its token file is denied in the sandbox
-    (filesystem) and in the Claude Code permission rules (Read/Edit tools).
-  - `session`: only the Postgres login for orq's own index (`PG_HOST`, `PG_DB`,
-    `PG_LOGIN`, `PG_PASSWORD`). Sessions get it on purpose: the worst misuse is a messed
-    up task index. TLS to the shared instance pins its self-signed certificate
-    (`PGSSLMODE=verify-ca`).
-- **Sandbox network:** allowed are GitHub, Anthropic, the shared Postgres, `dock`'s Docker
-  socket and the preview URLs on VPS2. Everything else is blocked.
-- **To prove on VPS1 first:** inside the sandbox, a test reaches its testcontainers port
-  and the shared Postgres.
-- **VPS2:** no agent runs there. OpenBao holds the apps' test secrets (it starts sealed;
-  unsealing after a reboot is part of its setup).
+- **Sessions** run in Fence (bubblewrap): its own network allowlist, files, and process
+  namespace. They hold no database login: they reach orq's state through `orq serve`
+  (`ORQ_SERVER`), which runs no command, so a session cannot make it run its code.
+  - `orq` should be a root-owned binary, so a session cannot replace it, and the Fence
+    config read-only inside the sandbox.
+  - Allowed network: GitHub, Anthropic, `orq serve`, the Docker socket (testcontainers,
+    rootless Docker as its own user) and the preview URLs. Everything else is blocked.
+  - The tokens of the processes beside the sessions (the Slack bridge, `gh`) are in files
+    Fence hides; inside Fence, other processes are invisible (checked on VPS1).
+- **`orq serve`** gets the Postgres login and nothing else does. TLS to a shared instance
+  pins its self-signed certificate (`PGSSLMODE=verify-ca`).
+- My hosting (orqestrai-infra): `orq serve` in k3s, non-root and read-only, its login from
+  OpenBao through External Secrets, reachable only over Tailscale from the sessions'
+  machine, and network policies that let it reach only the database.
 - GitHub: fine-grained token per repo. Branch protection on `main`; the token cannot
   bypass it.
 - Guard hook (`orq guard`, PreToolUse, `src/guard/`). `decide()` is plain TS (no Effect,
   no `bun:*`) and decides allow / block; a shell parser splits commands, also inside
-  `bash -c`, `eval` and over several lines. `bin/orq` starts it without the Effect CLI,
-  so a call takes ~20 ms. Tests: `test/guard.test.ts`. Active only when `ORQ_TASK` is set, which
+  `bash -c`, `eval` and over several lines. `src/main.ts` starts it without the Effect CLI. Tests: `test/guard.test.ts`. Active only when `ORQ_TASK` is set, which
   `orq new` / `orq open` do for task sessions; other sessions are not affected.
   - G1 protect base: no push, merge or commit on the base branch; no force push; no
     `gh pr merge`.
-  - G2 secrets: no reading or writing `.env*`, keys, credential files, the bws tokens.
+  - G2 secrets: no reading or writing `.env*`, keys, credential files, token files.
   - G3 stay inside: file writes and git writes only inside the task worktree; no
     `git worktree add/remove`.
   - G4 destructive: `rm -r`, `find -delete`, `git clean`, `git reset --hard` only inside
@@ -603,7 +610,7 @@ sandbox** (bubblewrap): every task session runs in it, the bridge does not.
 ## 7. Evals (after the first manual run)
 
 Cases in `evals/`, each against a small fixture repo after `orq init`, with a baseline
-without orqestrai. The harness is open (`claude plugin eval` expects a plugin; orqestrai is not one). Priority 1: **principle skills load** when a step names them.
+without orqestrai. The harness: `claude plugin eval`, now that orqestrai is a plugin. Priority 1: **principle skills load** when a step names them.
 Then: neutral research, question format, no self-approval, approval moves on, git rules.
 Later, promptfoo or similar tools for prompt-level comparisons.
 
@@ -633,7 +640,8 @@ Settled 2026-11-01:
 
 Settled 2026-11-02:
 
-- Install with Bun + `orq init`, not a plugin; Claude Code only (§4).
+- Install with Bun + `orq init`, not a plugin; Claude Code only (§4). Changed 2026-11-09:
+  a compiled `orq` binary and a Claude Code plugin (§4).
 - Guard hook in TS (§6).
 - Triage: checks for existing work and the out-of-scope notes, a recommendation first, grilling
   as a design tree; no acceptance criteria in the brief (§3.0, §3.1).
@@ -657,7 +665,7 @@ Open:
    for risk `high` only. Then Slack, the dashboard.
 2. ~~Modeling toolbox~~: settled 2026-11-02 (§3.7).
 3. ~~Test guidelines~~: settled 2026-11-03 (§3.3), written in
-   `skills/principles/test-behavior/GUIDELINES.md`.
+   `plugin/skills/principles/principle-test-behavior/GUIDELINES.md`.
 4. **GitHub and CI.** orqestrai is public on GitHub (`saculo/orqestrai`, MIT), `main` is
    protected (CI must pass, no force push). `.github/workflows/ci.yml` runs on every pull
    request and push to `main`:

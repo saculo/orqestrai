@@ -3,16 +3,16 @@
 import { afterEach, beforeAll, beforeEach, describe, expect, test } from "bun:test"
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync } from "node:fs"
 import { tmpdir } from "node:os"
-import { join, resolve } from "node:path"
+import { join } from "node:path"
+import { ORQ } from "./orq.ts"
 import { freshDatabase, startPostgres } from "./pg.ts"
 
-const CLI = resolve(import.meta.dir, "..", "src", "cli.ts")
 let dir: string, repo: string, home: string, pg: Record<string, string>
 
 const orq = (args: string[], extra: Record<string, string> = {}) => {
   const env = { ...process.env, ORQ_HOME: home, ...pg, ORQ_ZELLIJ_SESSION: "orq-test-none", ...extra } as Record<string, string | undefined>
   delete env.ZELLIJ
-  const p = Bun.spawnSync([process.execPath, CLI, ...args], { cwd: repo, env, stdout: "pipe", stderr: "pipe" })
+  const p = Bun.spawnSync([...ORQ, ...args], { cwd: repo, env, stdout: "pipe", stderr: "pipe" })
   return { code: p.exitCode, out: p.stdout.toString(), err: p.stderr.toString() }
 }
 const marker = (name: string) => join(dir, name)
@@ -83,7 +83,7 @@ describe("orq slot", () => {
     orq(["slot", "take", "T-0001"])
     const env = { ...process.env, ORQ_HOME: home, ...pg } as Record<string, string | undefined>
     delete env.ZELLIJ
-    const waiting = Bun.spawn([process.execPath, CLI, "slot", "take", "T-0002", "--wait", "20"], { cwd: repo, env, stdout: "pipe" })
+    const waiting = Bun.spawn([...ORQ, "slot", "take", "T-0002", "--wait", "20"], { cwd: repo, env, stdout: "pipe" })
     await Bun.sleep(1500)
     orq(["slot", "free", "T-0001"])
     expect(await waiting.exited).toBe(0)
@@ -105,6 +105,21 @@ describe("orq slot", () => {
     expect(orq(["slot", "free", "T-0001"], env).out).toContain("stopped the app")
     expect(existsSync(marker("stopped"))).toBe(true)
     expect(existsSync(marker("unserved-4100"))).toBe(true)
+  })
+
+  test("a stop or serve command that fails is a warning, and the slot is freed anyway", () => {
+    const env = { ORQ_SERVE: "echo cannot serve >&2; exit 3" }
+    orq(["slot", "take", "T-0001"], env)
+    const kept = orq(["slot", "keep", "T-0001", "--stop", "exit 4", "--port", "4100"], env)
+    expect(kept.code).toBe(0)
+    expect(kept.out).toContain("port 4100 (not served)")
+    expect(kept.err).toContain("orq: warning: `echo cannot serve >&2; exit 3` failed: cannot serve; run it yourself")
+    const freed = orq(["slot", "free", "T-0001"])
+    expect(freed.code).toBe(0)
+    expect(freed.out).toBe("freed slot 1\n")
+    expect(freed.err).toContain("`exit 4` in ")
+    expect(freed.err).toContain("failed: exit 4; run it yourself")
+    expect(orq(["slot", "take", "T-0002"]).code).toBe(0)
   })
 
   test("an expired slot is stopped and given to the next task", async () => {

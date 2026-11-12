@@ -1,6 +1,6 @@
 // The Postgres database that holds orq's state: tasks, events, links and verify slots.
-// One shared instance serves every machine. Settings are libpq's PG* variables; on the VPS,
-// `bws run` sets them from Bitwarden. PGSSLMODE as in libpq: require (default) encrypts,
+// One shared instance serves every machine. Settings are libpq's PG* variables; with a server,
+// only `orq serve` has them and its clients set ORQ_SERVER. PGSSLMODE as in libpq: require (default) encrypts,
 // verify-ca also checks the server against PGSSLROOTCERT (the shared instance's self-signed
 // certificate, pinned), disable is for local tests only.
 import { readFileSync } from "node:fs"
@@ -57,7 +57,7 @@ const settings = Config.all({
 const client = PgClient.layerFrom(
   Effect.gen(function* () {
     const { host, sslMode, rootCert, password, ...rest } = yield* settings
-    if (!host) return yield* new OrqError({ message: "no database: PGHOST is not set (on the VPS, run orq under `bws run`)" })
+    if (!host) return yield* new OrqError({ message: "no database: PGHOST is not set (a client of orq serve sets ORQ_SERVER instead)" })
     return yield* PgClient.make({
       ...rest,
       host,

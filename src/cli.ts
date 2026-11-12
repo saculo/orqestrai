@@ -1,7 +1,7 @@
 // orq: the mechanics of orqestrai. Task ids, state, worktrees, zellij tabs, task files, PR state.
 // The workflow lives in skills/. This program does not decide. It only does.
 
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs"
+import { existsSync, mkdirSync, writeFileSync } from "node:fs"
 import { dirname, join } from "node:path"
 import { BunRuntime, BunServices } from "@effect/platform-bun"
 import { Console, Effect, Layer } from "effect"
@@ -13,29 +13,28 @@ import { LINK_ROLES, OrqError, STATUSES, STEPS, slugify, stamp, TEMPLATES } from
 import { addWorktree, baseBranch, requireRef, topLevel } from "./git.ts"
 import { install } from "./init.ts"
 import { syncMerged } from "./pr.ts"
+import { serve } from "./server.ts"
 import { slot } from "./slot-cli.ts"
 import { withState } from "./state.ts"
+import { templates } from "./templates.ts"
+import { VERSION } from "./version.ts"
 import { openTab } from "./zellij.ts"
 
-/** The guard hook and the skills call `orq` by name. Without it on PATH the guards are off. */
+/** The plugin's guard hook and skills start `orq` by name. Without it on PATH they do not run. */
 const warnIfNotOnPath = Effect.gen(function* () {
   if (Bun.which("orq")) return
-  const { root } = yield* OrqConfig
-  yield* Console.error(
-    `orq: warning: orq is not on PATH, so the guard hook and the skills cannot call it.\n  ln -s "${root}/bin/orq" ~/.local/bin/orq`,
-  )
+  yield* Console.error("orq: warning: orq is not on PATH, so the plugin's guard hook and skills cannot start it (README, Install)")
 })
 
 const init = Command.make("init", {}, () =>
   Effect.gen(function* () {
-    const { root: orqRoot } = yield* OrqConfig
     const project = yield* topLevel()
-    const { skills, agents } = yield* install(orqRoot, project, yield* baseBranch(project))
-    yield* Console.log(`.orqestrai/config.toml\n.claude/skills: ${skills.join(" ")}\n.claude/agents: ${agents.join(" ")}`)
-    yield* Console.log(".claude/settings.json: PreToolUse hook `orq guard`")
+    const wrote = yield* install(project, yield* baseBranch(project))
+    yield* Console.log(wrote ? ".orqestrai/config.toml: written; set the quality gate's commands in it" : ".orqestrai/config.toml: kept")
+    yield* Console.log("skills, agents and the guard hook: claude plugin install orq@orqestrai (once per machine)")
     yield* warnIfNotOnPath
   }),
-).pipe(Command.withDescription("install orqestrai into this project: .orqestrai/ and .claude/"))
+).pipe(Command.withDescription("set up this project: .orqestrai/config.toml"))
 
 const id = Argument.String("id").pipe(Argument.withDescription("task id, e.g. T-0001"))
 
@@ -47,16 +46,8 @@ const newTask = Command.make("new", { request: Argument.String("request") }, ({ 
     const base = yield* baseBranch(root)
     yield* requireRef(root, base)
 
-    const slug = slugify(request)
-    const {
-      id: tid,
-      branch,
-      worktree,
-    } = yield* db.create((tid) => {
-      const branch = `orq/${tid}-${slug}`
-      const worktree = join(home, "worktrees", root.split("/").at(-1) ?? "repo", `${tid}-${slug}`)
-      return { id: tid, repo: root, title: request, branch, worktree, note: `${branch} from ${base}` }
-    })
+    const worktrees = join(home, "worktrees", root.split("/").at(-1) ?? "repo")
+    const { id: tid, branch, worktree } = yield* db.create({ repo: root, title: request, slug: slugify(request), worktrees, base })
 
     // The id is held; set up the worktree, and give the id back if that fails.
     yield* addWorktree(root, branch, worktree, base).pipe(Effect.tapError(() => db.remove(tid)))
@@ -137,23 +128,22 @@ const cleanTask = Command.make("clean", { id }, ({ id }) =>
 
 const file = Command.make("file", { id, name: Argument.Literals("name", TEMPLATES) }, ({ id, name }) =>
   Effect.gen(function* () {
-    const { root: orqRoot } = yield* OrqConfig
     const out = join(yield* topLevel(), ".orqestrai", "tasks", id, `${name}.md`)
     if (!existsSync(dirname(out))) return yield* new OrqError({ message: `no task folder for ${id} here; are you in its worktree?` })
     if (existsSync(out)) return yield* new OrqError({ message: `${out} exists; edit it instead` })
-    writeFileSync(out, readFileSync(join(orqRoot, "templates", `${name}.md`), "utf8").replaceAll("{{id}}", id))
+    writeFileSync(out, templates[name].replaceAll("{{id}}", id))
     yield* Console.log(out)
   }),
 ).pipe(Command.withDescription("new task file from templates/<name>.md"))
 
 const orq = Command.make("orq").pipe(
   Command.withDescription("orqestrai mechanics. The workflow is in the skills."),
-  Command.withSubcommands([init, newTask, open, state, show, link, ls, file, cleanTask, slot]),
+  Command.withSubcommands([init, newTask, open, state, show, link, ls, file, cleanTask, slot, serve]),
 )
 
 const AppLayer = OrqConfig.layer.pipe(Layer.provideMerge(BunServices.layer))
 
-Command.run(orq, { version: "0.1.0" }).pipe(
+Command.run(orq, { version: VERSION }).pipe(
   Effect.tapError((e) => (CliError.isCliError(e) ? Effect.void : Console.error(`orq: ${e.message}`))),
   Effect.provide(AppLayer),
   BunRuntime.runMain({ disableErrorReporting: true }),

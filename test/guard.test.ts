@@ -3,9 +3,10 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test"
 import { mkdtempSync, rmSync } from "node:fs"
 import { tmpdir } from "node:os"
-import { join, resolve } from "node:path"
+import { join } from "node:path"
 import { decide, type GuardEnv, type HookInput } from "../src/guard/decide.ts"
 import { gitBranch } from "../src/guard/main.ts"
+import { ORQ } from "./orq.ts"
 
 let T: string, WT: string, MAIN: string, env: GuardEnv
 
@@ -130,11 +131,10 @@ describe("G4 destructive commands", () => {
 })
 
 describe("orq guard, as Claude Code calls it", () => {
-  const ORQ = resolve(import.meta.dir, "..", "bin", "orq")
   const run = (input: unknown, extraEnv: Record<string, string> = {}) => {
     const e = { ...process.env, ...extraEnv } as Record<string, string | undefined>
     if (!extraEnv.ORQ_TASK) delete e.ORQ_TASK
-    const p = Bun.spawnSync([ORQ, "guard"], { stdin: Buffer.from(JSON.stringify(input)), env: e, stdout: "pipe", stderr: "pipe" })
+    const p = Bun.spawnSync([...ORQ, "guard"], { stdin: Buffer.from(JSON.stringify(input)), env: e, stdout: "pipe", stderr: "pipe" })
     return { code: p.exitCode, err: p.stderr.toString() }
   }
   const session = () => ({ ORQ_TASK: "T-0001", ORQ_WORKTREE: WT, ORQ_BASE: "main", ORQ_TMP: "/scratch" })
@@ -154,7 +154,7 @@ describe("orq guard, as Claude Code calls it", () => {
   })
 
   test("blocks input it cannot read, in a task session", () => {
-    const p = Bun.spawnSync([ORQ, "guard"], { stdin: Buffer.from("not json"), env: { ...process.env, ...session() }, stderr: "pipe" })
+    const p = Bun.spawnSync([...ORQ, "guard"], { stdin: Buffer.from("not json"), env: { ...process.env, ...session() }, stderr: "pipe" })
     expect(p.exitCode).toBe(2)
   })
 })

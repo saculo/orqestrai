@@ -1,7 +1,7 @@
 // The words of orqestrai: steps, statuses, tasks, links, events, and the one error the CLI reports.
 // Every other module imports these; nothing defines them twice. The schemas check rows read
 // from the database.
-import { Data, Schema } from "effect"
+import { Schema } from "effect"
 
 export const STEPS = ["triage", "plan", "impl", "verify", "learn", "ship"] as const
 export const Step = Schema.Literals(STEPS)
@@ -26,6 +26,17 @@ export const Task = Schema.Struct({
 })
 export type Task = typeof Task.Type
 
+/** What a new task needs; the database gives the id, and the id names the branch and the worktree. */
+export const NewTask = Schema.Struct({
+  repo: Schema.String,
+  title: Schema.String,
+  slug: Schema.String,
+  /** the folder the task's worktree goes in */
+  worktrees: Schema.String,
+  base: Schema.String,
+})
+export type NewTask = typeof NewTask.Type
+
 /** Where a task came from (origin) or what it relates to: an issue, a ticket, a thread, a PR.
  * The kind is open; the adapter that owns a kind is the only code that reads its ref. */
 export const LINK_ROLES = ["origin", "related"] as const
@@ -39,7 +50,7 @@ export const TaskEvent = Schema.Struct({ at: Schema.Date, kind: Schema.String, d
 export type TaskEvent = typeof TaskEvent.Type
 
 /** A failure the user can act on. The CLI prints its message and exits 1. */
-export class OrqError extends Data.TaggedError("OrqError")<{ readonly message: string }> {}
+export class OrqError extends Schema.TaggedError<OrqError>()("OrqError", { message: Schema.String }, { httpApiStatus: 422 }) {}
 
 export const taskId = (n: number): string => `T-${String(n).padStart(4, "0")}`
 
