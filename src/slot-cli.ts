@@ -11,22 +11,34 @@ import { withState } from "./state.ts"
 const id = Argument.String("id").pipe(Argument.withDescription("task id, e.g. T-0001"))
 const until = (s: Slot) => stamp(s.expires_at).slice(0, 16)
 
-/** Runs a shell command; a failure is ignored, as a stop that fails must not block the next task. */
-const sh = (cmd: string, cwd?: string) => run("sh", ["-c", cmd], cwd).pipe(Effect.ignore)
+/** Runs a shell command and returns whether it succeeded. A failure is a warning that names the
+ * command to run by hand, not an error: a stop that fails must not block the next task. */
+const sh = (cmd: string, cwd?: string) =>
+  run("sh", ["-c", cmd], cwd).pipe(
+    Effect.map((out) => (out.code === 0 ? "" : out.stderr.trim() || `exit ${out.code}`)),
+    Effect.orElseSucceed(() => "cannot start sh"),
+    Effect.flatMap((failure) =>
+      failure
+        ? Console.error(`orq: warning: \`${cmd}\`${cwd ? ` in ${cwd}` : ""} failed: ${failure}; run it yourself`).pipe(Effect.as(false))
+        : Effect.succeed(true),
+    ),
+  )
 const withPort = (cmd: string, port: number) => cmd.replaceAll("{port}", String(port))
 
-/** Stops a freed slot's app (if verify kept it up) and stops serving its port. */
+/** Stops a freed slot's app (if verify kept it up) and stops serving its port. Returns whether
+ * the app was stopped. */
 const release = Effect.fnUntraced(function* (s: Slot) {
   const { unserve } = yield* OrqConfig
-  if (s.stop) yield* sh(s.stop, s.worktree)
+  const stopped = s.stop ? yield* sh(s.stop, s.worktree) : false
   if (s.port && unserve) yield* sh(withPort(unserve, s.port))
+  return stopped
 })
 
-/** Frees the task's slot and stops its app. Returns the freed slot, if it held one. */
+/** Frees the task's slot and stops its app. Returns the freed slot, if it held one, and whether
+ * its app was stopped. */
 export const freeSlot = Effect.fnUntraced(function* (id: string) {
-  const s = yield* (yield* Slots).free(id)
-  if (s) yield* release(s)
-  return s
+  const slot = yield* (yield* Slots).free(id)
+  return slot ? { slot, stopped: yield* release(slot) } : undefined
 })
 
 const take = Command.make(
@@ -51,21 +63,24 @@ const keep = Command.make(
     Effect.gen(function* () {
       const s = yield* (yield* Slots).keep(id, stop, port)
       const { serve } = yield* OrqConfig
-      if (serve) yield* sh(withPort(serve, port))
-      yield* Console.log(`slot ${s.n} kept for ${id} until ${until(s)}, port ${port}; orq slot free ${id} stops it`)
+      const served = serve ? yield* sh(withPort(serve, port)) : true
+      yield* Console.log(
+        `slot ${s.n} kept for ${id} until ${until(s)}, port ${port}${served ? "" : " (not served)"}; orq slot free ${id} stops it`,
+      )
     }),
 ).pipe(Command.withDescription("keep the app up after verify, for the user's manual checks"), withState)
 
 const free = Command.make("free", { id }, ({ id }) =>
   Effect.gen(function* () {
-    const s = yield* freeSlot(id)
-    yield* Console.log(s ? `freed slot ${s.n}${s.stop ? " and stopped the app" : ""}` : `${id} holds no slot`)
+    const freed = yield* freeSlot(id)
+    yield* Console.log(freed ? `freed slot ${freed.slot.n}${freed.stopped ? " and stopped the app" : ""}` : `${id} holds no slot`)
   }),
 ).pipe(Command.withDescription("free the task's slot; stops a kept app"), withState)
 
 const ls = Command.make("ls", {}, () =>
   Effect.gen(function* () {
-    for (const s of yield* (yield* Slots).list)
+    const { host } = yield* OrqConfig
+    for (const s of yield* (yield* Slots).list(host))
       yield* Console.log(`slot ${s.n}  ${s.task_id}  until ${until(s)}${s.kept ? `  kept, port ${s.port}` : ""}`)
   }),
 ).pipe(Command.withDescription("verify slots in use"), withState)

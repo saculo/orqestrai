@@ -1,5 +1,5 @@
 // orq init: the one file a project owns, .orqestrai/config.toml (its base branch and the quality
-// gate's commands). The skills, agents, guard hook and MCP tools come from the orq plugin for
+// gate's commands). The skills, agents and guard hook come from the orq plugin for
 // Claude Code (plugin/), installed once per machine, not per project.
 
 import { existsSync, mkdirSync, writeFileSync } from "node:fs"

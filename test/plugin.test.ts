@@ -1,5 +1,5 @@
 // The Claude Code plugin (plugin/): every skill and agent is where Claude Code looks for it, under
-// the name the others call it by, and the plugin starts orq for the guard hook and the MCP tools.
+// the name the others call it by, and the plugin starts orq for the guard hook.
 import { describe, expect, test } from "bun:test"
 import { readFileSync } from "node:fs"
 import { basename, dirname, join, resolve } from "node:path"
@@ -30,9 +30,12 @@ describe("the orq plugin", () => {
     expect(mentioned.filter((n) => !names.has(n as string))).toEqual([])
   })
 
-  test("the guard hook and the MCP server start orq by name", () => {
+  test("the guard hook starts orq by name", () => {
     expect(json("plugin/hooks/hooks.json").hooks.PreToolUse[0].hooks[0].command).toBe("orq guard")
-    expect(json("plugin/.mcp.json").mcpServers.orq).toEqual({ command: "orq", args: ["mcp"] })
+  })
+
+  test("the plugin is named orq, as the orq:<name> skills and agents are called", () => {
+    expect(manifest.name).toBe("orq")
   })
 
   test("the marketplace lists the plugin, at orq's version", () => {

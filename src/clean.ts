@@ -67,8 +67,8 @@ export const clean = (id: string) =>
       if (task.status === "MERGED") yield* requireInPr(task, tip.stdout.trim())
       else done.push(`archived ${yield* archive(task, home)}`)
     }
-    const slot = yield* freeSlot(id)
-    if (slot) done.push(`freed verify slot ${slot.n}`)
+    const freed = yield* freeSlot(id)
+    if (freed) done.push(`freed verify slot ${freed.slot.n}${freed.stopped ? " and stopped its app" : ""}`)
     if (hasWorktree) {
       yield* exec("git", ["worktree", "remove", task.worktree], task.repo)
       done.push(`removed worktree ${task.worktree}`)

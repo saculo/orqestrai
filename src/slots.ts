@@ -4,7 +4,8 @@
 // how the app starts and stops is the verify-<surface> skill's job. A slot expires, so a
 // crashed session cannot hold it forever: the next take frees it and hands back its app to stop.
 // This service only touches the database: it also runs inside `orq serve`, which must never run
-// a command. Stopping and serving apps is the caller's job (src/slot-cli.ts).
+// a command. Stopping and serving apps is the caller's job (src/slot-cli.ts). The host is the
+// caller's too: inside `orq serve`, this process's own host name is not where the apps run.
 import { Context, Data, Duration, Effect, Layer, Schedule, Schema } from "effect"
 import { SqlClient } from "effect/sql/SqlClient"
 import { OrqConfig } from "./config.ts"
@@ -35,11 +36,13 @@ export type Taken = typeof Taken.Type
 export class Slots extends Context.Service<
   Slots,
   {
-    readonly take: (task: string, worktree: string) => Effect.Effect<Taken, OrqError>
+    /** Takes a slot of `host` (the machine that runs the app) for the task. */
+    readonly take: (host: string, task: string, worktree: string) => Effect.Effect<Taken, OrqError>
     readonly keep: (task: string, stop: string, port: number) => Effect.Effect<Slot, OrqError>
     /** Frees the task's slot and returns it, so the caller can stop its app. */
     readonly free: (task: string) => Effect.Effect<Slot | undefined, OrqError>
-    readonly list: Effect.Effect<ReadonlyArray<Slot>, OrqError>
+    /** The slots in use on `host`. */
+    readonly list: (host: string) => Effect.Effect<ReadonlyArray<Slot>, OrqError>
   }
 >()("orq/Slots") {
   static readonly layer = Layer.effect(
@@ -47,21 +50,20 @@ export class Slots extends Context.Service<
     Effect.gen(function* () {
       const cfg = yield* OrqConfig
       const sql = yield* SqlClient
-      const host = cfg.host
       const until = sql`now() + make_interval(secs => ${cfg.slotTtl})`
       const slots = rows(Slot)
       const portBase = (s: Slot) => cfg.portStart + (s.n - 1) * 100
-      const ofHost = sql`SELECT * FROM slots WHERE host = ${host} ORDER BY n`.pipe(Effect.flatMap(slots))
+      const ofHost = (host: string) => sql`SELECT * FROM slots WHERE host = ${host} ORDER BY n`.pipe(Effect.flatMap(slots))
 
-      const take = (task: string, worktree: string) =>
+      const take = (host: string, task: string, worktree: string) =>
         Effect.gen(function* () {
           yield* sql`LOCK TABLE slots IN SHARE ROW EXCLUSIVE MODE`
           const expired = yield* sql`DELETE FROM slots WHERE host = ${host} AND expires_at < now() RETURNING *`.pipe(Effect.flatMap(slots))
           const [mine] = yield* sql`UPDATE slots SET expires_at = ${until} WHERE task_id = ${task} RETURNING *`.pipe(Effect.flatMap(slots))
           if (mine) return { slot: mine, portBase: portBase(mine), expired } satisfies Taken
-          const used = new Set((yield* ofHost).map((s) => s.n))
+          const used = new Set((yield* ofHost(host)).map((s) => s.n))
           const n = Array.from({ length: cfg.slots }, (_, i) => i + 1).find((i) => !used.has(i))
-          if (n === undefined) return { busy: yield* ofHost, expired } satisfies Taken
+          if (n === undefined) return { busy: yield* ofHost(host), expired } satisfies Taken
           const [slot] = yield* sql`INSERT INTO slots (host, n, task_id, worktree, expires_at)
                                     VALUES (${host}, ${n}, ${task}, ${worktree}, ${until}) RETURNING *`.pipe(Effect.flatMap(slots))
           if (!slot) return yield* new OrqError({ message: "database: take: no row returned" })
@@ -87,7 +89,7 @@ export class Slots extends Context.Service<
         take,
         keep,
         free,
-        list: ofHost.pipe(asOrqError("list")),
+        list: (host: string) => ofHost(host).pipe(asOrqError("list")),
       }
     }),
   )
@@ -111,9 +113,10 @@ const within = (seconds: number) =>
 
 export const takeSlot = Effect.fnUntraced(function* (id: string, wait: number) {
   const slots = yield* Slots
+  const { host } = yield* OrqConfig
   const task = yield* (yield* Db).get(id)
   const expired: Array<Slot> = []
-  const { slot, portBase } = yield* slots.take(id, task.worktree).pipe(
+  const { slot, portBase } = yield* slots.take(host, id, task.worktree).pipe(
     Effect.tap((r) => Effect.sync(() => expired.push(...r.expired))),
     Effect.flatMap((r) => ("slot" in r ? Effect.succeed(r) : Effect.fail(new AllHeld({ held: r.busy })))),
     (taking) => (wait > 0 ? Effect.retry(taking, { schedule: within(wait), while: (e) => e._tag === "AllHeld" }) : taking),

@@ -49,7 +49,7 @@ export type TaskLink = typeof TaskLink.Type
 export const TaskEvent = Schema.Struct({ at: Schema.Date, kind: Schema.String, detail: Schema.NullOr(Schema.String) })
 export type TaskEvent = typeof TaskEvent.Type
 
-/** A failure the user can act on. The CLI prints its message and exits 1; an MCP tool returns it as its error. */
+/** A failure the user can act on. The CLI prints its message and exits 1. */
 export class OrqError extends Schema.TaggedError<OrqError>()("OrqError", { message: Schema.String }, { httpApiStatus: 422 }) {}
 
 export const taskId = (n: number): string => `T-${String(n).padStart(4, "0")}`

@@ -12,7 +12,7 @@ export const withoutPg = (): Record<string, string | undefined> =>
 export const startServer = async (at: string | number, env: Record<string, string>): Promise<Subprocess> => {
   const flags = typeof at === "string" ? ["--socket", at] : ["--host", "127.0.0.1", "--port", String(at)]
   const ping =
-    typeof at === "string" ? () => fetch("http://orq/slots", { unix: at } as RequestInit) : () => fetch(`http://127.0.0.1:${at}/slots`)
+    typeof at === "string" ? () => fetch("http://orq/tasks", { unix: at } as RequestInit) : () => fetch(`http://127.0.0.1:${at}/tasks`)
   const server = Bun.spawn([...ORQ, "serve", ...flags], {
     env: { ...process.env, ...env },
     stdout: "ignore",

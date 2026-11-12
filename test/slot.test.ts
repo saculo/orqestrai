@@ -107,6 +107,21 @@ describe("orq slot", () => {
     expect(existsSync(marker("unserved-4100"))).toBe(true)
   })
 
+  test("a stop or serve command that fails is a warning, and the slot is freed anyway", () => {
+    const env = { ORQ_SERVE: "echo cannot serve >&2; exit 3" }
+    orq(["slot", "take", "T-0001"], env)
+    const kept = orq(["slot", "keep", "T-0001", "--stop", "exit 4", "--port", "4100"], env)
+    expect(kept.code).toBe(0)
+    expect(kept.out).toContain("port 4100 (not served)")
+    expect(kept.err).toContain("orq: warning: `echo cannot serve >&2; exit 3` failed: cannot serve; run it yourself")
+    const freed = orq(["slot", "free", "T-0001"])
+    expect(freed.code).toBe(0)
+    expect(freed.out).toBe("freed slot 1\n")
+    expect(freed.err).toContain("`exit 4` in ")
+    expect(freed.err).toContain("failed: exit 4; run it yourself")
+    expect(orq(["slot", "take", "T-0002"]).code).toBe(0)
+  })
+
   test("an expired slot is stopped and given to the next task", async () => {
     orq(["slot", "take", "T-0001"], { ORQ_SLOT_TTL: "1" })
     orq(["slot", "keep", "T-0001", "--stop", `echo gone > ${marker("stopped")}`, "--port", "4100"], { ORQ_SLOT_TTL: "1" })

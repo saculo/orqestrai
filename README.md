@@ -14,10 +14,10 @@ Two pieces, once per machine. **The `orq` program**, one file from the latest re
 cd /tmp
 curl -fsSLO https://github.com/saculo/orqestrai/releases/latest/download/orq-linux-x64
 curl -fsSLO https://github.com/saculo/orqestrai/releases/latest/download/orq-linux-x64.sha256
-sha256sum -c orq-linux-x64.sha256 && install -m 755 orq-linux-x64 ~/.local/bin/orq
+sha256sum -c orq-linux-x64.sha256 && install -D -m 755 orq-linux-x64 ~/.local/bin/orq
 ```
 
-**The Claude Code plugin**, with the skills, agents, guard hook and orq's MCP tools:
+**The Claude Code plugin**, with the skills, agents and guard hook:
 
 ```bash
 claude plugin marketplace add saculo/orqestrai
@@ -34,16 +34,21 @@ From a checkout instead: `bun install`, `ln -s "$PWD/bin/orq" ~/.local/bin/orq`,
 ### Running `orq serve`
 
 On one machine, orq connects to Postgres itself, from libpq's `PG*` variables. To keep the
-login away from the sessions, run `orq serve` with them instead, and give the clients (the
-CLI, `orq mcp`) only `ORQ_SERVER`:
+login away from the sessions, run `orq serve` with them instead, and give the clients only
+`ORQ_SERVER`:
 
 ```bash
-PG...=... orq serve --socket /run/orq.sock               # same machine: ORQ_SERVER=/run/orq.sock
+PG...=... orq serve --socket /run/orq/orq.sock           # same machine: ORQ_SERVER=/run/orq/orq.sock
 PG...=... orq serve --host 10.0.0.2 --port 7400          # another machine: ORQ_SERVER=http://10.0.0.2:7400
 ```
 
-`--host` defaults to `127.0.0.1`; listen only on a private address. The image
-`ghcr.io/saculo/orqestrai:<version>` runs `orq serve --host 0.0.0.0 --port 7400`.
+The socket's directory must be writable by the server's user (a systemd `RuntimeDirectory=orq`
+makes `/run/orq`), and the socket's permissions decide who may call it. Over TCP the server
+does not authenticate callers: anyone who reaches the port can change any task. `--host`
+defaults to `127.0.0.1`; on another machine, listen on a private address and let the network
+admit only the sessions' machine (Tailscale ACLs, network policies). The image
+`ghcr.io/saculo/orqestrai:<version>` runs `orq serve --host 0.0.0.0 --port 7400`, so it needs
+the same.
 
 ## Use
 
@@ -67,7 +72,7 @@ State is in Postgres: orq reads libpq's `PGHOST`, `PGPORT`, `PGDATABASE`, `PGUSE
 `orq guard` and `orq init` need no database. `orq serve` is the one process that connects,
 on a Unix socket (`--socket <path>`) or a TCP address (`--host <ip> --port <n>`): set
 `ORQ_SERVER` to the path or to `http://<ip>:<n>` and every other command goes through it,
-with no `PG*` variable. `orq mcp` offers the state as MCP tools over stdio, for Claude Code. Worktrees are in
+with no `PG*` variable. Worktrees are in
 `~/.orqestrai/worktrees/<repo>/` (`ORQ_HOME`). Tests start their own Postgres with
 testcontainers, so they need Docker. Task files are in `.orqestrai/tasks/<id>/` in the worktree.
 
@@ -76,7 +81,7 @@ testcontainers, so they need Docker. Task files are in `.orqestrai/tasks/<id>/` 
 ```
 src/                     orq: TypeScript, Effect 4, Bun. Mechanics only. src/main.ts starts it
 bin/orq                  runs src/main.ts from a checkout; releases ship a compiled binary
-test/                    CLI, server, MCP, guard and plugin tests (bun run test)
+test/                    CLI, server, guard and plugin tests (bun run test)
 templates/               task files; `orq file <id> <NAME>` writes one (built into orq)
 plugin/                  the Claude Code plugin `orq`:
   skills/workflow/       task (the orchestrator), triage, plan, impl, verify (steps), grill
@@ -86,7 +91,7 @@ plugin/                  the Claude Code plugin `orq`:
   skills/principles/     short principles that steps load; test-behavior has GUIDELINES.md
   agents/                researcher (neutral code research), implementer (one task, test
                          first), verifier (drives the app, never reads code), reviewer
-  hooks/, .mcp.json      the guard hook (`orq guard`) and the MCP server (`orq mcp`)
+  hooks/                 the guard hook (`orq guard`)
 src/guard/               `orq guard`: guards G1–G4 for task sessions (PreToolUse hook)
 ```
 

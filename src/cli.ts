@@ -3,28 +3,27 @@
 
 import { existsSync, mkdirSync, writeFileSync } from "node:fs"
 import { dirname, join } from "node:path"
-import { BunRuntime, BunServices, BunStdio } from "@effect/platform-bun"
-import { Console, Effect, Layer, Option } from "effect"
-import { Argument, CliError, Command, Flag } from "effect/cli"
+import { BunRuntime, BunServices } from "@effect/platform-bun"
+import { Console, Effect, Layer } from "effect"
+import { Argument, CliError, Command } from "effect/cli"
 import { clean } from "./clean.ts"
 import { OrqConfig } from "./config.ts"
 import { Db } from "./db.ts"
 import { LINK_ROLES, OrqError, STATUSES, STEPS, slugify, stamp, TEMPLATES } from "./domain.ts"
 import { addWorktree, baseBranch, requireRef, topLevel } from "./git.ts"
 import { install } from "./init.ts"
-import { mcpStdio } from "./mcp.ts"
 import { syncMerged } from "./pr.ts"
-import { type Listen, serveApi } from "./server.ts"
+import { serve } from "./server.ts"
 import { slot } from "./slot-cli.ts"
-import { Direct, withState } from "./state.ts"
+import { withState } from "./state.ts"
 import { templates } from "./templates.ts"
 import { VERSION } from "./version.ts"
 import { openTab } from "./zellij.ts"
 
-/** The plugin's guard hook and MCP server start `orq` by name. Without it on PATH they do not run. */
+/** The plugin's guard hook and skills start `orq` by name. Without it on PATH they do not run. */
 const warnIfNotOnPath = Effect.gen(function* () {
   if (Bun.which("orq")) return
-  yield* Console.error("orq: warning: orq is not on PATH, so the plugin's guard hook and MCP tools cannot start it (README, Install)")
+  yield* Console.error("orq: warning: orq is not on PATH, so the plugin's guard hook and skills cannot start it (README, Install)")
 })
 
 const init = Command.make("init", {}, () =>
@@ -32,7 +31,7 @@ const init = Command.make("init", {}, () =>
     const project = yield* topLevel()
     const wrote = yield* install(project, yield* baseBranch(project))
     yield* Console.log(wrote ? ".orqestrai/config.toml: written; set the quality gate's commands in it" : ".orqestrai/config.toml: kept")
-    yield* Console.log("skills, agents, the guard hook and MCP tools: claude plugin install orq@orqestrai (once per machine)")
+    yield* Console.log("skills, agents and the guard hook: claude plugin install orq@orqestrai (once per machine)")
     yield* warnIfNotOnPath
   }),
 ).pipe(Command.withDescription("set up this project: .orqestrai/config.toml"))
@@ -137,35 +136,9 @@ const file = Command.make("file", { id, name: Argument.Literals("name", TEMPLATE
   }),
 ).pipe(Command.withDescription("new task file from templates/<name>.md"))
 
-const serve = Command.make(
-  "serve",
-  {
-    socket: Flag.String("socket").pipe(Flag.optional, Flag.withDescription("listen on this Unix socket")),
-    port: Flag.Int("port").pipe(Flag.optional, Flag.withDescription("listen on this TCP port")),
-    host: Flag.String("host").pipe(
-      Flag.withDefault("127.0.0.1"),
-      Flag.withDescription("with --port: the address to listen on, such as the server's private (Tailscale) address"),
-    ),
-  },
-  ({ socket, port, host }) => {
-    const listen: Option.Option<Listen> = Option.isSome(socket)
-      ? Option.some({ unix: socket.value })
-      : Option.map(port, (port) => ({ host, port }))
-    return Option.isSome(listen)
-      ? Layer.launch(serveApi(listen.value)).pipe(Effect.mapError((e) => new OrqError({ message: `orq serve: ${e.message}` })))
-      : Effect.fail(new OrqError({ message: "orq serve needs --socket <path> or --port <n>" }))
-  },
-).pipe(Command.withDescription("serve orq's state over HTTP; the one process that needs the database password"), Command.provide(Direct))
-
-const mcp = Command.make("mcp", {}, () =>
-  Layer.launch(mcpStdio.pipe(Layer.provide(BunStdio.layer))).pipe(
-    Effect.mapError((e) => (e instanceof OrqError ? e : new OrqError({ message: `orq mcp: ${e.message}` }))),
-  ),
-).pipe(Command.withDescription("orq's state as MCP tools over stdio, for Claude Code to start"), withState)
-
 const orq = Command.make("orq").pipe(
   Command.withDescription("orqestrai mechanics. The workflow is in the skills."),
-  Command.withSubcommands([init, newTask, open, state, show, link, ls, file, cleanTask, slot, serve, mcp]),
+  Command.withSubcommands([init, newTask, open, state, show, link, ls, file, cleanTask, slot, serve]),
 )
 
 const AppLayer = OrqConfig.layer.pipe(Layer.provideMerge(BunServices.layer))

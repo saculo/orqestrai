@@ -80,6 +80,15 @@ describe("orq with ORQ_SERVER and no database login", () => {
     expect(existsSync(marker("unserved-4100"))).toBe(true)
   })
 
+  test("the slots are the client's machine's, not the server's", () => {
+    orq(["new", "one"])
+    orq(["new", "two"])
+    orq(["slot", "take", "T-0001"], { ORQ_HOST: "vps" })
+    expect(orq(["slot", "take", "T-0002"], { ORQ_HOST: "laptop" }).out).toContain("ORQ_SLOT=1")
+    expect(orq(["slot", "ls"], { ORQ_HOST: "laptop" }).out).not.toContain("T-0001")
+    expect(orq(["slot", "ls"], { ORQ_HOST: "vps" }).out).toContain("T-0001")
+  })
+
   test("an expired slot's app is stopped by the client that takes the slot next", async () => {
     orq(["new", "one"])
     orq(["new", "two"])

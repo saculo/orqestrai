@@ -1,5 +1,5 @@
-// Db and Slots through `orq serve` (src/server.ts) instead of the database: the CLI and `orq mcp`
-// use these when ORQ_SERVER is set, so they need no database password. ORQ_SERVER is the server's
+// Db and Slots through `orq serve` (src/server.ts) instead of the database: the CLI uses these
+// when ORQ_SERVER is set, so they need no database password. ORQ_SERVER is the server's
 // Unix socket path (/run/orq/orq.sock) or its URL (http://127.0.0.1:7420).
 import { Config, Context, Effect, Layer } from "effect"
 import { FetchHttpClient, HttpClient, HttpClientRequest } from "effect/http"
@@ -54,10 +54,10 @@ const slots = Layer.effect(
   Effect.gen(function* () {
     const { slots } = yield* Client
     return Slots.of({
-      take: (id, worktree) => call(slots.take({ params: { id }, payload: { worktree } })),
+      take: (host, id, worktree) => call(slots.take({ params: { id }, payload: { host, worktree } })),
       keep: (id, stop, port) => call(slots.keep({ params: { id }, payload: { stop, port } })),
       free: (id) => call(slots.free({ params: { id } })).pipe(Effect.map((s) => s ?? undefined)),
-      list: call(slots.list()),
+      list: (host) => call(slots.list({ query: { host } })),
     })
   }),
 )

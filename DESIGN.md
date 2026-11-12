@@ -396,14 +396,13 @@ steps, statuses and task fields. Tests drive the CLI (`test/`).
 
 Install: two pieces from one repository, one version.
 
-- **The `orq` program**: one executable (`bun build --compile`, Bun inside) with the CLI,
-  `orq mcp` and `orq serve`. A tag `v<version>` builds it, runs the whole test suite against
+- **The `orq` program**: one executable (`bun build --compile`, Bun inside) with the CLI
+  and `orq serve`. A tag `v<version>` builds it, runs the whole test suite against
   the file, and attaches it to a GitHub release (`.github/workflows/release.yml`). The same
   file runs everywhere; only the command differs. One program, so client and server always
   agree on the API (`src/api.ts`).
 - **The Claude Code plugin `orq`** (`plugin/`; the repository is its marketplace,
-  `.claude-plugin/marketplace.json`): the skills, the agents, the guard hook and the MCP
-  server (`orq mcp`). Installed once per machine, `claude plugin install orq@orqestrai`.
+  `.claude-plugin/marketplace.json`): the skills, the agents and the guard hook. Installed once per machine, `claude plugin install orq@orqestrai`.
   Skills and agents are named `orq:<name>` (`/orq:task`); the folder name is the name.
   `test/plugin.test.ts` checks that every `orq:<name>` mentioned exists.
 
@@ -426,7 +425,6 @@ goes through Effect's `SqlClient` (`@effect/sql-pg`).
 | `orq clean <id>`           | removes a merged or dropped task's worktree and branch      |
 | `orq slot take\|keep\|free\|ls` | verify slots (§5)                                    |
 | `orq serve --socket <path>` | the state over HTTP (below); the one process with the database password |
-| `orq mcp`                  | the state as MCP tools over stdio, for Claude Code to start  |
 
 **Server and clients.** `orq serve` is the only process that connects to the database. It
 offers the `Db` and `Slots` services as an HTTP API (`src/api.ts`, Effect's `HttpApi`), on
@@ -435,12 +433,13 @@ socket path, or a URL), every other command uses the API's generated client
 (`src/remote.ts`) instead of the database, and needs no `PG*` variable. Without it, orq
 connects directly, as on a laptop. The server only touches the database and never runs a
 command: a slot's stop and serve commands go back to the client, which runs them as its
-own user. Where it runs is up to the hosting (§4 Topology).
+own user. The client also sends its `ORQ_HOST` with a slot take and list, so the slots are
+the sessions' machine's, not the server's; the number of slots, their ports and how long they
+last (`ORQ_SLOTS`, `ORQ_PORT_START`, `ORQ_SLOT_TTL`) are set on the server. Where it runs is
+up to the hosting (§4 Topology).
 
-`orq mcp` offers `orq_show`, `orq_state`, `orq_link`, `orq_slot_take`, `orq_slot_keep`
-and `orq_slot_free` (`src/mcp.ts`, Effect's `McpServer`). Claude Code starts it over
-stdio; it uses the same `Db` and `Slots` as the CLI, so with `ORQ_SERVER` it goes through
-the server too.
+Skills and agents reach orq only through the CLI, over Bash. There is no MCP server: one way
+in keeps the slot commands, the guard and the tests the same for every caller.
 
 `orq ask` and `orq send` come with the Slack bridge (after slice 4).
 
@@ -498,7 +497,7 @@ plain TS (no `bun:*` imports), because pi loads extensions under Node.
   and `slots(host, n, task_id, …)`. Step and status are checked by the database too.
   - Mine is a shared hosted Postgres 18, so it takes none of the servers' RAM or disk.
   - orq reads libpq's `PG*` variables. Only `orq serve` gets them (§6); sessions
-    reach the state through it (the CLI and the MCP tools). TLS: `PGSSLMODE=verify-ca` with `PGSSLROOTCERT`, the instance's self-signed
+    reach the state through it (the CLI). TLS: `PGSSLMODE=verify-ca` with `PGSSLROOTCERT`, the instance's self-signed
     certificate pinned; `require` (the default) only encrypts.
   - Nothing connects until a command needs state, so `orq guard` and `orq init` work
     without a database.

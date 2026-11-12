@@ -35,7 +35,7 @@ export class TasksApi extends HttpApiGroup.make("tasks").add(
 export class SlotsApi extends HttpApiGroup.make("slots").add(
   HttpApiEndpoint.post("take", "/slots/:id/take", {
     params: id,
-    payload: Schema.Struct({ worktree: Schema.String }),
+    payload: Schema.Struct({ host: Schema.String, worktree: Schema.String }),
     success: Taken,
     error: OrqError,
   }),
@@ -46,7 +46,7 @@ export class SlotsApi extends HttpApiGroup.make("slots").add(
     error: OrqError,
   }),
   HttpApiEndpoint.delete("free", "/slots/:id", { params: id, success: Schema.NullOr(Slot), error: OrqError }),
-  HttpApiEndpoint.get("list", "/slots", { success: Schema.Array(Slot), error: OrqError }),
+  HttpApiEndpoint.get("list", "/slots", { query: { host: Schema.String }, success: Schema.Array(Slot), error: OrqError }),
 ) {}
 
 export class OrqApi extends HttpApi.make("orq").add(TasksApi).add(SlotsApi) {}
