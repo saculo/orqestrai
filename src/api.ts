@@ -30,6 +30,11 @@ export class TasksApi extends HttpApiGroup.make("tasks").add(
     error: OrqError,
   }),
   HttpApiEndpoint.get("links", "/tasks/:id/links", { params: id, success: Schema.Array(TaskLink), error: OrqError }),
+  HttpApiEndpoint.get("findLink", "/links", {
+    query: { kind: Schema.String, ref: Schema.String },
+    success: Schema.NullOr(Schema.String),
+    error: OrqError,
+  }),
 ) {}
 
 export class SlotsApi extends HttpApiGroup.make("slots").add(

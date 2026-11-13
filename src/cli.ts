@@ -1,24 +1,26 @@
 // orq: the mechanics of orqestrai. Task ids, state, worktrees, zellij tabs, task files, PR state.
 // The workflow lives in skills/. This program does not decide. It only does.
 
-import { existsSync, mkdirSync, writeFileSync } from "node:fs"
+import { existsSync, writeFileSync } from "node:fs"
 import { dirname, join } from "node:path"
 import { BunRuntime, BunServices } from "@effect/platform-bun"
 import { Console, Effect, Layer } from "effect"
 import { Argument, CliError, Command } from "effect/cli"
+import { bridge } from "./bridge.ts"
 import { clean } from "./clean.ts"
 import { OrqConfig } from "./config.ts"
 import { Db } from "./db.ts"
-import { LINK_ROLES, OrqError, STATUSES, STEPS, slugify, stamp, TEMPLATES } from "./domain.ts"
-import { addWorktree, baseBranch, requireRef, topLevel } from "./git.ts"
+import { LINK_ROLES, OrqError, STATUSES, STEPS, stamp, TEMPLATES } from "./domain.ts"
+import { baseBranch, topLevel } from "./git.ts"
 import { install } from "./init.ts"
 import { syncMerged } from "./pr.ts"
 import { serve } from "./server.ts"
 import { slot } from "./slot-cli.ts"
 import { withState } from "./state.ts"
+import { startTask } from "./task.ts"
 import { templates } from "./templates.ts"
 import { VERSION } from "./version.ts"
-import { openTab } from "./zellij.ts"
+import { openTab, sendToTask } from "./zellij.ts"
 
 /** The plugin's guard hook and skills start `orq` by name. Without it on PATH they do not run. */
 const warnIfNotOnPath = Effect.gen(function* () {
@@ -40,22 +42,9 @@ const id = Argument.String("id").pipe(Argument.withDescription("task id, e.g. T-
 
 const newTask = Command.make("new", { request: Argument.String("request") }, ({ request }) =>
   Effect.gen(function* () {
-    const { home } = yield* OrqConfig
-    const db = yield* Db
-    const root = yield* topLevel()
-    const base = yield* baseBranch(root)
-    yield* requireRef(root, base)
-
-    const worktrees = join(home, "worktrees", root.split("/").at(-1) ?? "repo")
-    const { id: tid, branch, worktree } = yield* db.create({ repo: root, title: request, slug: slugify(request), worktrees, base })
-
-    // The id is held; set up the worktree, and give the id back if that fails.
-    yield* addWorktree(root, branch, worktree, base).pipe(Effect.tapError(() => db.remove(tid)))
-    const dir = join(worktree, ".orqestrai", "tasks", tid)
-    mkdirSync(dir, { recursive: true })
-    writeFileSync(join(dir, "REQUEST.md"), `---\nid: ${tid}\ncreated: ${new Date().toISOString()}\n---\n\n${request}\n`)
-    yield* Console.log(`${tid}  ${branch}  ${worktree}`)
-    yield* Console.log(yield* openTab(tid, worktree, base))
+    const { task, tab } = yield* startTask(yield* topLevel(), request)
+    yield* Console.log(`${task.id}  ${task.branch}  ${task.worktree}`)
+    yield* Console.log(tab)
     yield* warnIfNotOnPath
   }),
 ).pipe(Command.withDescription("new task: id, branch, worktree, zellij tab"), withState)
@@ -110,6 +99,29 @@ const link = Command.make(
     }),
 ).pipe(Command.withDescription("link the task to an outside reference (origin | related)"), withState)
 
+const ask = Command.make("ask", { id, text: Argument.String("text") }, ({ id, text }) =>
+  Effect.gen(function* () {
+    const db = yield* Db
+    const task = yield* db.get(id)
+    yield* db.setState(id, task.step, "WAITING FOR ME", text.split("\n")[0] ?? "")
+    const { bridge } = yield* OrqConfig
+    const sent = yield* Effect.tryPromise(() =>
+      fetch("http://bridge/ask", { method: "POST", body: JSON.stringify({ id, text }), unix: bridge } as RequestInit),
+    ).pipe(
+      Effect.flatMap((r) => Effect.promise(() => r.text()).pipe(Effect.map((body) => (r.ok ? "posted in the task's Slack thread" : body)))),
+      Effect.orElseSucceed(() => "no Slack bridge; the question is only here"),
+    )
+    yield* Console.log(`${id}: WAITING FOR ME; ${sent}`)
+  }),
+).pipe(Command.withDescription("wait for the user: status WAITING FOR ME, the question in the task's Slack thread"), withState)
+
+const send = Command.make("send", { id, text: Argument.String("text") }, ({ id, text }) =>
+  Effect.gen(function* () {
+    const task = yield* (yield* Db).get(id)
+    yield* Console.log(yield* sendToTask(id, task.worktree, yield* baseBranch(task.repo), text))
+  }),
+).pipe(Command.withDescription("type a message into the task's session (opens it again if it is closed)"), withState)
+
 const ls = Command.make("ls", {}, () =>
   Effect.gen(function* () {
     const db = yield* Db
@@ -138,7 +150,7 @@ const file = Command.make("file", { id, name: Argument.Literals("name", TEMPLATE
 
 const orq = Command.make("orq").pipe(
   Command.withDescription("orqestrai mechanics. The workflow is in the skills."),
-  Command.withSubcommands([init, newTask, open, state, show, link, ls, file, cleanTask, slot, serve]),
+  Command.withSubcommands([init, newTask, open, state, show, link, ask, send, ls, file, cleanTask, slot, serve, bridge]),
 )
 
 const AppLayer = OrqConfig.layer.pipe(Layer.provideMerge(BunServices.layer))
