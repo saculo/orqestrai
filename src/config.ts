@@ -8,6 +8,8 @@ const settings = Config.all({
   home: Config.String("ORQ_HOME").pipe(Config.withDefault(join(homedir(), ".orqestrai"))),
   /** zellij session used when orq runs outside zellij */
   session: Config.String("ORQ_ZELLIJ_SESSION").pipe(Config.withDefault("orq")),
+  /** command the task session runs inside, e.g. "fence --" for the Fence sandbox; empty: none */
+  sandbox: Config.String("ORQ_SANDBOX").pipe(Config.withDefault("")),
   /** model for the interactive task session */
   model: Config.String("ORQ_SESSION_MODEL").pipe(Config.withDefault("opus")),
   /** this machine's name for its verify slots */
