@@ -14,9 +14,10 @@ const sh = (cmd: string[], cwd: string) => {
   return p.stdout.toString().trim()
 }
 
-const orq = (args: string[], cwd = repo) => {
-  const env = { ...process.env, ORQ_HOME: home, ...pg, ORQ_ZELLIJ_SESSION: "orq-test-none" } as Record<string, string | undefined>
+const orq = (args: string[], cwd = repo, extra: Record<string, string> = {}) => {
+  const env = { ...process.env, ORQ_HOME: home, ...pg, ORQ_ZELLIJ_SESSION: "orq-test-none", ...extra } as Record<string, string | undefined>
   delete env.ZELLIJ
+  if (!("ORQ_SANDBOX" in extra)) delete env.ORQ_SANDBOX
   const p = Bun.spawnSync([...ORQ, ...args], { cwd, env, stdout: "pipe", stderr: "pipe" })
   return { code: p.exitCode, out: p.stdout.toString(), err: p.stderr.toString() }
 }
@@ -57,6 +58,12 @@ describe("orq new", () => {
     expect(r.out).toContain("ORQ_TASK=T-0001")
     expect(r.out).toContain("ORQ_BASE=main")
     expect(r.out).toContain("'/orq:task T-0001'")
+    expect(r.out).toMatch(/&& env ORQ_TASK=T-0001/)
+  })
+
+  test("with ORQ_SANDBOX, the session starts inside the sandbox", () => {
+    const r = orq(["new", "x"], repo, { ORQ_SANDBOX: "fence --" })
+    expect(r.out).toMatch(/&& fence -- env ORQ_TASK=T-0001 .* claude /)
   })
 
   test("gives two tasks started at the same moment different ids", async () => {

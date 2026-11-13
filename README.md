@@ -66,6 +66,8 @@ guard hooks are active only when it is set.
 
 Inside zellij, `orq new` opens a new tab. Outside, it uses the zellij session
 `$ORQ_ZELLIJ_SESSION` (default `orq`) if it exists, or prints the command to run.
+`ORQ_SANDBOX` is a command the session starts inside, e.g. `fence --` for the
+[Fence](https://github.com/fencesandbox/fence) sandbox: `fence -- env ORQ_TASK=… claude …`.
 
 State is in Postgres: orq reads libpq's `PGHOST`, `PGPORT`, `PGDATABASE`, `PGUSER`,
 `PGPASSWORD` and `PGSSLMODE` (`require` by default; `verify-ca` with `PGSSLROOTCERT`).

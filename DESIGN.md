@@ -672,7 +672,7 @@ Open:
 
    | Job step | Why |
    |----------|-----|
-   | Bun 1.3.10, `bun install --frozen-lockfile` | same toolchain as local; lockfile drift fails |
+   | Bun 1.4.4, `bun install --frozen-lockfile` | same toolchain as local; lockfile drift fails |
    | `bun run check` (tsc) | types |
    | `bunx biome ci .` | lint and format |
    | `bun test` (CLI, guard, init) | behavior |

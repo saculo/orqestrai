@@ -3,8 +3,10 @@ import { Effect } from "effect"
 import { OrqConfig } from "./config.ts"
 import { exec, run } from "./proc.ts"
 
-/** The command that starts a task session. ORQ_* switch on the guard hook (orq guard). */
-export const sessionCommand = (id: string, worktree: string, base: string, model: string) => [
+/** The command that starts a task session, inside the sandbox command if one is set (ORQ_SANDBOX).
+ * ORQ_* switch on the guard hook (orq guard). */
+export const sessionCommand = (id: string, worktree: string, base: string, model: string, sandbox: string) => [
+  ...sandbox.split(/\s+/).filter(Boolean),
   "env",
   `ORQ_TASK=${id}`,
   `ORQ_WORKTREE=${worktree}`,
@@ -20,8 +22,8 @@ const shellQuote = (s: string) => (/^[\w@%+=:,./-]+$/.test(s) ? s : `'${s.replac
 /** Open a tab inside zellij, or in the named session, or return the command to run by hand. */
 export const openTab = (id: string, worktree: string, base: string) =>
   Effect.gen(function* () {
-    const { session, model } = yield* OrqConfig
-    const cmd = sessionCommand(id, worktree, base, model)
+    const { session, model, sandbox } = yield* OrqConfig
+    const cmd = sessionCommand(id, worktree, base, model, sandbox)
     const tab = ["action", "new-tab", "--name", `orq-${id}`, "--cwd", worktree, "--", ...cmd]
 
     if (process.env.ZELLIJ) {
