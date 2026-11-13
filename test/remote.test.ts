@@ -63,6 +63,15 @@ describe("orq with ORQ_SERVER and no database login", () => {
     expect(orq(["ls"]).out).toContain("T-0001  impl    IN PROGRESS")
   })
 
+  test("the server finds the task linked to an outside reference (the bridge's Slack threads)", async () => {
+    expect(orq(["new", "Add search"]).code).toBe(0)
+    expect(orq(["link", "T-0001", "slack-thread", "C1/100.1", "origin"]).code).toBe(0)
+    const find = (ref: string) =>
+      fetch(`http://orq/links?kind=slack-thread&ref=${encodeURIComponent(ref)}`, { unix: socket } as RequestInit).then((r) => r.json())
+    expect(await find("C1/100.1")).toBe("T-0001")
+    expect(await find("C1/999.9")).toBeNull()
+  })
+
   test("orq's own errors come back as they are", () => {
     const r = orq(["show", "T-0099"])
     expect(r.code).toBe(1)

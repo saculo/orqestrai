@@ -420,7 +420,8 @@ goes through Effect's `SqlClient` (`@effect/sql-pg`).
 | `orq link <id> <kind> <ref> [origin\|related]` | links the task to an outside reference |
 | `orq file <id> <NAME>`     | new task file from `templates/`                             |
 | `orq ask <id> "<text>"`    | status → WAITING FOR ME, posts to the task's Slack thread   |
-| `orq send <id> "<text>"`   | types text into the task's zellij pane                      |
+| `orq send <id> "<text>"`   | types text into the task's session (reopens it if closed)   |
+| `orq bridge`               | the Slack bridge (below)                                    |
 | `orq ls`                   | lists tasks and status; reads merged PRs from `gh`          |
 | `orq clean <id>`           | removes a merged or dropped task's worktree and branch      |
 | `orq slot take\|keep\|free\|ls` | verify slots (§5)                                    |
@@ -441,21 +442,31 @@ up to the hosting (§4 Topology).
 Skills and agents reach orq only through the CLI, over Bash. There is no MCP server: one way
 in keeps the slot commands, the guard and the tests the same for every caller.
 
-`orq ask` and `orq send` come with the Slack bridge (after slice 4).
 
 ### Slack bridge
 
-One long-running process, `orq bridge` (Socket Mode, no open port, no LLM), on the
-sessions' machine, outside the sandbox. It holds the Slack token; the sandbox cannot read
-it (Fence hides the file, and sessions cannot see other processes).
+One long-running process, `orq bridge` (`src/bridge.ts`; Socket Mode, so no open port; no
+SDK, no LLM), on the sessions' machine, outside the sandbox. It holds the Slack tokens, in
+a file the sandbox hides (`ORQ_SLACK_TOKENS`), never in its environment, so the zellij
+session it starts and the task sessions in it do not inherit them. Sessions cannot see
+other processes. Settings: `ORQ_SLACK_USER` (it listens to you only) and
+`ORQ_SLACK_CHANNELS` (each project's channel and checkout, `C0123=/path`).
 
-- `@bot <request>` in a project's channel → `orq new`: a zellij tab with Claude Code, the
-  request typed in. The task gets one Slack thread.
-- `orq ask <id> "<text>"` (from a session) → the bridge posts it in the thread, status
-  WAITING FOR ME. Claude gets an action, never the token.
-- Your reply in the thread → the bridge types it into the task's tab (`orq send`). If the
-  tab is closed, it reopens the session (`claude --resume`) first.
-- `/orq ls`, `/orq show <id>` answer in Slack. Artifacts are read in the dashboard.
+- `@bot <request>` at the top of a project's channel → a new task, as `orq new` in that
+  checkout (`src/task.ts`). The thread under your message is the task's (link
+  `slack-thread`, origin); the bridge answers there with the id and the branch.
+- `orq ask <id> "<text>"` (from a session) → status WAITING FOR ME, and the text goes to
+  the bridge over a local socket (`ORQ_BRIDGE`, mode 0600), which posts it in the thread,
+  mentioning you. A task started in a terminal gets its thread at its first question.
+  Claude gets an action, never the token. Without a bridge, the question stays in the
+  terminal.
+- Your reply in the thread → typed into the task's session as a paste, then Enter
+  (`orq send`). If its tab is closed, the session opens again with
+  `claude --continue <reply>`: the worktree's last conversation, so nothing is lost.
+- zellij 0.45 gives a tab no pane when nobody is attached, so `orq new` then adds the
+  pane to the tab by its id (`src/zellij.ts`). The bridge starts the session in the
+  background if it is not running.
+- Later: `/orq ls`, `/orq show <id>` in Slack. Artifacts are read in the dashboard.
 - **Git and GitHub:** a fine-grained token per repo, used by `gh` and `git push` outside the
   sandbox; Fence hides `~/.config/gh` from sessions.
 - orq pre-trusts each worktree, so the folder trust dialog never blocks.
