@@ -59,6 +59,7 @@ orq new "what you want"     # id, branch, worktree, zellij tab running /orq:task
 orq ls                      # all tasks
 orq show T-0001             # one task, its links and its last events
 orq open T-0001             # open the task's tab again, for example after a restart
+orq send T-0001 "go on"     # type a message into the task's session
 ```
 
 Always start a task session with `orq new` or `orq open`. They set `ORQ_TASK`, and the
@@ -68,6 +69,28 @@ Inside zellij, `orq new` opens a new tab. Outside, it uses the zellij session
 `$ORQ_ZELLIJ_SESSION` (default `orq`) if it exists, or prints the command to run.
 `ORQ_SANDBOX` is a command the session starts inside, e.g. `fence --` for the
 [Fence](https://github.com/fencesandbox/fence) sandbox: `fence -- env ORQ_TASK=… claude …`.
+
+**Slack.** `orq bridge` connects a Slack app (Socket Mode) to the sessions: `@orq <request>`
+in a project's channel starts a task with its own thread, a session's questions
+(`orq ask`) are posted there, and your replies are typed into the session. It reads
+`SLACK_APP_TOKEN=xapp-…` and `SLACK_BOT_TOKEN=xoxb-…` lines from `ORQ_SLACK_TOKENS`
+(default `~/.config/orq-bridge/slack.env`; hide it from the sandbox), listens to
+`ORQ_SLACK_USER` only, and maps channels to checkouts with
+`ORQ_SLACK_CHANNELS=C0123=/path/to/repo,…`. The app, from a manifest (api.slack.com/apps,
+Create New App, From a manifest):
+
+```yaml
+display_information: { name: orq }
+features: { bot_user: { display_name: orq, always_online: true } }
+oauth_config:
+  scopes: { bot: [app_mentions:read, channels:history, groups:history, chat:write] }
+settings:
+  event_subscriptions: { bot_events: [app_mention, message.channels, message.groups] }
+  socket_mode_enabled: true
+```
+
+Then install it to the workspace (the bot token), make an app-level token with
+`connections:write` (Basic Information), and `/invite @orq` in each project's channel.
 
 State is in Postgres: orq reads libpq's `PGHOST`, `PGPORT`, `PGDATABASE`, `PGUSER`,
 `PGPASSWORD` and `PGSSLMODE` (`require` by default; `verify-ca` with `PGSSLROOTCERT`).

@@ -40,8 +40,7 @@ orq slot take <id> --wait 900
 ```
 
 You are woken when it ends. It prints `ORQ_SLOT`, `ORQ_PORT_BASE` and `ORQ_PROJECT`.
-If it fails after 15 minutes: `orq state <id> verify "WAITING FOR ME" "verify slot held
-by <task>"`, tell the user, and stop. When the user says to retry, take it again.
+If it fails after 15 minutes: `orq ask <id> "verify slot held by <task>"`, and stop. When the user says to retry, take it again.
 
 ## 3. Verifier and reviewer, at once
 
@@ -109,18 +108,18 @@ round before.
 ## 6. Decide
 
 - **A missing skill** (any check, whatever else happened): the round cannot pass. Finish
-  the round as below, but instead of passing, run `orq state <id> verify "WAITING FOR ME"
-  "no verify-<surface> skill for V3"` and ask the user: write the skill (then run verify
-  again), or change the check to `manual` in `SPEC.md` (then it is theirs at the PR).
+  the round as below, but instead of passing, run `orq ask <id> "no verify-<surface> skill
+  for V3"`, asking on the next lines: write the skill (then run verify again), or change
+  the check to `manual` in `SPEC.md` (then it is theirs at the PR).
 - **No failing items:** `status: passed`. Continue with the next step in `orq:task`.
 - **Failing items, round < 3, and no root cause repeated from the round before:**
   `status: failed`, outcome "back to impl: <items>". Run
   `orq state <id> impl "IN PROGRESS" "verify round <n>: <count> items"` and continue
   with `orq:impl` round 2+.
 - **Round 3 failed, or a root cause repeated:** `status: escalated`. Run
-  `orq state <id> verify "WAITING FOR ME" "<one line>"` and tell the user, in a few
-  lines: what passed, what still fails, the repeated cause, and your recommendation
-  (change the spec, accept a risk, or one more round with a different approach).
+  `orq ask <id> "<one line>"`, and on the next lines, in a few lines: what passed, what
+  still fails, the repeated cause, and your recommendation (change the spec, accept a
+  risk, or one more round with a different approach).
 
 Commit `VERIFY.md` and the evidence: `docs(<id>): verify round <n>`.
 

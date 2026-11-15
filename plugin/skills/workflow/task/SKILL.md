@@ -39,7 +39,10 @@ After ship, the task waits for the merge. `orq show` reads the PR from GitHub an
 ## Records
 
 - When a step starts: `orq state <id> <step> "IN PROGRESS"`.
-- When you wait for the user: `orq state <id> <step> "WAITING FOR ME" "<one line why>"`.
+- When you wait for the user: `orq ask <id> "<your message>"`, then end your turn. It sets
+  `WAITING FOR ME` (its first line is the note) and posts the message in the task's Slack
+  thread, where the user may answer. Pass the whole message, as you would write it here:
+  a first line that says what you need, then the questions and your recommendations.
 - When the user answers: `orq state <id> <step> "IN PROGRESS"`.
 - When a step cannot continue (a tool fails, an input is missing):
   `orq state <id> <step> BLOCKED "<reason>"`, tell the user, stop.
@@ -64,7 +67,8 @@ You never set `status: approved` by your own decision.
 - Ask in plain text, not with a question tool, so the same question works in a terminal
   and in a Slack thread. Number the questions. Give your recommended answer and the reason
   for each. Triage and plan ask in rounds, as `orq:grill` says.
-- After you ask, set `WAITING FOR ME` and end your turn.
+- Ask with `orq ask` (Records), and end your turn. The user's answer comes in this
+  conversation, typed in by the Slack bridge or by them.
 - Report outcomes and decisions. Do not report progress or internal mechanics.
 
 ## Never

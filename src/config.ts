@@ -6,6 +6,8 @@ import { Config, Context, Layer } from "effect"
 const settings = Config.all({
   /** Worktrees and the archive: $ORQ_HOME. State is in Postgres (src/pg.ts). */
   home: Config.String("ORQ_HOME").pipe(Config.withDefault(join(homedir(), ".orqestrai"))),
+  /** the Slack bridge's socket, where `orq ask` sends a question (orq bridge) */
+  bridge: Config.String("ORQ_BRIDGE").pipe(Config.withDefault(join(homedir(), ".orqestrai", "bridge.sock"))),
   /** zellij session used when orq runs outside zellij */
   session: Config.String("ORQ_ZELLIJ_SESSION").pipe(Config.withDefault("orq")),
   /** command the task session runs inside, e.g. "fence --" for the Fence sandbox; empty: none */

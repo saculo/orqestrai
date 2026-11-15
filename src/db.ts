@@ -21,6 +21,8 @@ export class Db extends Context.Service<
     readonly events: (id: string, limit: number) => Effect.Effect<ReadonlyArray<TaskEvent>, OrqError>
     readonly link: (id: string, kind: string, ref: string, role: LinkRole) => Effect.Effect<void, OrqError>
     readonly links: (id: string) => Effect.Effect<ReadonlyArray<TaskLink>, OrqError>
+    /** The task linked to this outside reference, if any (the newest, if several). */
+    readonly findLink: (kind: string, ref: string) => Effect.Effect<string | null, OrqError>
   }
 >()("orq/Db") {
   static readonly layer = Layer.effect(
@@ -87,6 +89,11 @@ export class Db extends Context.Service<
           sql`SELECT kind, ref, role FROM task_links WHERE task_id = ${id} ORDER BY seq`.pipe(
             Effect.flatMap(rows(TaskLink)),
             asOrqError("links"),
+          ),
+        findLink: (kind, ref) =>
+          sql<{ task_id: string }>`SELECT task_id FROM task_links WHERE kind = ${kind} AND ref = ${ref} ORDER BY seq DESC LIMIT 1`.pipe(
+            Effect.map(([row]) => row?.task_id ?? null),
+            asOrqError("find link"),
           ),
       }
     }),

@@ -27,6 +27,7 @@ const tasks = HttpApiBuilder.group(
       events: ({ params, query }) => db.events(params.id, query.limit),
       link: ({ params, payload }) => db.link(params.id, payload.kind, payload.ref, payload.role),
       links: ({ params }) => db.links(params.id),
+      findLink: ({ query }) => db.findLink(query.kind, query.ref),
     })
   }),
 )

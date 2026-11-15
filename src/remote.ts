@@ -45,6 +45,7 @@ const db = Layer.effect(
       events: (id, limit) => call(tasks.events({ params: { id }, query: { limit } })),
       link: (id, kind, ref, role) => call(tasks.link({ params: { id }, payload: { kind, ref, role } })),
       links: (id) => call(tasks.links({ params: { id } })),
+      findLink: (kind, ref) => call(tasks.findLink({ query: { kind, ref } })),
     })
   }),
 )
