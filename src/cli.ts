@@ -106,6 +106,8 @@ const ask = Command.make("ask", { id, text: Argument.String("text") }, ({ id, te
     yield* db.setState(id, task.step, "WAITING FOR ME", text.split("\n")[0] ?? "")
     const { bridge } = yield* OrqConfig
     const sent = yield* Effect.tryPromise(() =>
+      // a local Unix socket (mode 0600), not the network; the host name is a placeholder
+      // nosemgrep: rules.typescript.react.security.react-insecure-request
       fetch("http://bridge/ask", { method: "POST", body: JSON.stringify({ id, text }), unix: bridge } as RequestInit),
     ).pipe(
       Effect.flatMap((r) => Effect.promise(() => r.text()).pipe(Effect.map((body) => (r.ok ? "posted in the task's Slack thread" : body)))),
