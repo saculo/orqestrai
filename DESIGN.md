@@ -456,8 +456,8 @@ it (Fence hides the file, and sessions cannot see other processes).
 - Your reply in the thread → the bridge types it into the task's tab (`orq send`). If the
   tab is closed, it reopens the session (`claude --resume`) first.
 - `/orq ls`, `/orq show <id>` answer in Slack. Artifacts are read in the dashboard.
-- **Git and GitHub:** a fine-grained token per repo, used by `gh` and `git push` outside the
-  sandbox; Fence hides `~/.config/gh` from sessions.
+- **Git and GitHub:** the session itself pushes its branch and opens the PR with `gh`,
+  inside the sandbox, with a fine-grained token (see Security).
 - orq pre-trusts each worktree, so the folder trust dialog never blocks.
 - Only your Slack user may talk to the bot.
 
@@ -582,15 +582,18 @@ agents get actions (orq's API), never credentials, and the database login is onl
     config read-only inside the sandbox.
   - Allowed network: GitHub, Anthropic, `orq serve`, the Docker socket (testcontainers,
     rootless Docker as its own user) and the preview URLs. Everything else is blocked.
-  - The tokens of the processes beside the sessions (the Slack bridge, `gh`) are in files
-    Fence hides; inside Fence, other processes are invisible (checked on VPS1).
+  - The Slack bridge's token is in a file Fence hides; inside Fence, other processes are
+    invisible (checked on VPS1).
 - **`orq serve`** gets the Postgres login and nothing else does. TLS to a shared instance
   pins its self-signed certificate (`PGSSLMODE=verify-ca`).
 - My hosting (orqestrai-infra): `orq serve` in k3s, non-root and read-only, its login from
   OpenBao through External Secrets, reachable only over Tailscale from the sessions'
   machine, and network policies that let it reach only the database.
-- GitHub: fine-grained token per repo. Branch protection on `main`; the token cannot
-  bypass it.
+- GitHub: the one secret a session can read, so it can do little. A fine-grained token:
+  only the project repositories, Contents and Pull requests read/write, nothing else, an
+  expiry. Branch protection on `main`; the token cannot bypass it. A leaked token can push
+  branches and open PRs in those repositories, nothing more. `gh` instead of a push action
+  behind `orq`: simpler, and the risk is small.
 - Guard hook (`orq guard`, PreToolUse, `src/guard/`). `decide()` is plain TS (no Effect,
   no `bun:*`) and decides allow / block; a shell parser splits commands, also inside
   `bash -c`, `eval` and over several lines. `src/main.ts` starts it without the Effect CLI. Tests: `test/guard.test.ts`. Active only when `ORQ_TASK` is set, which
