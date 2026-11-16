@@ -25,7 +25,7 @@ export const startTask = (root: string, request: string, playbook?: string) =>
       slug: slugify(request),
       worktrees,
       base,
-      ...(playbook ? { playbook } : {}),
+      ...(playbook ? { type: playbook } : {}),
     })
 
     // The id is held; set up the worktree, and give the id back if that fails.

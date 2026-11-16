@@ -511,9 +511,9 @@ plain TS (no `bun:*` imports), because pi loads extensions under Node.
 
 - Content: Markdown files + git.
 - Index: one **shared Postgres** database for every machine (`src/pg.ts`).
-  `tasks(id, repo, title, branch, worktree, step, status, playbook, created_at, updated_at)`,
+  `tasks(id, repo, title, branch, worktree, step, status, type, created_at, updated_at)`,
   `events(seq, task_id, at, kind, detail)` and `task_links(seq, task_id, kind, ref, role)`.
-  Step, status and the playbook's name are checked by the database too.
+  Step, status and the type (the playbook's name) are checked by the database too.
   - Mine is a shared hosted Postgres 18, so it takes none of the servers' RAM or disk.
   - orq reads libpq's `PG*` variables. Only `orq serve` gets them (§6); sessions
     reach the state through it (the CLI). TLS: `PGSSLMODE=verify-ca` with `PGSSLROOTCERT`, the instance's self-signed

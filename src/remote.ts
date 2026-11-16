@@ -45,7 +45,7 @@ const db = Layer.effect(
       link: (id, kind, ref, role) => call(tasks.link({ params: { id }, payload: { kind, ref, role } })),
       links: (id) => call(tasks.links({ params: { id } })),
       findLink: (kind, ref) => call(tasks.findLink({ query: { kind, ref } })),
-      setPlaybook: (id, playbook) => call(tasks.setPlaybook({ params: { id }, payload: { playbook } })),
+      setType: (id, playbook) => call(tasks.setPlaybook({ params: { id }, payload: { playbook } })),
     })
   }),
 )

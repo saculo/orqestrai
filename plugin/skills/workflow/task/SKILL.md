@@ -12,15 +12,15 @@ the user. The step skills do the work. You keep the task moving and the records 
 
 ## Start (every time, also after a restart)
 
-1. Run `orq show <id>`. It gives the step, the status, the playbook and the worktree.
+1. Run `orq show <id>`. It gives the step, the status, the playbook (`type`) and the worktree.
 2. Check that `git rev-parse --show-toplevel` is that worktree. If it is not, stop and tell
    the user. Do not work in another checkout.
    Check that `echo $ORQ_TASK` prints this id. If it does not, the guard hooks are off:
    tell the user to start the session with `orq open <id>`.
 3. Read the files in `.orqestrai/tasks/<id>/`. The `status:` line in each file's
    frontmatter and the database row together tell you where the task is.
-4. The playbook: if `orq show` names one, load its skill (`playbook-<name>`, in this
-   plugin) and do not choose again. If it says `playbook = null`, choose one (below).
+4. The playbook: if `orq show` names one in `type`, load its skill (`playbook-<name>`, in this
+   plugin) and do not choose again. If it says `type = null`, choose one (below).
 5. Continue from the playbook's steps. A restart must lose nothing: decisions are in the
    files, not in this chat.
 

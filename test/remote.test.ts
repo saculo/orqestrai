@@ -63,9 +63,9 @@ describe("orq with ORQ_SERVER and no database login", () => {
 
   test("the playbook, set at new or later, goes through the server", () => {
     expect(orq(["new", "--playbook", "feature", "Add search"]).code).toBe(0)
-    expect(orq(["show", "T-0001"]).out).toContain("playbook = feature")
+    expect(orq(["show", "T-0001"]).out).toContain("type = feature")
     expect(orq(["playbook", "T-0001", "bugfix"]).code).toBe(0)
-    expect(orq(["show", "T-0001"]).out).toMatch(/playbook = bugfix[\s\S]*playbook\s+bugfix/)
+    expect(orq(["show", "T-0001"]).out).toMatch(/type = bugfix[\s\S]*type\s+bugfix/)
   })
 
   test("the server finds the task linked to an outside reference (the bridge's Slack threads)", async () => {

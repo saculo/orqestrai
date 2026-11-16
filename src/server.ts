@@ -27,7 +27,7 @@ const tasks = HttpApiBuilder.group(
       link: ({ params, payload }) => db.link(params.id, payload.kind, payload.ref, payload.role),
       links: ({ params }) => db.links(params.id),
       findLink: ({ query }) => db.findLink(query.kind, query.ref),
-      setPlaybook: ({ params, payload }) => db.setPlaybook(params.id, payload.playbook),
+      setPlaybook: ({ params, payload }) => db.setType(params.id, payload.playbook),
     })
   }),
 )

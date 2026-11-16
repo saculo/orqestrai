@@ -165,7 +165,7 @@ describe("orq bridge", () => {
     mention("playbook=bugfix Fix the login", "100.1")
     await until("the reply in the thread", () => posts.length > 0)
     expect(posts[0]?.text).toContain("T-0001 started: `orq/T-0001-fix-the-login`")
-    expect(orq(["show", "T-0001"]).out).toMatch(/title = Fix the login[\s\S]*playbook = bugfix/)
+    expect(orq(["show", "T-0001"]).out).toMatch(/title = Fix the login[\s\S]*type = bugfix/)
   })
 
   test("listens to you only", async () => {

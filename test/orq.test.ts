@@ -146,14 +146,14 @@ describe("orq state", () => {
 describe("orq playbook", () => {
   test("a new task has no playbook until one is chosen", () => {
     orq(["new", "x"])
-    expect(orq(["show", "T-0001"]).out).toContain("playbook = null")
+    expect(orq(["show", "T-0001"]).out).toContain("type = null")
     expect(orq(["playbook", "T-0001", "feature"]).code).toBe(0)
-    expect(orq(["show", "T-0001"]).out).toMatch(/playbook = feature[\s\S]*playbook\s+feature/)
+    expect(orq(["show", "T-0001"]).out).toMatch(/type = feature[\s\S]*type\s+feature/)
   })
 
   test("orq new --playbook sets it at once", () => {
     expect(orq(["new", "--playbook", "bugfix", "Fix login"]).code).toBe(0)
-    expect(orq(["show", "T-0001"]).out).toContain("playbook = bugfix")
+    expect(orq(["show", "T-0001"]).out).toContain("type = bugfix")
   })
 
   test("rejects a name that is not a playbook's, and an unknown task", () => {

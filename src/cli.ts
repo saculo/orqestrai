@@ -10,7 +10,7 @@ import { bridge } from "./bridge.ts"
 import { clean } from "./clean.ts"
 import { OrqConfig } from "./config.ts"
 import { Db } from "./db.ts"
-import { LINK_ROLES, OrqError, Playbook, STATUSES, STEPS, stamp, TEMPLATES } from "./domain.ts"
+import { LINK_ROLES, OrqError, TaskType, STATUSES, STEPS, stamp, TEMPLATES } from "./domain.ts"
 import { baseBranch, topLevel } from "./git.ts"
 import { install } from "./init.ts"
 import { syncMerged } from "./pr.ts"
@@ -40,14 +40,14 @@ const init = Command.make("init", {}, () =>
 const id = Argument.String("id").pipe(Argument.withDescription("task id, e.g. T-0001"))
 
 const playbookName = (what: string) =>
-  Argument.String(what).pipe(Argument.withSchema(Playbook), Argument.withDescription("a playbook, e.g. feature (skill playbook-feature)"))
+  Argument.String(what).pipe(Argument.withSchema(TaskType), Argument.withDescription("a playbook, e.g. feature (skill playbook-feature)"))
 
 const newTask = Command.make(
   "new",
   {
     request: Argument.String("request"),
     playbook: Flag.String("playbook").pipe(
-      Flag.withSchema(Playbook),
+      Flag.withSchema(TaskType),
       Flag.optional,
       Flag.withDescription("the playbook to run, e.g. feature; without it, the task session chooses"),
     ),
@@ -85,7 +85,7 @@ const state = Command.make(
 
 const playbook = Command.make("playbook", { id, name: playbookName("name") }, ({ id, name }) =>
   Effect.gen(function* () {
-    yield* (yield* Db).setPlaybook(id, name)
+    yield* (yield* Db).setType(id, name)
   }),
 ).pipe(Command.withDescription("record the playbook the task runs"), withState)
 
