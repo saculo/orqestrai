@@ -1,7 +1,8 @@
 // `orq bridge`: Slack ⇄ the task sessions, on the sessions' machine, outside the sandbox. No LLM.
-//   @bot <request> in a project's channel → a new task (`orq new`), its tab, one thread for it.
-//   your reply in that thread           → typed into the task's session (reopened if closed).
-//   `orq ask` from a session            → posted in the task's thread, over a local socket.
+//   @bot [playbook=<name>] <request> in a project's channel → a new task (`orq new`), its tab,
+//     one thread for it.
+//   your reply in that thread → typed into the task's session (reopened if closed).
+//   `orq ask` from a session → posted in the task's thread, over a local socket.
 // The Slack tokens are read from a file the sandbox hides, never from the environment, so the
 // zellij session it may start (and every task session in it) does not inherit them.
 import { chmodSync, existsSync, readFileSync, rmSync } from "node:fs"
@@ -57,6 +58,12 @@ const parseChannels = (spec: string) =>
 /** The request without the bot's mention. */
 const request = (text: string | undefined) => (text ?? "").replace(/<@[A-Z0-9]+>/g, "").trim()
 
+/** `playbook=<name> <request>` chooses the playbook; without it, the session chooses. */
+const withPlaybook = (text: string) => {
+  const m = /^playbook=([a-z][a-z0-9-]*)\s+([\s\S]*)$/.exec(text)
+  return m ? { playbook: m[1], request: m[2] ?? "" } : { playbook: undefined, request: text }
+}
+
 const threadRef = (channel: string, ts: string) => `${channel}/${ts}`
 
 /** The question `orq ask` sends to the bridge's socket. */
@@ -79,7 +86,8 @@ const bridge = Command.make("bridge", {}, () =>
       Effect.gen(function* () {
         const root = channels.get(e.channel)
         if (root === undefined) return yield* new OrqError({ message: `this channel is no project's (ORQ_SLACK_CHANNELS)` })
-        const { task, tab } = yield* startTask(root, request(e.text))
+        const asked = withPlaybook(request(e.text))
+        const { task, tab } = yield* startTask(root, asked.request, asked.playbook)
         yield* db.link(task.id, "slack-thread", threadRef(e.channel, e.ts), "origin")
         yield* post(slack, e.channel, `${task.id} started: \`${task.branch}\`. ${tab.split("\n")[0]}`, e.ts)
       }).pipe(Effect.catch(reportTo(e.channel, e.ts)))

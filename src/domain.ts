@@ -11,6 +11,10 @@ export const STATUSES = ["TODO", "IN PROGRESS", "WAITING FOR ME", "BLOCKED", "DR
 export const Status = Schema.Literals(STATUSES)
 export type Status = typeof Status.Type
 
+/** The name of a playbook: which workflow a task runs. The skills define them (playbook-<name>);
+ * orq only records the name. */
+export const Playbook = Schema.String.pipe(Schema.check(Schema.isPattern(/^[a-z][a-z0-9-]*$/)))
+
 export const TEMPLATES = ["BRIEF", "RESEARCH", "SPEC", "VERIFY", "LEARN", "PR"] as const
 
 export const Task = Schema.Struct({
@@ -21,6 +25,7 @@ export const Task = Schema.Struct({
   worktree: Schema.String,
   step: Step,
   status: Status,
+  playbook: Schema.NullOr(Schema.String),
   created_at: Schema.Date,
   updated_at: Schema.Date,
 })
@@ -34,6 +39,8 @@ export const NewTask = Schema.Struct({
   /** the folder the task's worktree goes in */
   worktrees: Schema.String,
   base: Schema.String,
+  /** set when the user chose it; else the task session chooses */
+  playbook: Schema.optional(Playbook),
 })
 export type NewTask = typeof NewTask.Type
 

@@ -40,7 +40,7 @@ Set `status: applied` in `LEARN.md`.
 Follow `orq:git`. One commit with `LEARN.md` and the changed files:
 `docs(<id>): learn`. Name the proposals in the body, one line each.
 
-Continue with ship, as `orq:task` says. Do not ask the user. They see the proposals in
+Continue with the next step of the task's playbook. Do not ask the user. They see the proposals in
 the PR.
 
 ## Never

@@ -37,6 +37,19 @@ ones it loads, so an agent loads only what its step needs.
 
 ## 2. Flow
 
+A **playbook** is the order of steps a task runs. The playbooks are skills,
+`plugin/skills/workflow/playbook-<name>/`: the description says when one fits, the body
+lists the steps, the gates and what the task ends with. `orq:task` is the base every
+playbook shares (where the task is, the records, the gates, talking to you). At its start
+it reads the task's playbook from `orq show`; when none is set, it compares `REQUEST.md`
+with the playbook descriptions, picks one and records it (`orq playbook <id> <name>`), or
+asks you when none fits clearly or two do. You can set it yourself: `orq new --playbook
+<name>`, or `@bot playbook=<name> …` in Slack. A task that turns out to be of another kind
+stops and asks before it switches. A new playbook is one new skill; it reuses the step
+skills, and steps are the ones in `src/domain.ts`.
+
+There is one playbook now, **feature**, the flow below.
+
 ```
 triage ⇄ you ─⛩─▶ plan ⇄ you ─⛩─▶ impl ─▶ verify ─▶ learn ─▶ ship ─⛩ you merge
                                      ▲         │
@@ -232,16 +245,15 @@ One round:
 
 ```
 1. Quality gate     [commands] types, lint, test (unit / integration / contract); no app
-2. orq slot take    in the background, waits up to 15 min; then WAITING FOR ME
-3. In parallel:
+2. In parallel:
    Verifier (never reads source)            Reviewer (never runs the app)
-     starts the app once, in the slot         reads diff + SPEC
+     starts the app once, free ports          reads diff + SPEC
      e2e:    writes the test (round 1) or     hypotheses first, Spec + Standards
              reruns it (round 2+), runs it    ≥75 confidence, max 5
      driven: drives the app, keeps evidence   round 2+: prior findings
      manual: not run; goes to you at the PR
-4. Commit the e2e tests (failing ones too); keep or free the slot
-5. VERIFY.md: failing items → impl (max 3 rounds), else passed → learn
+3. Commit the e2e tests (failing ones too); the verifier stops the app
+4. VERIFY.md: failing items → impl (max 3 rounds), else passed → learn
 ```
 
 - **Verifier** (Sonnet). Does not read the app's source, its other tests or the diff
@@ -390,8 +402,8 @@ private; orqestrai itself ships only the binary, the plugin and an image of `orq
 ### The `orq` CLI
 
 TypeScript on Bun, with Effect 4 (`src/`). Rule: **the code does mechanics only** —
-ids, state, worktrees, tabs, Slack, slots. Routing, gates and step order stay in the
-skills. Size budget: about 150 lines per module. `src/domain.ts` is the one definition of
+ids, state, worktrees, tabs, Slack. Routing, gates, step order and the choice of
+playbook stay in the skills. Size budget: about 150 lines per module. `src/domain.ts` is the one definition of
 steps, statuses and task fields. Tests drive the CLI (`test/`).
 
 Install: two pieces from one repository, one version.
@@ -413,9 +425,10 @@ goes through Effect's `SqlClient` (`@effect/sql-pg`).
 |----------------------------|-------------------------------------------------------------|
 | `orq init`                 | creates `.orqestrai/config.toml`                            |
 | `orq guard`                | the PreToolUse guard hook (§6)                              |
-| `orq new "<request>"`      | task id, task row, worktree, branch, zellij tab             |
+| `orq new [--playbook <name>] "<request>"` | task id, task row, worktree, branch, zellij tab |
 | `orq open <id>`            | opens the task's tab again (after a restart)                |
 | `orq state <id> <step> <status> [note]` | updates the task row, adds an event            |
+| `orq playbook <id> <name>` | records the playbook the task runs                          |
 | `orq show <id>`            | one task, its links and its last events                     |
 | `orq link <id> <kind> <ref> [origin\|related]` | links the task to an outside reference |
 | `orq file <id> <NAME>`     | new task file from `templates/`                             |
@@ -424,23 +437,18 @@ goes through Effect's `SqlClient` (`@effect/sql-pg`).
 | `orq bridge`               | the Slack bridge (below)                                    |
 | `orq ls`                   | lists tasks and status; reads merged PRs from `gh`          |
 | `orq clean <id>`           | removes a merged or dropped task's worktree and branch      |
-| `orq slot take\|keep\|free\|ls` | verify slots (§5)                                    |
 | `orq serve --socket <path>` | the state over HTTP (below); the one process with the database password |
 
 **Server and clients.** `orq serve` is the only process that connects to the database. It
-offers the `Db` and `Slots` services as an HTTP API (`src/api.ts`, Effect's `HttpApi`), on
+offers the `Db` service as an HTTP API (`src/api.ts`, Effect's `HttpApi`), on
 a Unix socket or a TCP address. With `ORQ_SERVER` set (the
 socket path, or a URL), every other command uses the API's generated client
 (`src/remote.ts`) instead of the database, and needs no `PG*` variable. Without it, orq
 connects directly, as on a laptop. The server only touches the database and never runs a
-command: a slot's stop and serve commands go back to the client, which runs them as its
-own user. The client also sends its `ORQ_HOST` with a slot take and list, so the slots are
-the sessions' machine's, not the server's; the number of slots, their ports and how long they
-last (`ORQ_SLOTS`, `ORQ_PORT_START`, `ORQ_SLOT_TTL`) are set on the server. Where it runs is
-up to the hosting (§4 Topology).
+command. Where it runs is up to the hosting (§4 Topology).
 
 Skills and agents reach orq only through the CLI, over Bash. There is no MCP server: one way
-in keeps the slot commands, the guard and the tests the same for every caller.
+in keeps the commands, the guard and the tests the same for every caller.
 
 
 ### Slack bridge
@@ -453,7 +461,7 @@ other processes. Settings: `ORQ_SLACK_USER` (it listens to you only) and
 `ORQ_SLACK_CHANNELS` (each project's channel and checkout, `C0123=/path`).
 
 - `@bot <request>` at the top of a project's channel → a new task, as `orq new` in that
-  checkout (`src/task.ts`). The thread under your message is the task's (link
+  checkout (`src/task.ts`). `@bot playbook=<name> <request>` sets its playbook. The thread under your message is the task's (link
   `slack-thread`, origin); the bridge answers there with the id and the branch.
 - `orq ask <id> "<text>"` (from a session) → status WAITING FOR ME, and the text goes to
   the bridge over a local socket (`ORQ_BRIDGE`, mode 0600), which posts it in the thread,
@@ -503,9 +511,9 @@ plain TS (no `bun:*` imports), because pi loads extensions under Node.
 
 - Content: Markdown files + git.
 - Index: one **shared Postgres** database for every machine (`src/pg.ts`).
-  `tasks(id, repo, title, branch, worktree, step, status, created_at, updated_at)`,
-  `events(seq, task_id, at, kind, detail)`, `task_links(seq, task_id, kind, ref, role)`
-  and `slots(host, n, task_id, …)`. Step and status are checked by the database too.
+  `tasks(id, repo, title, branch, worktree, step, status, playbook, created_at, updated_at)`,
+  `events(seq, task_id, at, kind, detail)` and `task_links(seq, task_id, kind, ref, role)`.
+  Step, status and the playbook's name are checked by the database too.
   - Mine is a shared hosted Postgres 18, so it takes none of the servers' RAM or disk.
   - orq reads libpq's `PG*` variables. Only `orq serve` gets them (§6); sessions
     reach the state through it (the CLI). TLS: `PGSSLMODE=verify-ca` with `PGSSLROOTCERT`, the instance's self-signed
@@ -516,7 +524,7 @@ plain TS (no `bun:*` imports), because pi loads extensions under Node.
     listed in `src/pg.ts`, run in order by Effect's Migrator and recorded in
     `orq_migrations`. A merged migration is frozen; a change is a new file. The commands
     that use state run pending migrations first; the migrator's table lock keeps parallel
-    runs apart. New ids and slot takes each lock their table for one transaction.
+    runs apart. New ids lock the table for one transaction.
   - Tests use a real Postgres in a container (testcontainers), one empty database per
     test. Never the shared instance.
 - The task holds only what is orqestrai's own. Everything outside — the GitHub issue,
@@ -572,9 +580,9 @@ The app under test runs as a **preview per PR**, deployed by the hosting, not by
     preview. That is the merge gate; nobody can skip it.
 - **What a project needs for previews:** a Dockerfile, a `/version` endpoint, a CI
   workflow that builds the image, `preview_url`, and its entry in the hosting.
-- **Until previews exist:** the verify slots of slice 4 stay (`orq slot take|keep|free|ls`,
-  a row per `ORQ_HOST` in the database, the app started by the `verify-<surface>` skill).
-  They go away once previews work.
+- **Until previews exist:** the verifier starts the app itself on the sessions' machine,
+  as the `verify-<surface>` skill says, on free ports and named after the task
+  (`orq-<id>`), and stops it at the end. Nothing limits how many run at once.
 
 The `verify-<surface>` skills are generated when a project is onboarded into orqestrai, not
 before.
@@ -675,7 +683,8 @@ Open:
    because without ship the whole flow cannot run on a real project. **Slice 4**
    (settled 2026-11-05): e2e-first verify (the verifier writes and runs e2e tests; kinds
    `e2e` / `driven` / `manual`; one level per behavior; impl never changes e2e tests),
-   verify slots with wait, expiry, keep and serve. The adversary is later and optional,
+   verify slots with wait, expiry, keep and serve (removed 2026-11-16: not needed; the
+   verifier takes free ports). The adversary is later and optional,
    for risk `high` only. Then Slack, the dashboard.
 2. ~~Modeling toolbox~~: settled 2026-11-02 (§3.7).
 3. ~~Test guidelines~~: settled 2026-11-03 (§3.3), written in

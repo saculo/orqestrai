@@ -4,18 +4,17 @@
 import { existsSync, writeFileSync } from "node:fs"
 import { dirname, join } from "node:path"
 import { BunRuntime, BunServices } from "@effect/platform-bun"
-import { Console, Effect, Layer } from "effect"
-import { Argument, CliError, Command } from "effect/cli"
+import { Console, Effect, Layer, Option } from "effect"
+import { Argument, CliError, Command, Flag } from "effect/cli"
 import { bridge } from "./bridge.ts"
 import { clean } from "./clean.ts"
 import { OrqConfig } from "./config.ts"
 import { Db } from "./db.ts"
-import { LINK_ROLES, OrqError, STATUSES, STEPS, stamp, TEMPLATES } from "./domain.ts"
+import { LINK_ROLES, OrqError, Playbook, STATUSES, STEPS, stamp, TEMPLATES } from "./domain.ts"
 import { baseBranch, topLevel } from "./git.ts"
 import { install } from "./init.ts"
 import { syncMerged } from "./pr.ts"
 import { serve } from "./server.ts"
-import { slot } from "./slot-cli.ts"
 import { withState } from "./state.ts"
 import { startTask } from "./task.ts"
 import { templates } from "./templates.ts"
@@ -40,13 +39,26 @@ const init = Command.make("init", {}, () =>
 
 const id = Argument.String("id").pipe(Argument.withDescription("task id, e.g. T-0001"))
 
-const newTask = Command.make("new", { request: Argument.String("request") }, ({ request }) =>
-  Effect.gen(function* () {
-    const { task, tab } = yield* startTask(yield* topLevel(), request)
-    yield* Console.log(`${task.id}  ${task.branch}  ${task.worktree}`)
-    yield* Console.log(tab)
-    yield* warnIfNotOnPath
-  }),
+const playbookName = (what: string) =>
+  Argument.String(what).pipe(Argument.withSchema(Playbook), Argument.withDescription("a playbook, e.g. feature (skill playbook-feature)"))
+
+const newTask = Command.make(
+  "new",
+  {
+    request: Argument.String("request"),
+    playbook: Flag.String("playbook").pipe(
+      Flag.withSchema(Playbook),
+      Flag.optional,
+      Flag.withDescription("the playbook to run, e.g. feature; without it, the task session chooses"),
+    ),
+  },
+  ({ request, playbook }) =>
+    Effect.gen(function* () {
+      const { task, tab } = yield* startTask(yield* topLevel(), request, Option.getOrUndefined(playbook))
+      yield* Console.log(`${task.id}  ${task.branch}  ${task.worktree}`)
+      yield* Console.log(tab)
+      yield* warnIfNotOnPath
+    }),
 ).pipe(Command.withDescription("new task: id, branch, worktree, zellij tab"), withState)
 
 const open = Command.make("open", { id }, ({ id }) =>
@@ -70,6 +82,12 @@ const state = Command.make(
       yield* (yield* Db).setState(id, step, status, note)
     }),
 ).pipe(Command.withDescription("record step and status"), withState)
+
+const playbook = Command.make("playbook", { id, name: playbookName("name") }, ({ id, name }) =>
+  Effect.gen(function* () {
+    yield* (yield* Db).setPlaybook(id, name)
+  }),
+).pipe(Command.withDescription("record the playbook the task runs"), withState)
 
 const show = Command.make("show", { id }, ({ id }) =>
   Effect.gen(function* () {
@@ -152,7 +170,7 @@ const file = Command.make("file", { id, name: Argument.Literals("name", TEMPLATE
 
 const orq = Command.make("orq").pipe(
   Command.withDescription("orqestrai mechanics. The workflow is in the skills."),
-  Command.withSubcommands([init, newTask, open, state, show, link, ask, send, ls, file, cleanTask, slot, serve, bridge]),
+  Command.withSubcommands([init, newTask, open, state, playbook, show, link, ask, send, ls, file, cleanTask, serve, bridge]),
 )
 
 const AppLayer = OrqConfig.layer.pipe(Layer.provideMerge(BunServices.layer))

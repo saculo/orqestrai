@@ -143,6 +143,27 @@ describe("orq state", () => {
   })
 })
 
+describe("orq playbook", () => {
+  test("a new task has no playbook until one is chosen", () => {
+    orq(["new", "x"])
+    expect(orq(["show", "T-0001"]).out).toContain("playbook = null")
+    expect(orq(["playbook", "T-0001", "feature"]).code).toBe(0)
+    expect(orq(["show", "T-0001"]).out).toMatch(/playbook = feature[\s\S]*playbook\s+feature/)
+  })
+
+  test("orq new --playbook sets it at once", () => {
+    expect(orq(["new", "--playbook", "bugfix", "Fix login"]).code).toBe(0)
+    expect(orq(["show", "T-0001"]).out).toContain("playbook = bugfix")
+  })
+
+  test("rejects a name that is not a playbook's, and an unknown task", () => {
+    orq(["new", "x"])
+    expect(orq(["playbook", "T-0001", "Not A Name"]).code).not.toBe(0)
+    expect(orq(["new", "--playbook", "-x", "y"]).code).not.toBe(0)
+    expect(orq(["playbook", "T-0099", "feature"]).err).toContain("no task T-0099")
+  })
+})
+
 describe("orq file", () => {
   test("creates a task file from its template, with the id filled in", () => {
     orq(["new", "x"])

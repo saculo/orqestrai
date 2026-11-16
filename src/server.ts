@@ -10,7 +10,6 @@ import { HttpApiBuilder } from "effect/http-api"
 import { OrqApi } from "./api.ts"
 import { Db } from "./db.ts"
 import { OrqError } from "./domain.ts"
-import { Slots } from "./slots.ts"
 import { Direct } from "./state.ts"
 
 const tasks = HttpApiBuilder.group(
@@ -28,20 +27,7 @@ const tasks = HttpApiBuilder.group(
       link: ({ params, payload }) => db.link(params.id, payload.kind, payload.ref, payload.role),
       links: ({ params }) => db.links(params.id),
       findLink: ({ query }) => db.findLink(query.kind, query.ref),
-    })
-  }),
-)
-
-const slots = HttpApiBuilder.group(
-  OrqApi,
-  "slots",
-  Effect.fnUntraced(function* (handlers) {
-    const slots = yield* Slots
-    return handlers.handleAll({
-      take: ({ params, payload }) => slots.take(payload.host, params.id, payload.worktree),
-      keep: ({ params, payload }) => slots.keep(params.id, payload.stop, payload.port),
-      free: ({ params }) => slots.free(params.id).pipe(Effect.map((s) => s ?? null)),
-      list: ({ query }) => slots.list(query.host),
+      setPlaybook: ({ params, payload }) => db.setPlaybook(params.id, payload.playbook),
     })
   }),
 )
@@ -50,7 +36,7 @@ const slots = HttpApiBuilder.group(
 export type Listen = { readonly unix: string } | { readonly host: string; readonly port: number }
 
 const serveApi = (listen: Listen) =>
-  HttpRouter.serve(HttpApiBuilder.layer(OrqApi).pipe(Layer.provide([tasks, slots])), { disableLogger: true }).pipe(
+  HttpRouter.serve(HttpApiBuilder.layer(OrqApi).pipe(Layer.provide(tasks)), { disableLogger: true }).pipe(
     Layer.provide(BunHttpServer.layer("unix" in listen ? { unix: listen.unix } : { hostname: listen.host, port: listen.port })),
   )
 

@@ -1,6 +1,6 @@
 ---
 name: verify
-description: orqestrai verify step. Runs the quality gate from config.toml, takes a verify slot, then runs the verifier (e2e tests and driven checks against one running app, through the verify-<surface> skills) and the reviewer in fresh contexts, writes VERIFY.md, and sends failures back to impl at most 3 rounds. Loaded by orq:task; do not run it alone.
+description: orqestrai verify step. Runs the quality gate from config.toml, then runs the verifier (e2e tests and driven checks against one running app, through the verify-<surface> skills) and the reviewer in fresh contexts, writes VERIFY.md, and sends failures back to impl at most 3 rounds. Loaded by orq:task; do not run it alone.
 ---
 
 # orqestrai: verify
@@ -31,18 +31,7 @@ worktree, in this order: `types`, `lint`, `test`, then any other keys **except `
 - A `fail` is a failing item. Still run the review: one round should find as much as it
   can.
 
-## 2. Take a verify slot
-
-Only when the plan has `e2e` or `driven` checks. Run, **in the background**:
-
-```
-orq slot take <id> --wait 900
-```
-
-You are woken when it ends. It prints `ORQ_SLOT`, `ORQ_PORT_BASE` and `ORQ_PROJECT`.
-If it fails after 15 minutes: `orq ask <id> "verify slot held by <task>"`, and stop. When the user says to retry, take it again.
-
-## 3. Verifier and reviewer, at once
+## 2. Verifier and reviewer, at once
 
 Start both subagents in one message. Each gets only what is listed here.
 
@@ -51,12 +40,11 @@ Group the checks by **Surface**. Each surface has a driver skill,
 `.claude/skills/verify-<surface>/`.
 
 ```
-Slot: ORQ_SLOT=<n> ORQ_PORT_BASE=<port> ORQ_PROJECT=<name>
+Task: <id>
 Verify skills: verify-<surface> (V1, V2), verify-<surface> (V3)
 E2E module: <[e2e] dir, or "none">. E2E command: <[commands] e2e, or "none">
 Round: <n>. Existing e2e tests of this task: <round 2+: their files; else "none">
 Notes on e2e tests from impl: <round 2+: gaps impl reported about a test; else "none">
-Keep the app running at the end: <yes when this round can pass and the plan has manual checks; else no>
 Evidence folder: .orqestrai/tasks/<id>/evidence/
 Checks (from SPEC.md, Verification plan):
 <each row: Check, Claim, Surface, Kind, How, Evidence expected>
@@ -79,16 +67,15 @@ Prior findings: <round 2+: the findings table of the round before; else "none">
 
 Nothing else: not the impl reports, not the verifier's results.
 
-## 4. After the verifier
+## 3. After the verifier
 
 - **E2E tests:** commit the files the verifier wrote or changed in the e2e module, also
   when they fail (they are the spec of the check): `test(<id>): e2e for AC1, AC2`.
   Nothing outside the e2e module and the evidence folder may change. Revert anything else.
-- **The slot:** if the verifier kept the app running, and the round passes, run
-  `orq slot keep <id> --stop "<the stop command it reported>" --port <port>`. Otherwise
-  run `orq slot free <id>`.
+- **The app:** the verifier stops what it started. If it reports an app still running,
+  stop it with the stop command it gives.
 
-## 5. Write the round
+## 4. Write the round
 
 Fill the round in `VERIFY.md` from the reports: the gate table, the checks table, the
 review (hypotheses, prior findings, findings). Check one or two pieces of evidence
@@ -105,13 +92,13 @@ Non-blocking findings go to **For the PR body**. Do not notify the user about th
 example `quality:test:src/orders.ts:42` or `check:V2:POST /orders 500`. Compare with the
 round before.
 
-## 6. Decide
+## 5. Decide
 
 - **A missing skill** (any check, whatever else happened): the round cannot pass. Finish
   the round as below, but instead of passing, run `orq ask <id> "no verify-<surface> skill
   for V3"`, asking on the next lines: write the skill (then run verify again), or change
   the check to `manual` in `SPEC.md` (then it is theirs at the PR).
-- **No failing items:** `status: passed`. Continue with the next step in `orq:task`.
+- **No failing items:** `status: passed`. Continue with the next step of the task's playbook.
 - **Failing items, round < 3, and no root cause repeated from the round before:**
   `status: failed`, outcome "back to impl: <items>". Run
   `orq state <id> impl "IN PROGRESS" "verify round <n>: <count> items"` and continue
@@ -129,4 +116,4 @@ Commit `VERIFY.md` and the evidence: `docs(<id>): verify round <n>`.
 - Fix code here. Verify finds; impl fixes.
 - Mark a check passed that the verifier did not mark `VERIFIED`.
 - Pass a round with a check that nobody ran.
-- Leave a slot taken when verify stops, except a kept one.
+- Leave an app running when verify stops.
