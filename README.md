@@ -1,7 +1,8 @@
 # orqestrai
 
-An orchestrated software factory with human gates:
-triage → plan → impl → verify → learn → ship. The design is in [DESIGN.md](DESIGN.md).
+An orchestrated software factory with human gates. Each task runs a playbook, chosen by
+the agent or by you; the one playbook now, feature, is triage → plan → impl → verify →
+learn → ship. The design is in [DESIGN.md](DESIGN.md).
 
 Status: slice 2 — `orq new`, and a task session that runs triage, plan, impl and verify.
 
@@ -56,6 +57,7 @@ In a project's git repository:
 
 ```bash
 orq new "what you want"     # id, branch, worktree, zellij tab running /orq:task <id>
+orq new --playbook feature "…"  # the same, with the playbook chosen by you
 orq ls                      # all tasks
 orq show T-0001             # one task, its links and its last events
 orq open T-0001             # open the task's tab again, for example after a restart
@@ -109,7 +111,8 @@ bin/orq                  runs src/main.ts from a checkout; releases ship a compi
 test/                    CLI, server, guard and plugin tests (bun run test)
 templates/               task files; `orq file <id> <NAME>` writes one (built into orq)
 plugin/                  the Claude Code plugin `orq`:
-  skills/workflow/       task (the orchestrator), triage, plan, impl, verify (steps), grill
+  skills/workflow/       task (the base: playbook, records, gates), playbook-feature,
+                         triage, plan, impl, verify, learn, ship (steps), grill
                          (how they ask questions), git (branch, staging, commit, push)
   skills/modeling/       problem-class, consistency-unit, context-distilling: tools that
                          plan and grill load on signals

@@ -1,4 +1,4 @@
-// Db and Slots through `orq serve` (src/server.ts) instead of the database: the CLI uses these
+// Db through `orq serve` (src/server.ts) instead of the database: the CLI uses these
 // when ORQ_SERVER is set, so they need no database password. ORQ_SERVER is the server's
 // Unix socket path (/run/orq/orq.sock) or its URL (http://127.0.0.1:7420).
 import { Config, Context, Effect, Layer } from "effect"
@@ -7,7 +7,6 @@ import { HttpApiClient } from "effect/http-api"
 import { OrqApi } from "./api.ts"
 import { Db } from "./db.ts"
 import { OrqError } from "./domain.ts"
-import { Slots } from "./slots.ts"
 
 class Client extends Context.Service<Client, HttpApiClient.ForApi<typeof OrqApi>>()("orq/Client") {}
 
@@ -46,22 +45,10 @@ const db = Layer.effect(
       link: (id, kind, ref, role) => call(tasks.link({ params: { id }, payload: { kind, ref, role } })),
       links: (id) => call(tasks.links({ params: { id } })),
       findLink: (kind, ref) => call(tasks.findLink({ query: { kind, ref } })),
+      setType: (id, playbook) => call(tasks.setPlaybook({ params: { id }, payload: { playbook } })),
     })
   }),
 )
 
-const slots = Layer.effect(
-  Slots,
-  Effect.gen(function* () {
-    const { slots } = yield* Client
-    return Slots.of({
-      take: (host, id, worktree) => call(slots.take({ params: { id }, payload: { host, worktree } })),
-      keep: (id, stop, port) => call(slots.keep({ params: { id }, payload: { stop, port } })),
-      free: (id) => call(slots.free({ params: { id } })).pipe(Effect.map((s) => s ?? undefined)),
-      list: (host) => call(slots.list({ query: { host } })),
-    })
-  }),
-)
-
-/** Db and Slots served by `orq serve`. */
-export const Remote = Layer.mergeAll(db, slots).pipe(Layer.provide(client))
+/** Db served by `orq serve`. */
+export const Remote = db.pipe(Layer.provide(client))

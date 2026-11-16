@@ -160,6 +160,14 @@ describe("orq bridge", () => {
     expect(zellijLog()).toMatch(/action new-pane --tab-id 1 --cwd \S+ -- env ORQ_TASK=T-0001 .* claude --model opus \/orq:task T-0001/)
   })
 
+  test("playbook=<name> at the start of your mention chooses the task's playbook", async () => {
+    await startBridge()
+    mention("playbook=bugfix Fix the login", "100.1")
+    await until("the reply in the thread", () => posts.length > 0)
+    expect(posts[0]?.text).toContain("T-0001 started: `orq/T-0001-fix-the-login`")
+    expect(orq(["show", "T-0001"]).out).toMatch(/title = Fix the login[\s\S]*type = bugfix/)
+  })
+
   test("listens to you only", async () => {
     await startBridge()
     mention("Not yours", "100.1", "U2")

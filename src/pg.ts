@@ -1,4 +1,4 @@
-// The Postgres database that holds orq's state: tasks, events, links and verify slots.
+// The Postgres database that holds orq's state: tasks, events and links.
 // One shared instance serves every machine. Settings are libpq's PG* variables; with a server,
 // only `orq serve` has them and its clients set ORQ_SERVER. PGSSLMODE as in libpq: require (default) encrypts,
 // verify-ca also checks the server against PGSSLROOTCERT (the shared instance's self-signed
@@ -10,9 +10,10 @@ import { Config, Effect, Layer, Option, Schema } from "effect"
 import * as Migrator from "effect/sql/Migrator"
 import { OrqError } from "./domain.ts"
 import init from "./migrations/0001_init.ts"
+import playbooks from "./migrations/0002_playbooks.ts"
 
 /** Every migration, in order. A schema change is a new file in src/migrations/ and a line here. */
-const MIGRATIONS = { "0001_init": init }
+const MIGRATIONS = { "0001_init": init, "0002_playbooks": playbooks }
 
 /** Any failure becomes a message the CLI prints; an OrqError passes through as it is. */
 export const asOrqError =

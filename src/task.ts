@@ -9,8 +9,9 @@ import { addWorktree, baseBranch, requireRef } from "./git.ts"
 import { openTab } from "./zellij.ts"
 
 /** Task id, row, worktree, branch, REQUEST.md and its zellij tab, for the project at `root`.
- * Gives back the task and what happened to the tab. */
-export const startTask = (root: string, request: string) =>
+ * With `playbook`, the task runs that one; without, the session chooses. Gives back the task
+ * and what happened to the tab. */
+export const startTask = (root: string, request: string, playbook?: string) =>
   Effect.gen(function* () {
     const { home } = yield* OrqConfig
     const db = yield* Db
@@ -18,7 +19,14 @@ export const startTask = (root: string, request: string) =>
     yield* requireRef(root, base)
 
     const worktrees = join(home, "worktrees", root.split("/").at(-1) ?? "repo")
-    const task = yield* db.create({ repo: root, title: request, slug: slugify(request), worktrees, base })
+    const task = yield* db.create({
+      repo: root,
+      title: request,
+      slug: slugify(request),
+      worktrees,
+      base,
+      ...(playbook ? { type: playbook } : {}),
+    })
 
     // The id is held; set up the worktree, and give the id back if that fails.
     yield* addWorktree(root, task.branch, task.worktree, base).pipe(Effect.tapError(() => db.remove(task.id)))

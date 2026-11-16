@@ -23,6 +23,8 @@ export class Db extends Context.Service<
     readonly links: (id: string) => Effect.Effect<ReadonlyArray<TaskLink>, OrqError>
     /** The task linked to this outside reference, if any (the newest, if several). */
     readonly findLink: (kind: string, ref: string) => Effect.Effect<string | null, OrqError>
+    /** Records the task's type: the playbook it runs. */
+    readonly setType: (id: string, type: string) => Effect.Effect<void, OrqError>
   }
 >()("orq/Db") {
   static readonly layer = Layer.effect(
@@ -46,13 +48,13 @@ export class Db extends Context.Service<
           asOrqError("get"),
         )
 
-      const create = ({ repo, title, slug, worktrees, base }: NewTask) =>
+      const create = ({ repo, title, slug, worktrees, base, type }: NewTask) =>
         Effect.gen(function* () {
           yield* sql`LOCK TABLE tasks IN SHARE ROW EXCLUSIVE MODE`
           const [next] = yield* sql<{ n: number }>`SELECT coalesce(max(substr(id, 3)::int), 0) + 1 AS n FROM tasks`
           const id = taskId(next?.n ?? 1)
           const branch = `orq/${id}-${slug}`
-          const row = { id, repo, title, branch, worktree: join(worktrees, `${id}-${slug}`) }
+          const row = { id, repo, title, branch, worktree: join(worktrees, `${id}-${slug}`), type: type ?? null }
           yield* sql`INSERT INTO tasks ${sql.insert(row)}`
           yield* addEvent(id, "created", `${branch} from ${base}`)
           return yield* get(id)
@@ -64,6 +66,13 @@ export class Db extends Context.Service<
           yield* sql`UPDATE tasks SET ${sql.update({ step, status })}, updated_at = now() WHERE id = ${id}`
           yield* addEvent(id, `${step}: ${status}`, note)
         }).pipe(sql.withTransaction, asOrqError("set state"))
+
+      const setType = (id: string, type: string) =>
+        Effect.gen(function* () {
+          yield* lockTask(id)
+          yield* sql`UPDATE tasks SET type = ${type}, updated_at = now() WHERE id = ${id}`
+          yield* addEvent(id, "type", type)
+        }).pipe(sql.withTransaction, asOrqError("set type"))
 
       const link = (id: string, kind: string, ref: string, role: LinkRole) =>
         Effect.gen(function* () {
@@ -95,6 +104,7 @@ export class Db extends Context.Service<
             Effect.map(([row]) => row?.task_id ?? null),
             asOrqError("find link"),
           ),
+        setType,
       }
     }),
   )
