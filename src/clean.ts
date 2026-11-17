@@ -1,6 +1,6 @@
 // orq clean: remove a finished task's worktree and local branch. The task row, its links and
 // its events stay. A merged task's files are in the base branch already. A dropped task never
-// merges, so what its branch holds is copied to $ORQ_HOME/archive/<repo>/<id>/ first: its task
+// merges, so what its branch holds is copied to $ORQ_DATA/archive/<repo>/<id>/ first: its task
 // folder, and the out-of-scope notes triage wrote, so triage can still find them.
 import { cpSync, existsSync, mkdirSync } from "node:fs"
 import { basename, join } from "node:path"

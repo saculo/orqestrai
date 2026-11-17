@@ -33,7 +33,7 @@ const env = (extra: Record<string, string> = {}) => {
   const e: Record<string, string | undefined> = {
     ...process.env,
     ...pg,
-    ORQ_HOME: join(dir, "home"),
+    ORQ_DATA: join(dir, "home"),
     ORQ_BRIDGE: join(dir, "bridge.sock"),
     ORQ_ZELLIJ_SESSION: "orq-bridge-test",
     ORQ_SLACK_TOKENS: join(dir, "slack.env"),

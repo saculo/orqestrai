@@ -4,8 +4,8 @@ An orchestrated software factory with human gates. Each task runs a playbook, ch
 the agent or by you; the one playbook now, feature, is triage → plan → impl → verify →
 learn → ship. The design is in [DESIGN.md](DESIGN.md).
 
-> The install below is the target of the current work (DESIGN.md §4). Until the npm
-> package and the config file are released, see the git history of this README.
+> The npm package is not published yet (next release). Until then, install `orq` from a
+> checkout (Develop, below).
 
 ## What you need
 
@@ -44,8 +44,11 @@ path          = "~/Projects/my-app"
 slack_channel = "C0123"
 ```
 
-Secrets never go in this file; it only names the file that holds them. An environment
-variable `ORQ_<KEY>` (e.g. `ORQ_SERVER`) overrides a key.
+Other keys: `model` (the task session's, default `opus`), `data` (worktrees, archive and
+state, default `~/.orqestrai`), `zellij_session` (default `orq`). `ORQ_CONFIG` names
+another file. Secrets never go in this file; it only names the file that holds them. An
+environment variable `ORQ_<KEY>` (e.g. `ORQ_SERVER`) overrides a key. A key orq does not
+know is an error.
 
 ### One machine or several
 

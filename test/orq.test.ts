@@ -1,4 +1,4 @@
-// orq through its seam: the command line. Each test gets a fresh repo and ORQ_HOME.
+// orq through its seam: the command line. Each test gets a fresh repo and ORQ_DATA.
 import { afterEach, beforeAll, beforeEach, describe, expect, test } from "bun:test"
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
@@ -15,7 +15,7 @@ const sh = (cmd: string[], cwd: string) => {
 }
 
 const orq = (args: string[], cwd = repo, extra: Record<string, string> = {}) => {
-  const env = { ...process.env, ORQ_HOME: home, ...pg, ORQ_ZELLIJ_SESSION: "orq-test-none", ...extra } as Record<string, string | undefined>
+  const env = { ...process.env, ORQ_DATA: home, ...pg, ORQ_ZELLIJ_SESSION: "orq-test-none", ...extra } as Record<string, string | undefined>
   delete env.ZELLIJ
   if (!("ORQ_SANDBOX" in extra)) delete env.ORQ_SANDBOX
   const p = Bun.spawnSync([...ORQ, ...args], { cwd, env, stdout: "pipe", stderr: "pipe" })
@@ -73,7 +73,7 @@ describe("orq new", () => {
   })
 
   test("gives two tasks started at the same moment different ids", async () => {
-    const env = { ...process.env, ORQ_HOME: home, ...pg, ORQ_ZELLIJ_SESSION: "orq-test-none" } as Record<string, string | undefined>
+    const env = { ...process.env, ORQ_DATA: home, ...pg, ORQ_ZELLIJ_SESSION: "orq-test-none" } as Record<string, string | undefined>
     delete env.ZELLIJ
     const start = (request: string) => Bun.spawn([...ORQ, "new", request], { cwd: repo, env, stdout: "pipe", stderr: "pipe" })
     const runs = [start("one"), start("two"), start("three")]

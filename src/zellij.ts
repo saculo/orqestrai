@@ -4,7 +4,7 @@ import { OrqConfig } from "./config.ts"
 import { exec, run } from "./proc.ts"
 
 /** The command that starts a task session, inside the sandbox command if one is set (ORQ_SANDBOX).
- * ORQ_* switch on the guard hook (orq guard). Each of `addDirs` (ORQ_ADD_DIRS) is added with --add-dir. With `resume`, it continues the worktree's last
+ * ORQ_* switch on the guard hook (orq guard); ORQ_DATA is for the skills (the archive). Each of `addDirs` (ORQ_ADD_DIRS) is added with --add-dir. With `resume`, it continues the worktree's last
  * conversation with that message instead of starting the task skill. */
 export const sessionCommand = (
   id: string,
@@ -13,6 +13,7 @@ export const sessionCommand = (
   model: string,
   sandbox: string,
   addDirs: string,
+  data: string,
   resume?: string,
 ) => [
   ...sandbox.split(/\s+/).filter(Boolean),
@@ -20,6 +21,7 @@ export const sessionCommand = (
   `ORQ_TASK=${id}`,
   `ORQ_WORKTREE=${worktree}`,
   `ORQ_BASE=${base}`,
+  `ORQ_DATA=${data}`,
   "claude",
   "--model",
   model,
@@ -58,8 +60,8 @@ export const ensureSession = Effect.gen(function* () {
 /** Open a tab inside zellij, or in the named session, or return the command to run by hand. */
 export const openTab = (id: string, worktree: string, base: string, resume?: string) =>
   Effect.gen(function* () {
-    const { session, model, sandbox, addDirs } = yield* OrqConfig
-    const cmd = sessionCommand(id, worktree, base, model, sandbox, addDirs, resume)
+    const { session, model, sandbox, addDirs, home } = yield* OrqConfig
+    const cmd = sessionCommand(id, worktree, base, model, sandbox, addDirs, home, resume)
     if (!process.env.ZELLIJ && !(yield* sessionExists))
       return `no zellij session; start the task with:\n  cd ${shellQuote(worktree)} && ${cmd.map(shellQuote).join(" ")}`
 

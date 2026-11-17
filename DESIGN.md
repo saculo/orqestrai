@@ -430,6 +430,7 @@ sandbox  = "fence --"                   # a command prefix for task sessions; un
 add_dirs = ["~/shared-skills"]          # more directories for every task session (--add-dir)
 model    = "opus"                       # the task session's model
 data     = "~/.orqestrai"               # worktrees, archive, the local SQLite file
+zellij_session = "orq"                  # the zellij session for tabs when orq runs outside zellij
 
 [slack]
 user   = "U0123"                        # the bridge listens to this user only
@@ -443,7 +444,10 @@ slack_channel = "C0123"
 - **Secrets are never in this file.** It only names where they are, so a sandbox can hide
   them and still let sessions read the config.
 - An environment variable `ORQ_<KEY>` overrides a key, for tests and containers
-  (`ORQ_SERVER`, `ORQ_SANDBOX`, …).
+  (`ORQ_SERVER`, `ORQ_SANDBOX`, `ORQ_DATA`, …; `[slack]` is `ORQ_SLACK_USER` and
+  `ORQ_SLACK_TOKENS`, the projects' channels `ORQ_SLACK_CHANNELS=C0123=/path,…`).
+  `src/settings.ts` reads the file into these variables at start, and the rest of orq
+  reads only variables. A key orq does not know is an error, so a typo is not ignored.
 - What belongs to a project is in the project: `.orqestrai/config.toml` (base branch, the
   quality gate's `[commands]`), written by `orq init`.
 

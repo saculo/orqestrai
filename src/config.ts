@@ -4,8 +4,8 @@ import { join } from "node:path"
 import { Config, Context, Layer } from "effect"
 
 const settings = Config.all({
-  /** Worktrees and the archive: $ORQ_HOME. State is in Postgres (src/pg.ts). */
-  home: Config.String("ORQ_HOME").pipe(Config.withDefault(join(homedir(), ".orqestrai"))),
+  /** Worktrees and the archive: $ORQ_DATA (the settings file's `data`). State is in Postgres (src/pg.ts). */
+  home: Config.String("ORQ_DATA").pipe(Config.withDefault(join(homedir(), ".orqestrai"))),
   /** the Slack bridge's socket, where `orq ask` sends a question (orq bridge) */
   bridge: Config.String("ORQ_BRIDGE").pipe(Config.withDefault(join(homedir(), ".orqestrai", "bridge.sock"))),
   /** zellij session used when orq runs outside zellij */
@@ -15,7 +15,7 @@ const settings = Config.all({
   /** directories every task session also gets, with --add-dir, separated by ":" (e.g. a home repo's shared skills) */
   addDirs: Config.String("ORQ_ADD_DIRS").pipe(Config.withDefault("")),
   /** model for the interactive task session */
-  model: Config.String("ORQ_SESSION_MODEL").pipe(Config.withDefault("opus")),
+  model: Config.String("ORQ_MODEL").pipe(Config.withDefault("opus")),
 })
 
 export class OrqConfig extends Context.Service<OrqConfig, Config.Success<typeof settings>>()("orq/Config") {
