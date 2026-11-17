@@ -12,6 +12,8 @@ const settings = Config.all({
   session: Config.String("ORQ_ZELLIJ_SESSION").pipe(Config.withDefault("orq")),
   /** command the task session runs inside, e.g. "fence --" for the Fence sandbox; empty: none */
   sandbox: Config.String("ORQ_SANDBOX").pipe(Config.withDefault("")),
+  /** directories every task session also gets, with --add-dir, separated by ":" (e.g. a home repo's shared skills) */
+  addDirs: Config.String("ORQ_ADD_DIRS").pipe(Config.withDefault("")),
   /** model for the interactive task session */
   model: Config.String("ORQ_SESSION_MODEL").pipe(Config.withDefault("opus")),
 })

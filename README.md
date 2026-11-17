@@ -71,6 +71,8 @@ Inside zellij, `orq new` opens a new tab. Outside, it uses the zellij session
 `$ORQ_ZELLIJ_SESSION` (default `orq`) if it exists, or prints the command to run.
 `ORQ_SANDBOX` is a command the session starts inside, e.g. `fence --` for the
 [Fence](https://github.com/fencesandbox/fence) sandbox: `fence -- env ORQ_TASK=… claude …`.
+`ORQ_ADD_DIRS` lists directories, separated by `:`, that every task session also gets with
+`--add-dir`, e.g. a home repo with your shared skills: `ORQ_ADD_DIRS=$HOME/Projects/home`.
 
 **Slack.** `orq bridge` connects a Slack app (Socket Mode) to the sessions: `@orq <request>`
 in a project's channel starts a task with its own thread, a session's questions

@@ -66,6 +66,12 @@ describe("orq new", () => {
     expect(r.out).toMatch(/&& fence -- env ORQ_TASK=T-0001 .* claude /)
   })
 
+  test("with ORQ_ADD_DIRS, the session gets each directory with --add-dir", () => {
+    const r = orq(["new", "x"], repo, { ORQ_ADD_DIRS: "/srv/home:/srv/shared" })
+    // --add-dir=<dir>: with a bare --add-dir, claude reads the prompt as one more directory
+    expect(r.out).toMatch(/ claude --model opus --add-dir=\/srv\/home --add-dir=\/srv\/shared '\/orq:task T-0001'/)
+  })
+
   test("gives two tasks started at the same moment different ids", async () => {
     const env = { ...process.env, ORQ_HOME: home, ...pg, ORQ_ZELLIJ_SESSION: "orq-test-none" } as Record<string, string | undefined>
     delete env.ZELLIJ
