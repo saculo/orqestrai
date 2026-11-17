@@ -36,12 +36,9 @@ sandbox  = "fence --"                   # task sessions start inside this comman
 add_dirs = ["~/shared-skills"]          # more directories for every task session
 
 [slack]
-user   = "U0123"
-tokens = "~/.config/orq-bridge/slack.env"
-
-[projects.my-app]
-path          = "~/Projects/my-app"
-slack_channel = "C0123"
+user     = "U0123"
+tokens   = "~/.config/orq-bridge/slack.env"
+channels = { C0123 = "~/Projects/my-app" }   # channel → the checkout where its tasks start
 ```
 
 Other keys: `model` (the task session's, default `opus`), `data` (worktrees, archive and

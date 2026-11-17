@@ -433,19 +433,20 @@ data     = "~/.orqestrai"               # worktrees, archive, the local SQLite f
 zellij_session = "orq"                  # the zellij session for tabs when orq runs outside zellij
 
 [slack]
-user   = "U0123"                        # the bridge listens to this user only
-tokens = "~/.config/orq-bridge/slack.env"  # the file with the tokens (hide it from the sandbox)
-
-[projects.meal-prep]
-path          = "~/Projects/meal-prep"
-slack_channel = "C0123"
+user     = "U0123"                      # the bridge listens to this user only
+tokens   = "~/.config/orq-bridge/slack.env"  # the file with the tokens (hide it from the sandbox)
+channels = { C0123 = "~/Projects/my-app" }   # a channel and the checkout where its tasks start
 ```
+
+orq keeps no list of projects. `orq new` starts the task in the repo it runs in, so it
+works the same from inside a project as from anywhere that `cd`s there first (for
+example a home directory whose `CLAUDE.md` lists your projects).
 
 - **Secrets are never in this file.** It only names where they are, so a sandbox can hide
   them and still let sessions read the config.
 - An environment variable `ORQ_<KEY>` overrides a key, for tests and containers
   (`ORQ_SERVER`, `ORQ_SANDBOX`, `ORQ_DATA`, …; `[slack]` is `ORQ_SLACK_USER` and
-  `ORQ_SLACK_TOKENS`, the projects' channels `ORQ_SLACK_CHANNELS=C0123=/path,…`).
+  `ORQ_SLACK_TOKENS` and `ORQ_SLACK_CHANNELS=C0123=/path,…`).
   `src/settings.ts` reads the file into these variables at start, and the rest of orq
   reads only variables. A key orq does not know is an error, so a typo is not ignored.
 - What belongs to a project is in the project: `.orqestrai/config.toml` (base branch, the
@@ -496,8 +497,8 @@ Optional. One long-running process, `orq bridge` (`src/bridge.ts`; Socket Mode, 
 port; no SDK, no LLM), on the sessions' machine, outside the sandbox. It reads the Slack
 tokens from the file `[slack] tokens` names, never from its environment, so the zellij
 session it starts and the task sessions in it do not inherit them. It listens to
-`[slack] user` only. Each `[projects.<name>]` with a `slack_channel` is a channel it
-serves, mapped to that project's `path`.
+`[slack] user` only, in the channels of `[slack] channels`, each mapped to the checkout
+where its tasks start.
 
 - `@bot <request>` at the top of a project's channel → a new task, as `orq new` in that
   checkout (`src/task.ts`). `@bot playbook=<name> <request>` sets its playbook. The thread under your message is the task's (link
