@@ -485,7 +485,9 @@ Skills and agents are named `orq:<name>` (`/orq:task`); the folder name is the n
 **Server and clients.** `orq serve` offers the `Db` service as an HTTP API (`src/api.ts`,
 Effect's `HttpApi`), on a Unix socket or a TCP address. With `server` set (a socket path
 or a URL), every other command uses the API's generated client (`src/remote.ts`).
-Without it, orq opens the local SQLite file itself. Over TCP the server does not
+Without it, orq opens the local SQLite file itself. Task sessions in a sandbox use a server
+even on one machine (a socket, the server outside the sandbox), so the state is never
+writable from inside it. Over TCP the server does not
 authenticate callers: put it where only your machines reach it.
 
 Skills and agents reach orq only through the CLI, over Bash. There is no MCP server: one way

@@ -47,6 +47,10 @@ know is an error.
 ### One machine or several
 
 - **One machine:** set nothing. orq keeps its state in a SQLite file, `~/.orqestrai/state.db`.
+- **One machine, task sessions in a sandbox:** keep the state outside it. Run
+  `orq serve --socket ~/.orqestrai/orq.sock` outside the sandbox (e.g. as a user service) and
+  set `server = "~/.orqestrai/orq.sock"`. The sessions then only talk to the socket; the
+  sandbox must allow Unix sockets, not writes to `~/.orqestrai`.
 - **Several machines:** run `orq serve` on one of them, as a process or a container
   (`ghcr.io/saculo/orqestrai:<version>`):
 
