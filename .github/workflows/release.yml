@@ -61,5 +61,9 @@ jobs:
           "$RUNNER_TEMP/bun/bin/orq" --version
       - name: npm
         env:
-          NPM_CONFIG_TOKEN: ${{ secrets.NPM_TOKEN }}
-        run: bun publish --access public
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+        # bun publish takes the token from an .npmrc, not from the environment
+        run: |
+          test -n "$NPM_TOKEN" || { echo "::error::the secret NPM_TOKEN is not set"; exit 1; }
+          echo "//registry.npmjs.org/:_authToken=$NPM_TOKEN" > ~/.npmrc
+          bun publish --access public
