@@ -549,7 +549,8 @@ plain TS (no `bun:*` imports), because pi loads extensions under Node.
 ### State
 
 - Content: Markdown files + git.
-- Index: one **SQLite** file, `<data>/state.db`, opened by `orq serve` or, without a server,
+- Index: one **SQLite** file, `<data>/state/orq.db` (a folder of its own: a sandbox allows
+  writes there, and SQLite writes its `-wal` and `-shm` files next to it), opened by `orq serve` or, without a server,
   by the CLI itself (`bun:sqlite`). No database to install. A transaction takes the write
   lock (`BEGIN IMMEDIATE`), so parallel runs wait their turn and never share an id.
   `tasks(id, repo, title, branch, worktree, step, status, type, created_at, updated_at)`,

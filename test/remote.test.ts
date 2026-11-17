@@ -56,8 +56,8 @@ describe("orq with ORQ_SERVER", () => {
     expect(shown).toContain("link gh-issue o/r#3 (origin)")
     expect(shown).toContain("impl: IN PROGRESS")
     expect(orq(["ls"]).out).toContain("T-0001  impl    IN PROGRESS")
-    expect(existsSync(join(dir, "server", "state.db"))).toBe(true)
-    expect(existsSync(join(dir, "home", "state.db"))).toBe(false)
+    expect(existsSync(join(dir, "server", "state", "orq.db"))).toBe(true)
+    expect(existsSync(join(dir, "home", "state"))).toBe(false)
   })
 
   test("the playbook, set at new or later, goes through the server", () => {

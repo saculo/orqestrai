@@ -237,11 +237,11 @@ test("orq ls lists every task", () => {
   expect(out).toContain("second")
 })
 
-test("the state is one SQLite file in ORQ_DATA, made on first use; orq init never makes it", () => {
+test("the state is one SQLite file in ORQ_DATA/state, made on first use; orq init never makes it", () => {
   expect(orq(["init"]).code).toBe(0)
-  expect(existsSync(join(home, "state.db"))).toBe(false)
+  expect(existsSync(join(home, "state"))).toBe(false)
   orq(["new", "first"])
-  expect(existsSync(join(home, "state.db"))).toBe(true)
+  expect(existsSync(join(home, "state", "orq.db"))).toBe(true)
 })
 
 test("parallel runs never share an id", async () => {

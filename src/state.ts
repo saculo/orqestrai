@@ -1,6 +1,6 @@
 // orq's state service (tasks), given only to the commands that read or write
 // state, so `orq init` and `orq file` never connect. With ORQ_SERVER set they go through
-// `orq serve` (src/remote.ts) and never open the file; without it they open $ORQ_DATA/state.db.
+// `orq serve` (src/remote.ts) and never open the file; without it they open $ORQ_DATA/state/orq.db.
 import { Config, Effect, Layer, Option } from "effect"
 import { Command } from "effect/cli"
 import type { OrqConfig } from "./config.ts"

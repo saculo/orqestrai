@@ -46,7 +46,9 @@ know is an error.
 
 ### One machine or several
 
-- **One machine:** set nothing. orq keeps its state in a SQLite file, `~/.orqestrai/state.db`.
+- **One machine:** set nothing. orq keeps its state in a SQLite file, `~/.orqestrai/state/orq.db`.
+  With a sandbox, let the task sessions write `~/.orqestrai/state/` (SQLite's own files are
+  there too).
 - **Several machines:** run `orq serve` on one of them, as a process or a container
   (`ghcr.io/saculo/orqestrai:<version>`):
 

@@ -1,4 +1,6 @@
-// The SQLite file that holds orq's state: tasks, events and links, in $ORQ_DATA/state.db.
+// The SQLite file that holds orq's state: tasks, events and links, in $ORQ_DATA/state/orq.db.
+// A folder of its own, as SQLite writes its -wal and -shm files next to it: a sandbox can allow
+// writes to that folder and nothing else of $ORQ_DATA.
 // Without a server each orq run opens it; with one, only `orq serve` does and its clients set
 // ORQ_SERVER. Transactions take the write lock (BEGIN IMMEDIATE), so parallel runs wait their turn.
 import { mkdirSync } from "node:fs"
@@ -26,12 +28,12 @@ export const rows = <S extends Schema.Top>(schema: S) => Schema.decodeUnknownEff
 
 const client = Layer.effectContext(
   Effect.gen(function* () {
-    const { home } = yield* OrqConfig
+    const dir = join((yield* OrqConfig).home, "state")
     yield* Effect.try({
-      try: () => mkdirSync(home, { recursive: true }),
-      catch: (e) => new OrqError({ message: `database: cannot create ${home}: ${e instanceof Error ? e.message : String(e)}` }),
+      try: () => mkdirSync(dir, { recursive: true }),
+      catch: (e) => new OrqError({ message: `database: cannot create ${dir}: ${e instanceof Error ? e.message : String(e)}` }),
     })
-    const db = yield* SqliteClient.make({ filename: join(home, "state.db"), busyTimeout: "10 seconds" }).pipe(asOrqError("open"))
+    const db = yield* SqliteClient.make({ filename: join(dir, "orq.db"), busyTimeout: "10 seconds" }).pipe(asOrqError("open"))
     return Context.make(SqlClient, db)
   }),
 ).pipe(Layer.provide(Reactivity.layer))
