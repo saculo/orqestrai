@@ -4,84 +4,95 @@ An orchestrated software factory with human gates. Each task runs a playbook, ch
 the agent or by you; the one playbook now, feature, is triage → plan → impl → verify →
 learn → ship. The design is in [DESIGN.md](DESIGN.md).
 
-Status: slice 2 — `orq new`, and a task session that runs triage, plan, impl and verify.
+> The install below is the target of the current work (DESIGN.md §4). Until the npm
+> package and the config file are released, see the git history of this README.
 
-## Install (Claude Code)
+## What you need
 
-Two pieces, once per machine. **The `orq` program**, one file from the latest release
-(Linux x64; it must be on PATH, because the plugin starts it by name):
+Claude Code, Bun, git, `gh` (logged in to GitHub) and zellij. Optional: Slack, a sandbox
+for the task sessions (e.g. [Fence](https://github.com/fencesandbox/fence)), a second
+machine.
 
-```bash
-cd /tmp
-curl -fsSLO https://github.com/saculo/orqestrai/releases/latest/download/orq-linux-x64
-curl -fsSLO https://github.com/saculo/orqestrai/releases/latest/download/orq-linux-x64.sha256
-sha256sum -c orq-linux-x64.sha256 && install -D -m 755 orq-linux-x64 ~/.local/bin/orq
-```
-
-**The Claude Code plugin**, with the skills, agents and guard hook:
+## Install
 
 ```bash
+bun add -g orqestrai                    # the orq CLI and server
 claude plugin marketplace add saculo/orqestrai
-claude plugin install orq@orqestrai
+claude plugin install orq@orqestrai     # skills, agents and the guard hook
 ```
+
+Update with `bun update -g orqestrai` and `claude plugin update orq@orqestrai`.
 
 Then, in each project's git repository, `orq init` writes `.orqestrai/config.toml`: the
 base branch and the commands of the quality gate.
 
-From a checkout instead: `bun install`, `ln -s "$PWD/bin/orq" ~/.local/bin/orq`, and
-`claude --plugin-dir ./plugin`. `bun run build` writes the binary to `dist/orq`. A tag
-`v<version>` (as in `package.json` and `plugin/.claude-plugin/plugin.json`) releases it.
+## Configure
 
-### Running `orq serve`
+Everything is optional and in one file, `~/.config/orqestrai/config.toml`:
 
-On one machine, orq connects to Postgres itself, from libpq's `PG*` variables. To keep the
-login away from the sessions, run `orq serve` with them instead, and give the clients only
-`ORQ_SERVER`:
+```toml
+server   = "http://orq.example:7400"    # several machines: where orq serve runs
+sandbox  = "fence --"                   # task sessions start inside this command
+add_dirs = ["~/shared-skills"]          # more directories for every task session
 
-```bash
-PG...=... orq serve --socket /run/orq/orq.sock           # same machine: ORQ_SERVER=/run/orq/orq.sock
-PG...=... orq serve --host 10.0.0.2 --port 7400          # another machine: ORQ_SERVER=http://10.0.0.2:7400
+[slack]
+user   = "U0123"
+tokens = "~/.config/orq-bridge/slack.env"
+
+[projects.my-app]
+path          = "~/Projects/my-app"
+slack_channel = "C0123"
 ```
 
-The socket's directory must be writable by the server's user (a systemd `RuntimeDirectory=orq`
-makes `/run/orq`), and the socket's permissions decide who may call it. Over TCP the server
-does not authenticate callers: anyone who reaches the port can change any task. `--host`
-defaults to `127.0.0.1`; on another machine, listen on a private address and let the network
-admit only the sessions' machine (Tailscale ACLs, network policies). The image
-`ghcr.io/saculo/orqestrai:<version>` runs `orq serve --host 0.0.0.0 --port 7400`, so it needs
-the same.
+Secrets never go in this file; it only names the file that holds them. An environment
+variable `ORQ_<KEY>` (e.g. `ORQ_SERVER`) overrides a key.
+
+### One machine or several
+
+- **One machine:** set nothing. orq keeps its state in a SQLite file in `~/.orqestrai/`.
+- **Several machines:** run `orq serve` on one of them, as a process or a container
+  (`ghcr.io/saculo/orqestrai:<version>`):
+
+  ```bash
+  orq serve --socket /run/orq/orq.sock      # same machine: server = "/run/orq/orq.sock"
+  orq serve --host 10.0.0.2 --port 7400     # another: server = "http://10.0.0.2:7400"
+  ```
+
+  and set `server` on the others. Over TCP the server does not authenticate callers:
+  listen on a private address that only your machines reach. `--host` defaults to
+  `127.0.0.1`.
 
 ## Use
 
 In a project's git repository:
 
 ```bash
-orq new "what you want"     # id, branch, worktree, zellij tab running /orq:task <id>
+orq new "what you want"         # id, branch, worktree, zellij tab running /orq:task <id>
 orq new --playbook feature "…"  # the same, with the playbook chosen by you
-orq ls                      # all tasks
-orq show T-0001             # one task, its links and its last events
-orq open T-0001             # open the task's tab again, for example after a restart
-orq send T-0001 "go on"     # type a message into the task's session
+orq ls                          # all tasks
+orq show T-0001                 # one task, its links and its last events
+orq open T-0001                 # open the task's tab again, for example after a restart
+orq send T-0001 "go on"         # type a message into the task's session
 ```
 
 Always start a task session with `orq new` or `orq open`. They set `ORQ_TASK`, and the
-guard hooks are active only when it is set.
+guard hooks are active only when it is set. Inside zellij, `orq new` opens a new tab.
+Outside, it uses the zellij session `orq` if it exists, or prints the command to run.
 
-Inside zellij, `orq new` opens a new tab. Outside, it uses the zellij session
-`$ORQ_ZELLIJ_SESSION` (default `orq`) if it exists, or prints the command to run.
-`ORQ_SANDBOX` is a command the session starts inside, e.g. `fence --` for the
-[Fence](https://github.com/fencesandbox/fence) sandbox: `fence -- env ORQ_TASK=… claude …`.
-`ORQ_ADD_DIRS` lists directories, separated by `:`, that every task session also gets with
-`--add-dir`, e.g. a home repo with your shared skills: `ORQ_ADD_DIRS=$HOME/Projects/home`.
+A project's own skills, agents and hooks go in its `.claude/` as usual. Shared ones can go
+in a directory of your own, given to every task session with `add_dirs`.
 
-**Slack.** `orq bridge` connects a Slack app (Socket Mode) to the sessions: `@orq <request>`
-in a project's channel starts a task with its own thread, a session's questions
-(`orq ask`) are posted there, and your replies are typed into the session. It reads
-`SLACK_APP_TOKEN=xapp-…` and `SLACK_BOT_TOKEN=xoxb-…` lines from `ORQ_SLACK_TOKENS`
-(default `~/.config/orq-bridge/slack.env`; hide it from the sandbox), listens to
-`ORQ_SLACK_USER` only, and maps channels to checkouts with
-`ORQ_SLACK_CHANNELS=C0123=/path/to/repo,…`. The app, from a manifest (api.slack.com/apps,
-Create New App, From a manifest):
+**Verify** needs the app running. How to start it, locally or as a preview that something
+else deploys, is written in the project's `verify-<surface>` skill (DESIGN.md §5).
+
+### Slack (optional)
+
+`orq bridge`, on the machine of the sessions, connects a Slack app (Socket Mode) to them:
+`@orq <request>` in a project's channel starts a task with its own thread, a session's
+questions (`orq ask`) are posted there, and your replies are typed into the session. The
+tokens file has `SLACK_APP_TOKEN=xapp-…` and `SLACK_BOT_TOKEN=xoxb-…` lines; hide it from
+the sandbox. The app, from a manifest (api.slack.com/apps, Create New App, From a
+manifest):
 
 ```yaml
 display_information: { name: orq }
@@ -96,21 +107,32 @@ settings:
 Then install it to the workspace (the bot token), make an app-level token with
 `connections:write` (Basic Information), and `/invite @orq` in each project's channel.
 
-State is in Postgres: orq reads libpq's `PGHOST`, `PGPORT`, `PGDATABASE`, `PGUSER`,
-`PGPASSWORD` and `PGSSLMODE` (`require` by default; `verify-ca` with `PGSSLROOTCERT`).
-`orq guard` and `orq init` need no database. `orq serve` is the one process that connects,
-on a Unix socket (`--socket <path>`) or a TCP address (`--host <ip> --port <n>`): set
-`ORQ_SERVER` to the path or to `http://<ip>:<n>` and every other command goes through it,
-with no `PG*` variable. Worktrees are in
-`~/.orqestrai/worktrees/<repo>/` (`ORQ_HOME`). Tests start their own Postgres with
-testcontainers, so they need Docker. Task files are in `.orqestrai/tasks/<id>/` in the worktree.
+### Secret files (second lock)
 
-## Layout
+The guard hook blocks secret files only in task sessions. Deny rules in
+`~/.claude/settings.json` are enforced by Claude Code itself, in every session:
+
+```json
+{
+  "permissions": {
+    "deny": [
+      "Read(**/.env)", "Read(**/.env.*)", "Read(**/*.pem)", "Read(**/*.key)",
+      "Read(~/.ssh/**)", "Read(**/credentials*)"
+    ]
+  }
+}
+```
+
+## Develop
+
+From a checkout: `bun install`, `ln -s "$PWD/bin/orq" ~/.local/bin/orq`, and
+`claude --plugin-dir ./plugin`. `bun test` runs everything. A tag `v<version>` (as in
+`package.json` and `plugin/.claude-plugin/plugin.json`) releases it.
 
 ```
 src/                     orq: TypeScript, Effect 4, Bun. Mechanics only. src/main.ts starts it
-bin/orq                  runs src/main.ts from a checkout; releases ship a compiled binary
-test/                    CLI, server, guard and plugin tests (bun run test)
+bin/orq                  runs src/main.ts from a checkout
+test/                    CLI, server, guard and plugin tests (bun test)
 templates/               task files; `orq file <id> <NAME>` writes one (built into orq)
 plugin/                  the Claude Code plugin `orq`:
   skills/workflow/       task (the base: playbook, records, gates), playbook-feature,
@@ -123,22 +145,6 @@ plugin/                  the Claude Code plugin `orq`:
                          first), verifier (drives the app, never reads code), reviewer
   hooks/                 the guard hook (`orq guard`)
 src/guard/               `orq guard`: guards G1–G4 for task sessions (PreToolUse hook)
-```
-
-## Secrets on a VPS (second lock)
-
-The guard hook blocks secret files only in task sessions. On the VPS, also add deny rules
-to `~/.claude/settings.json`. Claude Code enforces them itself, in every session:
-
-```json
-{
-  "permissions": {
-    "deny": [
-      "Read(**/.env)", "Read(**/.env.*)", "Read(**/*.pem)", "Read(**/*.key)",
-      "Read(~/.ssh/**)", "Read(**/credentials*)"
-    ]
-  }
-}
 ```
 
 ## Credits
