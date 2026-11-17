@@ -68,7 +68,8 @@ describe("orq new", () => {
 
   test("with ORQ_ADD_DIRS, the session gets each directory with --add-dir", () => {
     const r = orq(["new", "x"], repo, { ORQ_ADD_DIRS: "/srv/home:/srv/shared" })
-    expect(r.out).toMatch(/ claude --model opus --add-dir \/srv\/home --add-dir \/srv\/shared '\/orq:task T-0001'/)
+    // --add-dir=<dir>: with a bare --add-dir, claude reads the prompt as one more directory
+    expect(r.out).toMatch(/ claude --model opus --add-dir=\/srv\/home --add-dir=\/srv\/shared '\/orq:task T-0001'/)
   })
 
   test("gives two tasks started at the same moment different ids", async () => {

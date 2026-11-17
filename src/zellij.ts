@@ -26,7 +26,7 @@ export const sessionCommand = (
   ...addDirs
     .split(":")
     .filter(Boolean)
-    .flatMap((dir) => ["--add-dir", dir]),
+    .map((dir) => `--add-dir=${dir}`), // one value each: a bare --add-dir would take the prompt as a directory too
   ...(resume === undefined ? [`/orq:task ${id}`] : ["--continue", resume]),
 ]
 
