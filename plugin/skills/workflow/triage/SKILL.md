@@ -25,7 +25,7 @@ Two checks:
   request's words ("night theme" is the same concept as "dark mode"). Note where you looked.
 - **Rejected before?** Read `.orqestrai/out-of-scope/*.md`. Match by concept, not by
   keyword. Also read what dropped tasks left in the archive (`orq clean` keeps it there):
-  `${ORQ_HOME:-~/.orqestrai}/archive/<repo folder name>/*/BRIEF.md` and
+  `${ORQ_DATA:-~/.orqestrai}/archive/<repo folder name>/*/BRIEF.md` and
   `.../archive/<repo folder name>/*/out-of-scope/*.md`.
 
 ## 2. Write neutral research questions

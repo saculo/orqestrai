@@ -8,7 +8,7 @@ import { ORQ } from "./orq.ts"
 let dir: string, repo: string
 
 const orq = (args: string[], cwd = repo, extra: Record<string, string> = {}) => {
-  const env = { ...process.env, ORQ_HOME: join(dir, "home"), ...extra }
+  const env = { ...process.env, ORQ_DATA: join(dir, "home"), ...extra }
   const p = Bun.spawnSync([...ORQ, ...args], { cwd, env, stdout: "pipe", stderr: "pipe" })
   return { code: p.exitCode, out: p.stdout.toString(), err: p.stderr.toString() }
 }

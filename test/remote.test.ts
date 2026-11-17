@@ -14,7 +14,7 @@ let dir: string, repo: string, socket: string, server: Subprocess
 const orq = (args: string[], extra: Record<string, string> = {}) => {
   const env: Record<string, string | undefined> = {
     ...withoutPg(),
-    ORQ_HOME: join(dir, "home"),
+    ORQ_DATA: join(dir, "home"),
     ORQ_SERVER: socket,
     ORQ_ZELLIJ_SESSION: "orq-test-none",
     ...extra,
