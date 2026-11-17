@@ -1,0 +1,7 @@
+base_branch = "main"
+
+# The quality gate in verify runs these, in this order (as CI does).
+[commands]
+types = "bun run check"
+lint = "bunx biome ci ."
+test = "bun test"
