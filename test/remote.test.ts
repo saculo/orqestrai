@@ -1,19 +1,18 @@
-// orq through `orq serve`: the CLI has ORQ_SERVER and no PG* variable, as a sandboxed session on
-// the VPS. The server alone has the database login. The same commands work.
-import { afterEach, beforeAll, beforeEach, describe, expect, test } from "bun:test"
+// orq through `orq serve`: the CLI has ORQ_SERVER and never opens the state file; the server alone
+// has it, in its own ORQ_DATA. The same commands work.
+import { afterEach, beforeEach, describe, expect, test } from "bun:test"
 import { existsSync, mkdirSync, mkdtempSync, rmSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import type { Subprocess } from "bun"
 import { ORQ } from "./orq.ts"
-import { freshDatabase, startPostgres } from "./pg.ts"
-import { startServer, withoutPg } from "./server.ts"
+import { startServer } from "./server.ts"
 
 let dir: string, repo: string, socket: string, server: Subprocess
 
 const orq = (args: string[], extra: Record<string, string> = {}) => {
   const env: Record<string, string | undefined> = {
-    ...withoutPg(),
+    ...process.env,
     ORQ_DATA: join(dir, "home"),
     ORQ_SERVER: socket,
     ORQ_ZELLIJ_SESSION: "orq-test-none",
@@ -23,8 +22,6 @@ const orq = (args: string[], extra: Record<string, string> = {}) => {
   const p = Bun.spawnSync([...ORQ, ...args], { cwd: repo, env, stdout: "pipe", stderr: "pipe" })
   return { code: p.exitCode, out: p.stdout.toString(), err: p.stderr.toString() }
 }
-
-beforeAll(startPostgres, 120_000)
 
 beforeEach(async () => {
   dir = mkdtempSync(join(tmpdir(), "orq-remote-"))
@@ -36,14 +33,14 @@ beforeEach(async () => {
     ["commit", "-q", "--allow-empty", "-m", "init"],
   ])
     Bun.spawnSync(["git", "-c", "user.name=t", "-c", "user.email=t@t", ...args], { cwd: repo })
-  server = await startServer(socket, await freshDatabase())
+  server = await startServer(socket, { ORQ_DATA: join(dir, "server") })
 })
 afterEach(() => {
   server.kill()
   rmSync(dir, { recursive: true, force: true })
 })
 
-describe("orq with ORQ_SERVER and no database login", () => {
+describe("orq with ORQ_SERVER", () => {
   test("new, state, link, show and ls go through the server", () => {
     const created = orq(["new", "Add search"])
     expect(created.code).toBe(0)
@@ -59,6 +56,8 @@ describe("orq with ORQ_SERVER and no database login", () => {
     expect(shown).toContain("link gh-issue o/r#3 (origin)")
     expect(shown).toContain("impl: IN PROGRESS")
     expect(orq(["ls"]).out).toContain("T-0001  impl    IN PROGRESS")
+    expect(existsSync(join(dir, "server", "state.db"))).toBe(true)
+    expect(existsSync(join(dir, "home", "state.db"))).toBe(false)
   })
 
   test("the playbook, set at new or later, goes through the server", () => {
@@ -85,7 +84,7 @@ describe("orq with ORQ_SERVER and no database login", () => {
 
   test("a server on a TCP address, as on another machine", async () => {
     const port = 20_000 + Math.floor(Math.random() * 20_000)
-    const tcp = await startServer(port, await freshDatabase())
+    const tcp = await startServer(port, { ORQ_DATA: join(dir, "server-tcp") })
     try {
       expect(orq(["new", "Over TCP"], { ORQ_SERVER: `http://127.0.0.1:${port}` }).out).toContain("T-0001")
       expect(orq(["ls"], { ORQ_SERVER: `http://127.0.0.1:${port}` }).out).toContain("T-0001")

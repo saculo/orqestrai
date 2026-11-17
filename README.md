@@ -49,7 +49,7 @@ know is an error.
 
 ### One machine or several
 
-- **One machine:** set nothing. orq keeps its state in a SQLite file in `~/.orqestrai/`.
+- **One machine:** set nothing. orq keeps its state in a SQLite file, `~/.orqestrai/state.db`.
 - **Several machines:** run `orq serve` on one of them, as a process or a container
   (`ghcr.io/saculo/orqestrai:<version>`):
 
@@ -58,7 +58,8 @@ know is an error.
   orq serve --host 10.0.0.2 --port 7400     # another: server = "http://10.0.0.2:7400"
   ```
 
-  and set `server` on the others. Over TCP the server does not authenticate callers:
+  and set `server` on the others. In the container the state is in
+  `/home/nonroot/.orqestrai`; give it a volume (`-v orq:/home/nonroot/.orqestrai`). Over TCP the server does not authenticate callers:
   listen on a private address that only your machines reach. `--host` defaults to
   `127.0.0.1`.
 

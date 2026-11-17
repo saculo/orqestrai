@@ -1,6 +1,6 @@
 {
   "name": "orqestrai",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "private": true,
   "license": "MIT",
   "type": "module",
@@ -11,16 +11,14 @@
   },
   "dependencies": {
     "@effect/platform-bun": "4.1.2",
+    "@effect/sql-sqlite-bun": "4.1.2",
     "effect": "4.1.2",
-    "shell-quote": "1.8.1",
-    "@effect/sql-pg": "4.1.2"
+    "shell-quote": "1.8.1"
   },
   "devDependencies": {
     "@biomejs/biome": "2.5.15",
-    "@testcontainers/postgresql": "12.2.1",
     "@types/bun": "1.4.4",
     "@types/shell-quote": "1.7.5",
-    "testcontainers": "12.2.1",
     "typescript": "6.0.3"
   },
   "overrides": {

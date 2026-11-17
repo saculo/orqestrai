@@ -1,14 +1,13 @@
 // orq's settings file (~/.config/orqestrai/config.toml, or ORQ_CONFIG): each key fills in
 // its ORQ_<KEY> variable, and a variable that is set wins.
-import { afterEach, beforeAll, beforeEach, describe, expect, test } from "bun:test"
+import { afterEach, beforeEach, describe, expect, test } from "bun:test"
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs"
 import { homedir, tmpdir } from "node:os"
 import { join } from "node:path"
 import { settingsEnv } from "../src/settings.ts"
 import { ORQ } from "./orq.ts"
-import { freshDatabase, startPostgres } from "./pg.ts"
 
-let dir: string, repo: string, config: string, pg: Record<string, string>
+let dir: string, repo: string, config: string
 
 const sh = (cmd: string[], cwd: string) => {
   const p = Bun.spawnSync(cmd, { cwd, stdout: "pipe", stderr: "pipe" })
@@ -17,19 +16,13 @@ const sh = (cmd: string[], cwd: string) => {
 
 const orq = (args: string[], toml: string, extra: Record<string, string> = {}) => {
   writeFileSync(config, toml)
-  const env = { ...process.env, ...pg, ORQ_CONFIG: config, ORQ_ZELLIJ_SESSION: "orq-test-none", ...extra } as Record<
-    string,
-    string | undefined
-  >
+  const env = { ...process.env, ORQ_CONFIG: config, ORQ_ZELLIJ_SESSION: "orq-test-none", ...extra } as Record<string, string | undefined>
   for (const k of ["ZELLIJ", "ORQ_DATA", "ORQ_SANDBOX", "ORQ_ADD_DIRS", "ORQ_MODEL"]) if (!(k in extra)) delete env[k]
   const p = Bun.spawnSync([...ORQ, ...args], { cwd: repo, env, stdout: "pipe", stderr: "pipe" })
   return { code: p.exitCode, out: p.stdout.toString(), err: p.stderr.toString() }
 }
 
-beforeAll(startPostgres, 120_000)
-
-beforeEach(async () => {
-  pg = await freshDatabase()
+beforeEach(() => {
   dir = mkdtempSync(join(tmpdir(), "orq-config-"))
   repo = join(dir, "proj")
   config = join(dir, "config.toml")
@@ -57,7 +50,7 @@ describe("the settings file", () => {
     rmSync(config, { force: true })
     const env: Record<string, string | undefined> = {
       ...process.env,
-      ...pg,
+
       ORQ_CONFIG: join(dir, "missing.toml"),
       ORQ_DATA: join(dir, "data"),
     }

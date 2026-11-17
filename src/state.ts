@@ -1,15 +1,15 @@
 // orq's state service (tasks), given only to the commands that read or write
 // state, so `orq init` and `orq file` never connect. With ORQ_SERVER set they go through
-// `orq serve` (src/remote.ts) and need no database password; without it they connect directly.
+// `orq serve` (src/remote.ts) and never open the file; without it they open $ORQ_DATA/state.db.
 import { Config, Effect, Layer, Option } from "effect"
 import { Command } from "effect/cli"
 import type { OrqConfig } from "./config.ts"
 import { Db } from "./db.ts"
 import type { OrqError } from "./domain.ts"
-import { Database } from "./pg.ts"
 import { Remote } from "./remote.ts"
+import { Database } from "./sqlite.ts"
 
-/** Db on a connected, migrated database. `orq serve` always uses this one. */
+/** Db on the open, migrated SQLite file. `orq serve` always uses this one. */
 export const Direct = Db.layer.pipe(Layer.provideMerge(Database))
 
 export const State = Layer.unwrap(
