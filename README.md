@@ -4,9 +4,6 @@ An orchestrated software factory with human gates. Each task runs a playbook, ch
 the agent or by you; the one playbook now, feature, is triage → plan → impl → verify →
 learn → ship. The design is in [DESIGN.md](DESIGN.md).
 
-> The npm package is not published yet (next release). Until then, install `orq` from a
-> checkout (Develop, below).
-
 ## What you need
 
 Claude Code, Bun, git, `gh` (logged in to GitHub) and zellij. Optional: Slack, a sandbox
@@ -16,7 +13,7 @@ machine.
 ## Install
 
 ```bash
-bun add -g orqestrai                    # the orq CLI and server
+bun add -g orqestrai                    # the orq CLI and server (Bun runs it)
 claude plugin marketplace add saculo/orqestrai
 claude plugin install orq@orqestrai     # skills, agents and the guard hook
 ```
@@ -128,7 +125,8 @@ The guard hook blocks secret files only in task sessions. Deny rules in
 
 From a checkout: `bun install`, `ln -s "$PWD/bin/orq" ~/.local/bin/orq`, and
 `claude --plugin-dir ./plugin`. `bun test` runs everything. A tag `v<version>` (as in
-`package.json` and `plugin/.claude-plugin/plugin.json`) releases it.
+`package.json` and `plugin/.claude-plugin/plugin.json`) releases it: the npm package, a
+compiled binary and the image.
 
 ```
 src/                     orq: TypeScript, Effect 4, Bun. Mechanics only. src/main.ts starts it

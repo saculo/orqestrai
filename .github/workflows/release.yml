@@ -2,7 +2,8 @@ name: release
 
 # A tag v<version> (the version in package.json and plugin/.claude-plugin/plugin.json) builds orq
 # as one executable, runs the whole test suite against that file, and attaches it to a release.
-# It also pushes the image ghcr.io/saculo/orqestrai:<version>, which runs `orq serve`.
+# It also pushes the image ghcr.io/saculo/orqestrai:<version>, which runs `orq serve`, and publishes
+# the npm package orqestrai (`bun add -g orqestrai`; the secret NPM_TOKEN, an npm automation token).
 # The plugin needs no build: Claude Code reads it from the repository at the tag.
 on:
   push:
@@ -53,3 +54,12 @@ jobs:
           docker build -t "$image" .
           docker run --rm "$image" --version
           docker push "$image"
+      - name: the npm package installs and runs
+        run: |
+          bun pm pack --destination "$RUNNER_TEMP"
+          BUN_INSTALL="$RUNNER_TEMP/bun" bun add -g "$RUNNER_TEMP"/orqestrai-*.tgz
+          "$RUNNER_TEMP/bun/bin/orq" --version
+      - name: npm
+        env:
+          NPM_CONFIG_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: bun publish --access public
