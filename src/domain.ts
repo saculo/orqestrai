@@ -1,6 +1,6 @@
 // The words of orqestrai: steps, statuses, tasks, links, events, and the one error the CLI reports.
 // Every other module imports these; nothing defines them twice. The schemas check rows read
-// from the database.
+// from the database, where times are ISO 8601 text.
 import { Schema } from "effect"
 
 export const STEPS = ["triage", "plan", "impl", "verify", "learn", "ship"] as const
@@ -26,8 +26,8 @@ export const Task = Schema.Struct({
   step: Step,
   status: Status,
   type: Schema.NullOr(Schema.String),
-  created_at: Schema.Date,
-  updated_at: Schema.Date,
+  created_at: Schema.DateFromString,
+  updated_at: Schema.DateFromString,
 })
 export type Task = typeof Task.Type
 
@@ -53,7 +53,7 @@ export type LinkRole = typeof LinkRole.Type
 export const TaskLink = Schema.Struct({ kind: Schema.String, ref: Schema.String, role: LinkRole })
 export type TaskLink = typeof TaskLink.Type
 
-export const TaskEvent = Schema.Struct({ at: Schema.Date, kind: Schema.String, detail: Schema.NullOr(Schema.String) })
+export const TaskEvent = Schema.Struct({ at: Schema.DateFromString, kind: Schema.String, detail: Schema.NullOr(Schema.String) })
 export type TaskEvent = typeof TaskEvent.Type
 
 /** A failure the user can act on. The CLI prints its message and exits 1. */

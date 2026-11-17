@@ -1,12 +1,11 @@
 // orq through its seam: the command line. Each test gets a fresh repo and ORQ_DATA.
-import { afterEach, beforeAll, beforeEach, describe, expect, test } from "bun:test"
+import { afterEach, beforeEach, describe, expect, test } from "bun:test"
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { ORQ } from "./orq.ts"
-import { freshDatabase, startPostgres } from "./pg.ts"
 
-let dir: string, repo: string, home: string, pg: Record<string, string>
+let dir: string, repo: string, home: string
 
 const sh = (cmd: string[], cwd: string) => {
   const p = Bun.spawnSync(cmd, { cwd, stdout: "pipe", stderr: "pipe" })
@@ -15,7 +14,7 @@ const sh = (cmd: string[], cwd: string) => {
 }
 
 const orq = (args: string[], cwd = repo, extra: Record<string, string> = {}) => {
-  const env = { ...process.env, ORQ_DATA: home, ...pg, ORQ_ZELLIJ_SESSION: "orq-test-none", ...extra } as Record<string, string | undefined>
+  const env = { ...process.env, ORQ_DATA: home, ORQ_ZELLIJ_SESSION: "orq-test-none", ...extra } as Record<string, string | undefined>
   delete env.ZELLIJ
   if (!("ORQ_SANDBOX" in extra)) delete env.ORQ_SANDBOX
   const p = Bun.spawnSync([...ORQ, ...args], { cwd, env, stdout: "pipe", stderr: "pipe" })
@@ -28,10 +27,7 @@ const worktreeOf = (id: string) => {
   return m[1].trim()
 }
 
-beforeAll(startPostgres, 120_000)
-
-beforeEach(async () => {
-  pg = await freshDatabase()
+beforeEach(() => {
   dir = mkdtempSync(join(tmpdir(), "orq-test-"))
   repo = join(dir, "proj")
   home = join(dir, "home")
@@ -73,7 +69,7 @@ describe("orq new", () => {
   })
 
   test("gives two tasks started at the same moment different ids", async () => {
-    const env = { ...process.env, ORQ_DATA: home, ...pg, ORQ_ZELLIJ_SESSION: "orq-test-none" } as Record<string, string | undefined>
+    const env = { ...process.env, ORQ_DATA: home, ORQ_ZELLIJ_SESSION: "orq-test-none" } as Record<string, string | undefined>
     delete env.ZELLIJ
     const start = (request: string) => Bun.spawn([...ORQ, "new", request], { cwd: repo, env, stdout: "pipe", stderr: "pipe" })
     const runs = [start("one"), start("two"), start("three")]
@@ -241,19 +237,21 @@ test("orq ls lists every task", () => {
   expect(out).toContain("second")
 })
 
-test("without a database, a state command says so and orq init still works", () => {
-  for (const k of Object.keys(pg)) delete pg[k]
-  const r = orq(["ls"])
-  expect(r.code).toBe(1)
-  expect(r.err).toContain("orq: no database: PGHOST is not set")
+test("the state is one SQLite file in ORQ_DATA, made on first use; orq init never makes it", () => {
   expect(orq(["init"]).code).toBe(0)
+  expect(existsSync(join(home, "state.db"))).toBe(false)
+  orq(["new", "first"])
+  expect(existsSync(join(home, "state.db"))).toBe(true)
 })
 
-test("refuses a TLS mode it cannot honour, before it connects", () => {
-  pg.PGSSLMODE = "verify-full"
-  expect(orq(["ls"]).err).toContain("PGSSLMODE=verify-full is not supported; use disable, require or verify-ca")
-  pg.PGSSLMODE = "verify-ca"
-  expect(orq(["ls"]).err).toContain("PGSSLMODE=verify-ca needs PGSSLROOTCERT")
-  pg.PGSSLROOTCERT = join(dir, "missing.pem")
-  expect(orq(["ls"]).err).toStartWith(`orq: database: cannot read PGSSLROOTCERT ${join(dir, "missing.pem")}`)
+test("parallel runs never share an id", async () => {
+  const env = { ...process.env, ORQ_DATA: home, ORQ_ZELLIJ_SESSION: "orq-test-none" } as Record<string, string | undefined>
+  delete env.ZELLIJ
+  const runs = Array.from(
+    { length: 6 },
+    (_, i) => Bun.spawn([...ORQ, "new", `task ${i}`], { cwd: repo, env, stdout: "pipe", stderr: "pipe" }).exited,
+  )
+  expect(await Promise.all(runs)).toEqual([0, 0, 0, 0, 0, 0])
+  const ids = [...orq(["ls"]).out.matchAll(/T-\d{4}/g)].map((m) => m[0])
+  expect(new Set(ids).size).toBe(6)
 })

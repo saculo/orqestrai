@@ -1,12 +1,11 @@
 // `orq bridge` against a fake Slack (its Web API and a Socket Mode WebSocket, on localhost) and a
 // fake `zellij` on PATH that logs its calls and answers like a session nobody is attached to.
-import { afterEach, beforeAll, beforeEach, describe, expect, test } from "bun:test"
+import { afterEach, beforeEach, describe, expect, test } from "bun:test"
 import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import type { Server, ServerWebSocket, Subprocess } from "bun"
 import { ORQ } from "./orq.ts"
-import { freshDatabase, startPostgres } from "./pg.ts"
 
 const FAKE_ZELLIJ = `#!/usr/bin/env bash
 printf '%s\\n' "$*" >> "$FAKE_ZELLIJ_DIR/log"
@@ -25,14 +24,14 @@ interface Posted {
   thread_ts?: string
 }
 
-let dir: string, repo: string, pg: Record<string, string>, bridge: Subprocess | undefined
+let dir: string, repo: string, bridge: Subprocess | undefined
 let slack: Server<undefined>, ws: ServerWebSocket<undefined> | undefined
 let posts: Posted[], acks: string[], envelopes: number
 
 const env = (extra: Record<string, string> = {}) => {
   const e: Record<string, string | undefined> = {
     ...process.env,
-    ...pg,
+
     ORQ_DATA: join(dir, "home"),
     ORQ_BRIDGE: join(dir, "bridge.sock"),
     ORQ_ZELLIJ_SESSION: "orq-bridge-test",
@@ -92,10 +91,7 @@ const startBridge = async () => {
   await until("the bridge to connect to Slack", () => ws !== undefined)
 }
 
-beforeAll(startPostgres, 120_000)
-
-beforeEach(async () => {
-  pg = await freshDatabase()
+beforeEach(() => {
   dir = mkdtempSync(join(tmpdir(), "orq-bridge-"))
   repo = join(dir, "proj")
   mkdirSync(repo)

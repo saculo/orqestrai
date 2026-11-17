@@ -1,9 +1,9 @@
-// The index of tasks in Postgres (src/pg.ts). Content lives in Markdown and git; this is only the index.
+// The index of tasks in SQLite (src/sqlite.ts). Content lives in Markdown and git; this is only the index.
 import { join } from "node:path"
 import { Context, Effect, Layer } from "effect"
 import { SqlClient } from "effect/sql/SqlClient"
 import { type LinkRole, type NewTask, OrqError, type Status, type Step, Task, TaskEvent, TaskLink, taskId } from "./domain.ts"
-import { asOrqError, rows } from "./pg.ts"
+import { asOrqError, rows } from "./sqlite.ts"
 
 const noTask = (id: string) => new OrqError({ message: `no task ${id}` })
 
@@ -34,10 +34,10 @@ export class Db extends Context.Service<
 
       const addEvent = (id: string, kind: string, detail: string) => sql`INSERT INTO events ${sql.insert({ task_id: id, kind, detail })}`
 
-      /** Locks the task's row for the rest of the transaction; fails when there is no such task. */
+      /** Fails when there is no such task. Inside a transaction, which holds the write lock. */
       const lockTask = (id: string) =>
         Effect.gen(function* () {
-          const found = yield* sql`SELECT id FROM tasks WHERE id = ${id} FOR UPDATE`
+          const found = yield* sql`SELECT id FROM tasks WHERE id = ${id}`
           if (found.length === 0) return yield* noTask(id)
         })
 
@@ -50,8 +50,7 @@ export class Db extends Context.Service<
 
       const create = ({ repo, title, slug, worktrees, base, type }: NewTask) =>
         Effect.gen(function* () {
-          yield* sql`LOCK TABLE tasks IN SHARE ROW EXCLUSIVE MODE`
-          const [next] = yield* sql<{ n: number }>`SELECT coalesce(max(substr(id, 3)::int), 0) + 1 AS n FROM tasks`
+          const [next] = yield* sql<{ n: number }>`SELECT coalesce(max(CAST(substr(id, 3) AS INTEGER)), 0) + 1 AS n FROM tasks`
           const id = taskId(next?.n ?? 1)
           const branch = `orq/${id}-${slug}`
           const row = { id, repo, title, branch, worktree: join(worktrees, `${id}-${slug}`), type: type ?? null }
@@ -63,14 +62,14 @@ export class Db extends Context.Service<
       const setState = (id: string, step: Step, status: Status, note: string) =>
         Effect.gen(function* () {
           yield* lockTask(id)
-          yield* sql`UPDATE tasks SET ${sql.update({ step, status })}, updated_at = now() WHERE id = ${id}`
+          yield* sql`UPDATE tasks SET ${sql.update({ step, status })}, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ') WHERE id = ${id}`
           yield* addEvent(id, `${step}: ${status}`, note)
         }).pipe(sql.withTransaction, asOrqError("set state"))
 
       const setType = (id: string, type: string) =>
         Effect.gen(function* () {
           yield* lockTask(id)
-          yield* sql`UPDATE tasks SET type = ${type}, updated_at = now() WHERE id = ${id}`
+          yield* sql`UPDATE tasks SET type = ${type}, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ') WHERE id = ${id}`
           yield* addEvent(id, "type", type)
         }).pipe(sql.withTransaction, asOrqError("set type"))
 
@@ -78,7 +77,7 @@ export class Db extends Context.Service<
         Effect.gen(function* () {
           yield* lockTask(id)
           yield* sql`INSERT INTO task_links ${sql.insert({ task_id: id, kind, ref, role })}
-                     ON CONFLICT (task_id, kind, ref) DO UPDATE SET role = EXCLUDED.role`
+                     ON CONFLICT (task_id, kind, ref) DO UPDATE SET role = excluded.role`
           yield* addEvent(id, "linked", `${kind} ${ref} (${role})`)
         }).pipe(sql.withTransaction, asOrqError("link"))
 

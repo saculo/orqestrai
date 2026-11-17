@@ -4,7 +4,7 @@ import { join } from "node:path"
 import { Config, Context, Layer } from "effect"
 
 const settings = Config.all({
-  /** Worktrees and the archive: $ORQ_DATA (the settings file's `data`). State is in Postgres (src/pg.ts). */
+  /** Worktrees, the archive and the state file: $ORQ_DATA (the settings file's `data`). */
   home: Config.String("ORQ_DATA").pipe(Config.withDefault(join(homedir(), ".orqestrai"))),
   /** the Slack bridge's socket, where `orq ask` sends a question (orq bridge) */
   bridge: Config.String("ORQ_BRIDGE").pipe(Config.withDefault(join(homedir(), ".orqestrai", "bridge.sock"))),
