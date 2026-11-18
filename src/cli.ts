@@ -10,7 +10,7 @@ import { bridge } from "./bridge.ts"
 import { clean } from "./clean.ts"
 import { OrqConfig } from "./config.ts"
 import { Db } from "./db.ts"
-import { LINK_ROLES, OrqError, STATUSES, STEPS, stamp, TaskType, TEMPLATES } from "./domain.ts"
+import { headline, LINK_ROLES, OrqError, STATUSES, STEPS, stamp, TaskType, TEMPLATES } from "./domain.ts"
 import { baseBranch, topLevel } from "./git.ts"
 import { install } from "./init.ts"
 import { syncMerged } from "./pr.ts"
@@ -117,23 +117,36 @@ const link = Command.make(
     }),
 ).pipe(Command.withDescription("link the task to an outside reference (origin | related)"), withState)
 
-const ask = Command.make("ask", { id, text: Argument.String("text") }, ({ id, text }) =>
-  Effect.gen(function* () {
-    const db = yield* Db
-    const task = yield* db.get(id)
-    yield* db.setState(id, task.step, "WAITING FOR ME", text.split("\n")[0] ?? "")
-    const { bridge } = yield* OrqConfig
-    const sent = yield* Effect.tryPromise(() =>
-      // a local Unix socket (mode 0600), not the network; the host name is a placeholder
-      // nosemgrep: rules.typescript.react.security.react-insecure-request
-      fetch("http://bridge/ask", { method: "POST", body: JSON.stringify({ id, text }), unix: bridge } as RequestInit),
-    ).pipe(
-      Effect.flatMap((r) => Effect.promise(() => r.text()).pipe(Effect.map((body) => (r.ok ? "posted in the task's Slack thread" : body)))),
-      Effect.orElseSucceed(() => "no Slack bridge; the question is only here"),
-    )
-    yield* Console.log(`${id}: WAITING FOR ME; ${sent}`)
-  }),
-).pipe(Command.withDescription("wait for the user: status WAITING FOR ME, the question in the task's Slack thread"), withState)
+const ask = Command.make(
+  "ask",
+  {
+    blocked: Flag.Boolean("blocked").pipe(
+      Flag.withDefault(false),
+      Flag.withDescription("the step cannot continue: status BLOCKED, not WAITING FOR ME"),
+    ),
+    id,
+    text: Argument.String("text"),
+  },
+  ({ blocked, id, text }) =>
+    Effect.gen(function* () {
+      const db = yield* Db
+      const task = yield* db.get(id)
+      const status = blocked ? "BLOCKED" : "WAITING FOR ME"
+      yield* db.setState(id, task.step, status, headline(text))
+      const { bridge } = yield* OrqConfig
+      const sent = yield* Effect.tryPromise(() =>
+        // a local Unix socket (mode 0600), not the network; the host name is a placeholder
+        // nosemgrep: rules.typescript.react.security.react-insecure-request
+        fetch("http://bridge/ask", { method: "POST", body: JSON.stringify({ id, text }), unix: bridge } as RequestInit),
+      ).pipe(
+        Effect.flatMap((r) =>
+          Effect.promise(() => r.text()).pipe(Effect.map((body) => (r.ok ? "posted in the task's Slack thread" : body))),
+        ),
+        Effect.orElseSucceed(() => "no Slack bridge; the question is only here"),
+      )
+      yield* Console.log(`${id}: ${status}; ${sent}`)
+    }),
+).pipe(Command.withDescription("wait for the user: status WAITING FOR ME (or BLOCKED), the message in the task's Slack thread"), withState)
 
 const send = Command.make("send", { id, text: Argument.String("text") }, ({ id, text }) =>
   Effect.gen(function* () {

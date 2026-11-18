@@ -52,8 +52,8 @@ When the behaviors are settled, propose the seams in one question:
 - existing seams before new ones.
 
 ```
-Q<n> - Seams: tests go at <seam A> (B1, B2, B3) and <seam B> (B4). <Why these.>
-Recommended: yes.
+**Q<n> - Seams:** tests go at <seam A> (B1, B2, B3) and <seam B> (B4). <Why these.>
+- Recommended: yes
 ```
 
 ## 4. Write the spec
@@ -88,5 +88,15 @@ here. Anything not decided goes under **Assumptions**.
 
 ## 5. Gate
 
-Show the user a short summary: the ACs, the operations and their classes, the waves, the
-checks, the risk, the assumptions. Ask for approval. That is the gate.
+Ask for approval, as a gate (`orq:task`, Messages). That is the gate:
+
+```
+**SPEC.md ready: <n> ACs, <n> waves, risk <low|medium|high>**
+- AC1 <behavior>; AC2 <…>
+- Operations: <name> (<class>), …
+- Checks: V1 e2e, V2 driven, V3 manual
+- Assumptions: <…, or none>
+
+**Q<n> - Approve SPEC.md?** Then impl starts.
+- Recommended: yes
+```

@@ -473,7 +473,7 @@ Skills and agents are named `orq:<name>` (`/orq:task`); the folder name is the n
 | `orq show <id>`            | one task, its links and its last events                     |
 | `orq link <id> <kind> <ref> [origin\|related]` | links the task to an outside reference |
 | `orq file <id> <NAME>`     | new task file from `templates/`                             |
-| `orq ask <id> "<text>"`    | status → WAITING FOR ME, posts to the task's Slack thread   |
+| `orq ask [--blocked] <id> "<text>"` | status → WAITING FOR ME (or BLOCKED), posts to the task's Slack thread |
 | `orq send <id> "<text>"`   | types text into the task's session (reopens it if closed)   |
 | `orq bridge`               | the Slack bridge (below)                                    |
 | `orq ls`                   | lists tasks and status; reads merged PRs from `gh`          |
@@ -503,9 +503,12 @@ where its tasks start.
 - `@bot <request>` at the top of a project's channel → a new task, as `orq new` in that
   checkout (`src/task.ts`). `@bot playbook=<name> <request>` sets its playbook. The thread under your message is the task's (link
   `slack-thread`, origin); the bridge answers there with the id and the branch.
-- `orq ask <id> "<text>"` (from a session) → status WAITING FOR ME, and the text goes to
-  the bridge over a local socket (mode 0600), which posts it in the thread,
-  mentioning you. A task started in a terminal gets its thread at its first question.
+- `orq ask [--blocked] <id> "<text>"` (from a session) → status WAITING FOR ME (or
+  BLOCKED), its headline as the note, and the text goes to the bridge over a local socket
+  (mode 0600), which posts it in the thread: the session's Markdown as written (Slack's
+  markdown block), under it a grey line with you, the id and the step. Every message
+  has one shape, in every step (`orq:task`, Messages): a headline, a short list,
+  `Q<n>` questions each with its recommendation, as in the terminal. A task started in a terminal gets its thread at its first question.
   Claude gets an action, never the token. Without a bridge, the question stays in the
   terminal.
 - Your reply in the thread → typed into the task's session as a paste, then Enter

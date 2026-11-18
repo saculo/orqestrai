@@ -33,14 +33,16 @@ Round 2 asks the new frontier.
    something works today is a fact, not a decision. Get it yourself. For more than a quick
    look, start `orq:researcher` with neutral questions. Never ask the user a fact.
    Only the decisions that depend on a running search wait for it.
-2. **Ask the whole frontier** in one message, in plain text:
+2. **Ask the whole frontier** in one message, in the shape `orq:task` gives (Messages):
 
    ```
-   Q<n> - <title>: <the question, with the options and what each one means>
-   Recommended: <your answer> - <why>
+   **<step> round <r>: <what these questions decide>**
+
+   **Q<n> - <title>:** <the question, with the options and what each one means>
+   - Recommended: <your answer> - <why>
    ```
 
-   Number the questions across rounds (Q1, Q2, … never restart at Q1). Word each question
+   Number the questions across rounds and steps (never restart at Q1). Word each question
    so that "yes" accepts your recommendation. A question whose answer depends on another
    question in the same round waits for the next round.
 3. Send the round with `orq ask` (see `orq:task`, Records) and end your turn.

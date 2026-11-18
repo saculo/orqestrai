@@ -66,9 +66,9 @@ Run `orq file <id> BRIEF`. Load `orq:grill`. Answers go into the brief's
 **Q1 is always your recommendation**, before any deep question:
 
 ```
-Q1 - My reading: <category>. <confirmed / not reproduced / already exists in X /
-rejected before in out-of-scope/Y>. Recommended: <do it, scoped to …> / <drop it, because …>.
-Proceed on this basis?
+**Q1 - My reading:** <category>. <confirmed / not reproduced / already exists in X /
+rejected before in out-of-scope/Y>. Proceed on this basis?
+- Recommended: <do it, scoped to …> / <drop it, because …>
 ```
 
 It stops the work early on a task the user would drop. Put the first frontier in the
@@ -85,7 +85,17 @@ Do not grill design (seams, data structures, tasks). That is plan.
 ## 6. Finish
 
 **Do it:** fill every section of `BRIEF.md`. Name interfaces, not file paths: paths go
-stale. Show the user a short summary of the brief and ask for approval. That is the gate.
+stale. Ask for approval, as a gate (`orq:task`, Messages). That is the gate:
+
+```
+**BRIEF.md ready: <the change in one line>**
+- Problem: <one line>
+- In scope: <…>; out: <…>
+- Decided: Q2 <…>, Q4 <…>
+
+**Q<n> - Approve BRIEF.md?** Then plan starts.
+- Recommended: yes
+```
 
 **Drop it** (the user agreed):
 

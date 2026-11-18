@@ -51,11 +51,28 @@ const call = (slack: Slack, token: string, method: string, body: object) =>
     Effect.flatMap((r) => (r.ok ? Effect.succeed(r) : Effect.fail(new OrqError({ message: `slack ${method}: ${r.error ?? "not ok"}` })))),
   )
 
-/** Posts a message, in a thread when `thread` is set; gives back its ts. */
-export const post = (slack: Slack, channel: string, text: string, thread?: string) =>
-  call(slack, slack.botToken, "chat.postMessage", { channel, text, ...(thread === undefined ? {} : { thread_ts: thread }) }).pipe(
-    Effect.map((r) => String(r.ts)),
-  )
+/** Posts a message, in a thread when `thread` is set; gives back its ts. With `blocks`, they are
+ * what Slack shows, and `text` is the notification's. */
+export const post = (slack: Slack, channel: string, text: string, thread?: string, blocks?: ReadonlyArray<object>) =>
+  call(slack, slack.botToken, "chat.postMessage", {
+    channel,
+    text,
+    ...(thread === undefined ? {} : { thread_ts: thread }),
+    ...(blocks === undefined ? {} : { blocks }),
+  }).pipe(Effect.map((r) => String(r.ts)))
+
+/** Slack renders all the `markdown` blocks of one message up to 12,000 characters together. */
+const MARKDOWN_MAX = 11_000
+
+/** A message as Slack shows it: the Markdown as written (a markdown block), then a small grey
+ * line (a context block, Slack's mrkdwn). */
+export const blocks = (markdown: string, footer: string) => [
+  {
+    type: "markdown",
+    text: markdown.length > MARKDOWN_MAX ? `${markdown.slice(0, MARKDOWN_MAX)}\n\n… the rest is in the task's session` : markdown,
+  },
+  { type: "context", elements: [{ type: "mrkdwn", text: footer }] },
+]
 
 /** One Socket Mode connection, until Slack or the network closes it. Every envelope is
  * acknowledged at once (Slack sends it again after 3 s otherwise); each event once. */

@@ -70,3 +70,11 @@ export const slugify = (text: string): string =>
 
 /** A time as orq prints it: UTC, to the second. */
 export const stamp = (d: Date): string => d.toISOString().slice(0, 19).replace("T", " ")
+
+/** A message's headline, as plain text: its first line that is not empty, without Markdown's
+ * heading marks and emphasis. It is the task's status note and Slack's notification text. */
+export const headline = (message: string) =>
+  (message.split("\n").find((l) => l.trim() !== "") ?? "")
+    .replace(/^\s*#+\s*/, "")
+    .replace(/\*\*|__/g, "")
+    .trim()

@@ -52,9 +52,19 @@ Read each report.
   - reversible and inside the agreed scope (a name, an internal shape, the order of
     work): decide it, add a line to **Impl notes** at the end of `SPEC.md`
     (`<W1.2>: <decision>, because <reason>`), and start that task again with the answer;
-  - it changes behavior, scope or a seam: ask the user (see `orq:task`: plain text,
-    numbered, your recommendation). Work that does not depend on it continues.
-- **Blocked:** record `orq state <id> impl BLOCKED "<reason>"`, tell the user, stop.
+  - it changes behavior, scope or a seam: ask the user (`orq:task`, Messages). Work that
+    does not depend on it continues.
+- **Blocked:** `orq ask --blocked <id>` with what blocks, what you tried, what is done, and
+  a question for the way forward. Stop:
+
+  ```
+  **Blocked in wave 2: the payments API rejects test keys**
+  - Tried: the sandbox key from .env.example, the staging URL
+  - Done: W1.1–W1.3 (wave 1)
+
+  **Q<n> - How do I get past it?** <the options>
+  - Recommended: a fake at the PaymentGateway seam - the spec allows it
+  ```
 - **Outside the task:** a file touched outside the task is allowed only when the report
   says why and it is needed. Otherwise revert that file and start the task again.
 

@@ -31,8 +31,8 @@ The playbooks are this plugin's skills named `playbook-*`. Each description says
 1. Read `REQUEST.md`. Compare it with each playbook's description.
 2. One fits clearly: run `orq playbook <id> <name>` (the name without `playbook-`), load it,
    and start its first step.
-3. None fits, or two do: `orq ask <id> "Which playbook?"`, with the options on the next
-   lines, the one you recommend and why. End your turn. Record the user's choice as above.
+3. None fits, or two do: ask (Messages) one question: which playbook, with the options
+   and the one you recommend and why. End your turn. Record the user's choice as above.
 
 You choose once. When a later step shows the task is of another kind (a bug fix that turns
 out to be a new feature), stop: `orq ask <id>` with what you found and the playbook you
@@ -42,13 +42,13 @@ playbook at the step that matches the files the task has.
 ## Records
 
 - When a step starts: `orq state <id> <step> "IN PROGRESS"`.
-- When you wait for the user: `orq ask <id> "<your message>"`, then end your turn. It sets
-  `WAITING FOR ME` (its first line is the note) and posts the message in the task's Slack
-  thread, where the user may answer. Pass the whole message, as you would write it here:
-  a first line that says what you need, then the questions and your recommendations.
-- When the user answers: `orq state <id> <step> "IN PROGRESS"`.
+- When you wait for the user: `orq ask <id> "<the message>"`, then end your turn. It sets
+  `WAITING FOR ME` (the headline is the note) and posts the message in the task's Slack
+  thread, where the user may answer. Pass the whole message (Messages), exactly as you
+  show it here.
 - When a step cannot continue (a tool fails, an input is missing):
-  `orq state <id> <step> BLOCKED "<reason>"`, tell the user, stop.
+  `orq ask --blocked <id> "<the message>"`: the same, with status `BLOCKED`. Stop.
+- When the user answers: `orq state <id> <step> "IN PROGRESS"`.
 - At the end of each step, commit its files, following `orq:git`.
 
 ## Gates
@@ -67,12 +67,35 @@ You never set `status: approved` by your own decision.
 - Ask only about decisions that are the user's: scope, product behavior, accepting a risk,
   the gates. Decide reversible things yourself, write the decision in the step's file, and
   continue.
-- Ask in plain text, not with a question tool, so the same question works in a terminal
-  and in a Slack thread. Number the questions. Give your recommended answer and the reason
-  for each. Triage and plan ask in rounds, as `orq:grill` says.
+- Ask in plain text, not with a question tool, so the same message works in a terminal
+  and in a Slack thread. Triage and plan ask in rounds, as `orq:grill` says.
 - Ask with `orq ask` (Records), and end your turn. The user's answer comes in this
   conversation, typed in by the Slack bridge or by them.
 - Report outcomes and decisions. Do not report progress or internal mechanics.
+
+## Messages
+
+Every message you send with `orq ask`, in every step, has one shape, in Markdown (the
+terminal and Slack both render it):
+
+```
+**<headline: what happened, or what you need>**
+- <the facts behind it, a short list from the step's file>
+
+**Q<n> - <title>:** <the question, with the options and what each one means>
+- Recommended: <your answer> - <why>
+```
+
+- The headline is one line; it is the task's status note. The list is optional.
+- A question only when the user decides something; a report (the PR is open) has none.
+- Number the questions across the whole task: continue from the highest `Q<n>` in the
+  task's files. Word each one so that "yes" accepts your recommendation.
+- A blank line between questions. Keep the message under 40 lines: the details are in
+  the step's file, so name it.
+- A gate is a question: the headline names the file, the list is its summary, and
+  `**Q<n> - Approve <file>?**` / `- Recommended: yes`.
+
+Each step skill shows its own example.
 
 After the playbook's last step, the task waits for the merge. `orq show` reads the PR from
 GitHub and sets `MERGED` by itself. When the user asks for changes on the PR, `orq:ship`
