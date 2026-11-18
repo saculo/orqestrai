@@ -89,8 +89,9 @@ else deploys, is written in the project's `verify-<surface>` skill (DESIGN.md §
 web, mobile and APIs, use [e2e](https://github.com/e2e-inc/e2e): `npx e2e init` in the
 project, then its `create-verification-skill` writes the skill. Its agent steps can run on
 your Claude subscription (`claudeCode` from `@e2e-dev/acp`). The machine of the task
-sessions needs the browser's system libraries once (`npx playwright install-deps`, as
-root); a sandbox must allow `cdn.playwright.dev` for the browser download.
+sessions needs, outside any sandbox, the browser's system libraries once
+(`npx playwright install-deps`, as root) and the browser of the project's e2e version
+(`npx @e2e-dev/web install chromium`, again after e2e is updated).
 
 ### Slack (optional)
 
