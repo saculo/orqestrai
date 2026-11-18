@@ -5,6 +5,7 @@
 
 ## Acceptance criteria
 - [x] **AC1** <text>. V1 `VERIFIED`: <evidence in one line>.
+  <the check's screenshot, when it has one: ![V1](<link to the file on the branch>)>
 
 ## For you to check
 <The manual checks from the verification plan, each with its steps, starting with how to

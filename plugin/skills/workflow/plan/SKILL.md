@@ -74,7 +74,8 @@ here. Anything not decided goes under **Assumptions**.
 - **Verification plan:** every AC is covered by a behavior test (impl) or a check
   (verify). The verifier does not read the code, so describe each check by what a user
   does and sees. **Kind:**
-  - `e2e` (the default): the verifier writes it as a test in the project's e2e module and
+  - `e2e` (the default): the verifier writes it as a test in the project's e2e suite (the
+    one the surface's verify skill names; e2e-inc/e2e for web, mobile and APIs) and
     commits it.
   - `driven`: the verifier drives the app by hand and keeps the evidence. Only when a test
     cannot judge it (how a screen looks) or costs far more than it protects. Say why.
