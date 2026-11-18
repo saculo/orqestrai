@@ -1,13 +1,20 @@
 // Settings from the environment, read once at the boundary.
 import { homedir } from "node:os"
-import { join } from "node:path"
+import { join, resolve } from "node:path"
 import { Config, Context, Layer } from "effect"
 
 const settings = Config.all({
   /** Worktrees, the archive and the state file: $ORQ_DATA (the settings file's `data`). */
-  home: Config.String("ORQ_DATA").pipe(Config.withDefault(join(homedir(), ".orqestrai"))),
+  // absolute: `orq serve` changes its working directory (src/dashboard.ts)
+  home: Config.String("ORQ_DATA").pipe(
+    Config.withDefault(join(homedir(), ".orqestrai")),
+    Config.map((p) => resolve(p)),
+  ),
   /** the Slack bridge's socket, where `orq ask` sends a question (orq bridge) */
-  bridge: Config.String("ORQ_BRIDGE").pipe(Config.withDefault(join(homedir(), ".orqestrai", "bridge.sock"))),
+  bridge: Config.String("ORQ_BRIDGE").pipe(
+    Config.withDefault(join(homedir(), ".orqestrai", "bridge.sock")),
+    Config.map((p) => resolve(p)),
+  ),
   /** zellij session used when orq runs outside zellij */
   session: Config.String("ORQ_ZELLIJ_SESSION").pipe(Config.withDefault("orq")),
   /** command the task session runs inside, e.g. "fence --" for the Fence sandbox; empty: none */

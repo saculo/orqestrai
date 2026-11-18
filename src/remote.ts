@@ -40,7 +40,8 @@ const db = Layer.effect(
       remove: (id) => call(tasks.remove({ params: { id } })),
       get: (id) => call(tasks.get({ params: { id } })),
       list: call(tasks.list()),
-      setState: (id, step, status, note) => call(tasks.setState({ params: { id }, payload: { step, status, note } })),
+      setState: (id, step, status, note, message) =>
+        call(tasks.setState({ params: { id }, payload: { step, status, note, ...(message === undefined ? {} : { message }) } })),
       events: (id, limit) => call(tasks.events({ params: { id }, query: { limit } })),
       link: (id, kind, ref, role) => call(tasks.link({ params: { id }, payload: { kind, ref, role } })),
       links: (id) => call(tasks.links({ params: { id } })),

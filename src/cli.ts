@@ -99,7 +99,8 @@ const show = Command.make("show", { id }, ({ id }) =>
     for (const [k, v] of fields) yield* Console.log(`${k.padStart(width)} = ${v}`)
     for (const l of yield* db.links(id)) yield* Console.log(`link ${l.kind} ${l.ref} (${l.role})`)
     yield* Console.log("")
-    for (const e of yield* db.events(id, 10)) yield* Console.log(`${stamp(e.at)}  ${e.kind.padEnd(22)}  ${e.detail ?? ""}`)
+    for (const e of (yield* db.events(id, 12)).filter((e) => e.kind !== "message").slice(0, 10))
+      yield* Console.log(`${stamp(e.at)}  ${e.kind.padEnd(22)}  ${e.detail ?? ""}`)
   }),
 ).pipe(Command.withDescription("one task and its last events"), withState)
 
@@ -132,7 +133,7 @@ const ask = Command.make(
       const db = yield* Db
       const task = yield* db.get(id)
       const status = blocked ? "BLOCKED" : "WAITING FOR ME"
-      yield* db.setState(id, task.step, status, headline(text))
+      yield* db.setState(id, task.step, status, headline(text), text)
       const { bridge } = yield* OrqConfig
       const sent = yield* Effect.tryPromise(() =>
         // a local Unix socket (mode 0600), not the network; the host name is a placeholder

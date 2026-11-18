@@ -16,7 +16,8 @@ export class Db extends Context.Service<
     /** Removes a task that could not be set up. */
     readonly remove: (id: string) => Effect.Effect<void, OrqError>
     readonly get: (id: string) => Effect.Effect<Task, OrqError>
-    readonly setState: (id: string, step: Step, status: Status, note: string) => Effect.Effect<void, OrqError>
+    /** With `message`, the whole message the session sent the user (`orq ask`), as its own event. */
+    readonly setState: (id: string, step: Step, status: Status, note: string, message?: string) => Effect.Effect<void, OrqError>
     readonly list: Effect.Effect<ReadonlyArray<Task>, OrqError>
     readonly events: (id: string, limit: number) => Effect.Effect<ReadonlyArray<TaskEvent>, OrqError>
     readonly link: (id: string, kind: string, ref: string, role: LinkRole) => Effect.Effect<void, OrqError>
@@ -59,11 +60,12 @@ export class Db extends Context.Service<
           return yield* get(id)
         }).pipe(sql.withTransaction, asOrqError("create"))
 
-      const setState = (id: string, step: Step, status: Status, note: string) =>
+      const setState = (id: string, step: Step, status: Status, note: string, message?: string) =>
         Effect.gen(function* () {
           yield* lockTask(id)
           yield* sql`UPDATE tasks SET ${sql.update({ step, status })}, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ') WHERE id = ${id}`
           yield* addEvent(id, `${step}: ${status}`, note)
+          if (message !== undefined) yield* addEvent(id, "message", message)
         }).pipe(sql.withTransaction, asOrqError("set state"))
 
       const setType = (id: string, type: string) =>

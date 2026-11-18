@@ -4,6 +4,7 @@ FROM oven/bun:1.4.4@sha256:1d22548f177f4ff38e0c15baa3c2c46c6c2060ba2d1bc573bb472
 WORKDIR /src
 COPY package.json bun.lock ./
 RUN bun install --frozen-lockfile --production
+COPY tsconfig.json ./
 COPY src src
 COPY templates templates
 RUN bun run build

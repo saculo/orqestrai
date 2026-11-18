@@ -64,6 +64,20 @@ know is an error.
   listen on a private address that only your machines reach. `--host` defaults to
   `127.0.0.1`.
 
+### Dashboard
+
+`orq serve` also serves a read-only dashboard at `/` of its TCP address: the board of tasks
+by step, what waits for you on top (with the whole message), and each task's files, verify
+screenshots and timeline. It works on a phone too. Give the server a port next to its socket,
+on an address only you reach (a private network such as Tailscale):
+
+```bash
+orq serve --socket ~/.orqestrai/orq.sock --host <private address> --port 7400
+```
+
+The task files and screenshots are read from the task's worktree, so they show when
+`orq serve` runs on the machine of the sessions.
+
 ## Use
 
 In a project's git repository:

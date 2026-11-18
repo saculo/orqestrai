@@ -14,7 +14,7 @@ export class TasksApi extends HttpApiGroup.make("tasks").add(
   HttpApiEndpoint.get("list", "/tasks", { success: Schema.Array(Task), error: OrqError }),
   HttpApiEndpoint.post("setState", "/tasks/:id/state", {
     params: id,
-    payload: Schema.Struct({ step: Step, status: Status, note: Schema.String }),
+    payload: Schema.Struct({ step: Step, status: Status, note: Schema.String, message: Schema.optional(Schema.String) }),
     error: OrqError,
   }),
   HttpApiEndpoint.get("events", "/tasks/:id/events", {

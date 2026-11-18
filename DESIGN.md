@@ -478,7 +478,7 @@ Skills and agents are named `orq:<name>` (`/orq:task`); the folder name is the n
 | `orq bridge`               | the Slack bridge (below)                                    |
 | `orq ls`                   | lists tasks and status; reads merged PRs from `gh`          |
 | `orq clean <id>`           | removes a merged or dropped task's worktree and branch      |
-| `orq serve`                | the state over HTTP, on a Unix socket or a TCP address      |
+| `orq serve`                | the state over HTTP, on a Unix socket, a TCP address or both; the dashboard at `/` |
 
 **Server and clients.** `orq serve` offers the `Db` service as an HTTP API (`src/api.ts`,
 Effect's `HttpApi`), on a Unix socket or a TCP address. With `server` set (a socket path
@@ -571,7 +571,13 @@ plain TS (no `bun:*` imports), because pi loads extensions under Node.
   Only the adapter that owns a kind reads its refs, so a new trigger adds no column.
 - Statuses: `TODO`, `IN PROGRESS`, `WAITING FOR ME`, `BLOCKED`, `DROPPED` (triage decided not to do it), `MERGED`.
 - Archive: `<data>/archive/<repo>/<id>/`, the files of dropped tasks after `orq clean`.
-- Dashboard (later): a small web app that reads the state through `orq serve`.
+- **Dashboard:** `orq serve` serves it at `/` (`src/dashboard.ts`, the page in
+  `src/dashboard/`: React, bundled by Bun itself, so there is no build step and it is
+  inside the compiled binary too). Read-only: a board by step, "needs you" on top with the
+  whole message (`orq ask` keeps it as a `message` event), and per task its files (from the
+  worktree, when it is on this machine), the verify screenshots and the timeline. It polls
+  `/board` every 5 s. `orq serve` listens on a socket and a TCP port at once, so the
+  sessions keep the socket and a browser uses the port, on a private address.
 
 ## 5. Verification environment
 
