@@ -27,7 +27,8 @@ their files (feature map included), the e2e suite they name, the e2e skill and i
    Other tasks may run their apps on this machine at the same time: take free ports, and
    name what you start after the task (`orq-<id>`, lower case), so two tasks never share
    an app.
-2. Start the app **once** and run Doctor. Every check runs on this one app. If it does
+2. Start the app **once** and run Doctor. If e2e says its browser is missing, install it
+   (`npx @e2e-dev/web install chromium`) and go on. Every check runs on this one app. If it does
    not start, every check is `INCONCLUSIVE` with the startup output as evidence. Stop
    there.
 3. **`e2e` checks.** In round 1, write one test per check in the verify skill's e2e
