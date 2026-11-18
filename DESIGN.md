@@ -161,7 +161,7 @@ rejected and does not go there.
   | Check | Claim | Surface | Kind | How | Evidence |
   |-------|-------|---------|------|-----|----------|
 
-  Kinds: `e2e` (a committed test in the project's e2e module; the default), `driven`
+  Kinds: `e2e` (a committed test in the project's e2e suite; the default), `driven`
   (the verifier drives the app by hand: how a screen looks, or a test that costs far
   more than it protects), `manual` (you, at the PR). `driven` and `manual` need a
   reason. Each behavior has one level, so an e2e behavior is not tested again lower.
@@ -238,7 +238,7 @@ Three gate tiers: **quality** (deterministic: build, types, lint, tests, scanner
 (you, at the PR). A gate is added only for a named risk.
 
 **E2E first.** A check that can be an e2e test *is* an e2e test: the test is the proof,
-and it stays in the project's e2e module as a regression test. A check that cannot be a
+and it stays in the project's e2e suite as a regression test. A check that cannot be a
 test is driven by hand. Only what no agent can judge goes to you. Nothing is proven twice.
 
 One round:
@@ -257,8 +257,10 @@ One round:
 ```
 
 - **Verifier** (Sonnet). Does not read the app's source, its other tests or the diff
-  (prompt rule). Reads the `verify-<surface>` skills (§5), the e2e module and
-  `.orqestrai/testing.md`. When a new e2e test fails, it drives that step by hand once:
+  (prompt rule). Reads the `verify-<surface>` skills (§5), the e2e suite they name and
+  `.orqestrai/testing.md`. With e2e-inc/e2e it writes a test while it walks the flow over
+  `e2e mcp`, and each run's evidence (screenshots, trace page, `report.json`) goes to the
+  task's `evidence/`. When a new e2e test fails, it drives that step by hand once:
   the app is wrong → `NOT VERIFIED`; the test is wrong → it fixes the test (at most 2
   times); unclear → `INCONCLUSIVE`. Verdict per check: `VERIFIED` / `NOT VERIFIED` /
   `INCONCLUSIVE`, with evidence. One app instance serves the e2e and the driven checks.
@@ -282,23 +284,19 @@ same failure repeats. After the third failed round, or a repeated root cause, th
 goes to `WAITING FOR ME` with a short summary from `VERIFY.md`. Non-critical findings go
 into the PR body, with no notification.
 
-The quality gate runs the commands in `.orqestrai/config.toml`, except `e2e`, which the
-verifier runs against the app:
+The quality gate runs the commands in `.orqestrai/config.toml`, with no app:
 
 ```toml
 [commands]
 types = "bun run check"
 lint  = "bunx biome ci ."
 test  = "bun test"
-e2e   = "bun test e2e/"
-
-[e2e]
-dir = "e2e/"
 ```
 
 Any command not set is skipped and reported as "not configured". It is never guessed,
-and a missing command never fails the gate. With no `[e2e] dir`, e2e checks are driven
-by hand and the round says "no e2e module".
+and a missing command never fails the gate. orq knows nothing about the e2e suite: the
+surface's verify skill names it and how to run it (§5). A surface whose skill names no
+suite has its e2e checks driven by hand, and the round says so.
 
 **Models:** fixed in the agent files (`model:` in the frontmatter): implementer and
 verifier Sonnet, reviewer Opus. Per-project models in `config.toml` come when a project
@@ -580,11 +578,16 @@ A surface is a part of the app that a check drives: `api`, `web`, `cli`. A proje
 one surface has one skill, named after that surface (`verify-api` for an API). Each check in the verification plan names its
 surface; the verifier loads only the skills of the surfaces in the task. The skill is a
 **driver's manual, not a test list**: what to check is in the task's `SPEC.md`, the
-committed e2e tests are in the project's e2e module. Plan asks you when a surface in the
+committed e2e tests are in the project's e2e suite. Plan asks you when a surface in the
 plan has no skill yet. Learn changes a skill only when the way to drive the app changed.
 
-Generated with the approach of pstack `create-verification-skill` (later; written by
-hand for now). One skill combines:
+**e2e-inc/e2e** drives the surfaces it can (web, iOS and Android, APIs): the project runs
+`npx e2e init` (e2e is pinned in its `package.json`), and the skill is generated with
+e2e's `create-verification-skill`. Its agent steps run on the Claude subscription through
+the `claudeCode` executor (`@e2e-dev/acp`); a step that a later check confirmed is
+replayed from `.e2e/cache/`, committed with the tests, so a rerun costs no model call
+until the app changes. A surface e2e cannot drive (a CLI) gets a skill written by hand.
+One skill combines:
 
 - **Launch / Doctor / Cleanup**: how to get a running app for this task, check it is
   usable, and tear down what the run started. The project decides, and orqestrai does
@@ -592,9 +595,10 @@ hand for now). One skill combines:
   branch, open a draft PR, and wait until a preview that something else deploys serves
   this commit (e.g. a `/version` endpoint that returns the SHA). Nothing in orq depends
   on which.
-- **Drive**: Playwright or e2e-inc/e2e for web, a PTY for CLI, HTTP for APIs.
-- **Evidence**: screenshots, transcripts, responses, into
-  `.orqestrai/tasks/<id>/evidence/`, and the summary into the PR description.
+- **Drive**: e2e-inc/e2e (a test, or live over `e2e mcp`); a PTY for a CLI.
+- **Evidence**: screenshots, trace pages, responses, into
+  `.orqestrai/tasks/<id>/evidence/`; the PR description shows each check's screenshot.
+  Videos stay out of git.
   **Visual comparison**: Playwright `toHaveScreenshot()`, baseline from `main`, treatment
   from the branch.
 - **Feature map**: one file per user-facing feature — how to reach it, how to drive it,
@@ -685,7 +689,10 @@ Settled 2026-11-02:
 - Triage: checks for existing work and the out-of-scope notes, a recommendation first, grilling
   as a design tree; no acceptance criteria in the brief (§3.0, §3.1).
 - Plan: grill first, confirm seams, then write `SPEC.md` as a synthesis (§3.2).
-- Test levels and rules (§3.3); gate tiers (§3.4).
+- Test levels and rules (§3.3); gate tiers (§3.4). Changed 2026-11-18: the e2e suite is e2e-inc/e2e's,
+  named by the verify skill, not orq's config (`[e2e]` and the `e2e` command are gone);
+  agent steps on the subscription (`claudeCode`), the replay cache committed, screenshots
+  in the PR, videos out of git (§3.4, §5).
 - No needs-info / ready-for-human outcomes: triage goes deep enough instead.
 
 Open:

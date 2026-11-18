@@ -85,7 +85,12 @@ A project's own skills, agents and hooks go in its `.claude/` as usual. Shared o
 in a directory of your own, given to every task session with `add_dirs`.
 
 **Verify** needs the app running. How to start it, locally or as a preview that something
-else deploys, is written in the project's `verify-<surface>` skill (DESIGN.md §5).
+else deploys, is written in the project's `verify-<surface>` skill (DESIGN.md §5). For
+web, mobile and APIs, use [e2e](https://github.com/e2e-inc/e2e): `npx e2e init` in the
+project, then its `create-verification-skill` writes the skill. Its agent steps can run on
+your Claude subscription (`claudeCode` from `@e2e-dev/acp`). The machine of the task
+sessions needs the browser's system libraries once (`npx playwright install-deps`, as
+root); a sandbox must allow `cdn.playwright.dev` for the browser download.
 
 ### Slack (optional)
 

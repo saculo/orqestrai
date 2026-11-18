@@ -1,13 +1,13 @@
 ---
 name: verify
-description: orqestrai verify step. Runs the quality gate from config.toml, then runs the verifier (e2e tests and driven checks against one running app, through the verify-<surface> skills) and the reviewer in fresh contexts, writes VERIFY.md, and sends failures back to impl at most 3 rounds. Loaded by orq:task; do not run it alone.
+description: orqestrai verify step. Runs the quality gate from config.toml, then runs the verifier (e2e tests and driven checks against one running app, through the verify-<surface> skills, e2e-inc/e2e for the surfaces it drives) and the reviewer in fresh contexts, writes VERIFY.md, and sends failures back to impl at most 3 rounds. Loaded by orq:task; do not run it alone.
 ---
 
 # orqestrai: verify
 
 Input: the approved `SPEC.md`, the commits on the task branch.
 Output: `.orqestrai/tasks/<id>/VERIFY.md`, evidence in `.orqestrai/tasks/<id>/evidence/`,
-e2e tests in the project's e2e module.
+e2e tests in the project's e2e suite (the one its verify skills name).
 
 Load `orq:principle-prove-it-works`, `orq:principle-escalate-only-decisions`.
 
@@ -22,8 +22,8 @@ under the old ones and set `round: <n>` in the frontmatter. Old rounds stay.
 ## 1. Quality gate
 
 Read `[commands]` in `.orqestrai/config.toml`. Run each command that is set, in the
-worktree, in this order: `types`, `lint`, `test`, then any other keys **except `e2e`**
-(the verifier runs that one, against the app).
+worktree, in this order: `types`, `lint`, `test`, then any other keys. No app runs here:
+the e2e suite is the verifier's, against the app.
 
 - Record each one: `pass` or `fail`, and the command with the last lines of its output.
 - A command that is **not set** is `not configured`. Do not guess one, and do not fail
@@ -42,7 +42,6 @@ Group the checks by **Surface**. Each surface has a driver skill,
 ```
 Task: <id>
 Verify skills: verify-<surface> (V1, V2), verify-<surface> (V3)
-E2E module: <[e2e] dir, or "none">. E2E command: <[commands] e2e, or "none">
 Round: <n>. Existing e2e tests of this task: <round 2+: their files; else "none">
 Notes on e2e tests from impl: <round 2+: gaps impl reported about a test; else "none">
 Evidence folder: .orqestrai/tasks/<id>/evidence/
@@ -53,8 +52,9 @@ Acceptance criteria:
 ```
 
 No code, no diff, no task list, no impl reports. A check whose surface has **no verify
-skill** is not sent: it is `INCONCLUSIVE` with "no verify-<surface> skill". With no
-e2e module, `e2e` checks are run as `driven`, and the round reports "no e2e module".
+skill** is not sent: it is `INCONCLUSIVE` with "no verify-<surface> skill". When a
+surface's skill names no e2e suite, its `e2e` checks are run as `driven`, and the round
+reports "no e2e suite for <surface>".
 Manual checks are not sent; they wait for the user at the PR.
 
 **`orq:reviewer`**:
@@ -69,9 +69,13 @@ Nothing else: not the impl reports, not the verifier's results.
 
 ## 3. After the verifier
 
-- **E2E tests:** commit the files the verifier wrote or changed in the e2e module, also
-  when they fail (they are the spec of the check): `test(<id>): e2e for AC1, AC2`.
-  Nothing outside the e2e module and the evidence folder may change. Revert anything else.
+- **E2E tests:** commit the files the verifier wrote or changed in the e2e suite, and
+  its replay cache (e2e: `.e2e/cache/`), also when they fail (they are the spec of the
+  check): `test(<id>): e2e for AC1, AC2`. Nothing outside the e2e suite, its cache and
+  the evidence folder may change. Revert anything else.
+- **Evidence:** keep the screenshots, the trace pages (`trace.md`) and `report.json`.
+  Videos stay out of git (they would stay in the history for good): make sure
+  `.gitignore` has `.orqestrai/tasks/*/evidence/**/*.webm`; add the line when it does not.
 - **The app:** the verifier stops what it started. If it reports an app still running,
   stop it with the stop command it gives.
 

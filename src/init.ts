@@ -14,11 +14,6 @@ const COMMANDS = `
 # types = "bun run check"
 # lint = "bunx biome ci ."
 # test = "bun test"
-# e2e = "bun test e2e/"   # run by the verifier against the running app, not by the gate
-
-# The project's e2e module. The verifier writes and owns these tests; impl never changes them.
-[e2e]
-# dir = "e2e/"
 `
 
 /** Writes .orqestrai/config.toml unless it exists; true when it wrote it. */

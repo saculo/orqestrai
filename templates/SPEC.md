@@ -44,7 +44,7 @@ done.>
 |-------|-------|---------|------|---------------------------------|----------|
 | V1    | AC1   | api     | e2e  | <steps>                         | <the e2e test; a response> |
 
-<!-- Kind: e2e (a committed test, the default) | driven (the verifier drives the app by
+<!-- Kind: e2e (a committed test in the e2e suite, the default) | driven (the verifier drives the app by
 hand; say why it cannot be a test) | manual (the user, at the PR; say why). -->
 
 <!-- Surface: the part of the app a check drives (api, web, cli, …). Each surface has a

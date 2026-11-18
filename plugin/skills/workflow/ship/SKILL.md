@@ -37,7 +37,9 @@ are now. Copy, do not invent:
 
 - **What and why:** from `BRIEF.md`.
 - **Acceptance criteria:** each AC from `SPEC.md`, with the verdict and one line of
-  evidence from the last round of `VERIFY.md`.
+  evidence from the last round of `VERIFY.md`, and the check's screenshot when it has
+  one, linked to the file on the pushed branch:
+  `![V1](https://github.com/<owner>/<repo>/blob/<sha>/<path>?raw=true)`.
 - **For you to check:** each check from the verification plan with Kind = manual,
   with its steps. These are for the user. Nobody ran them.
 - **Verify:** the number of rounds, the last quality gate, what the review found and
