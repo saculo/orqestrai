@@ -13,21 +13,21 @@ Load `orq:git`, `orq:principle-prove-it-works`.
 
 ## 1. Rebase
 
-1. `git remote` must name a remote. If none: `orq state <id> ship BLOCKED "no git
-   remote"`, tell the user, stop.
+1. `git remote` must name a remote. If none: `orq ask --blocked <id>` (`orq:task`,
+   Messages), headline `**No git remote**`, and stop.
 2. `git fetch origin <base>`, then `git rebase origin/<base>`.
 3. On a conflict, follow `orq:git`. If the resolution changes behavior, stop:
-   `orq ask <id> "rebase conflict in <files>"`, with the conflict and your recommendation
-   on the next lines.
+   ask (`orq:task`, Messages): headline `**Rebase conflict in <files>**`, the conflict as
+   the list, and a question with your recommendation.
 
 ## 2. Quality gate, again
 
 Run `[commands]` from `.orqestrai/config.toml`, as `orq:verify` step 1 says. The base
 branch may have changed under the task.
 
-If a command fails: do not open the PR. Run `orq ask <id> "<command> fails after rebase"`,
-with the last lines of its output and one recommended way forward (another impl round, or
-a fix you name) on the next lines. Stop.
+If a command fails: do not open the PR. Ask (`orq:task`, Messages): headline
+`**<command> fails after rebase**`, the last lines of its output, and a question with one
+recommended way forward (another impl round, or a fix you name). Stop.
 
 ## 3. Write the PR body
 
@@ -58,8 +58,14 @@ Keep it short. A reviewer reads it in two minutes. Commit it: `docs(<id>): ship`
    main change.
 3. `gh pr create --base <base> --title "<title>" --body-file .orqestrai/tasks/<id>/PR.md`.
 4. `orq link <id> gh-pr <url>`.
-5. `orq ask <id> "PR <url>: review and merge"`, and on the next lines, in a few lines:
-   the manual checks waiting for the user and the number of open findings. Stop.
+5. `orq ask <id>` with the report (`orq:task`, Messages; no question). Stop:
+
+   ```
+   **PR #12 ready: review and merge** <url>
+   - ✅ AC1 ✅ AC2 ✅ AC3 (screenshots in the PR)
+   - Manual checks for you: <…, or none>
+   - Open findings: <n> (<the most serious, in a few words>)
+   ```
 
 ## After the PR is open
 

@@ -99,18 +99,28 @@ round before.
 ## 5. Decide
 
 - **A missing skill** (any check, whatever else happened): the round cannot pass. Finish
-  the round as below, but instead of passing, run `orq ask <id> "no verify-<surface> skill
-  for V3"`, asking on the next lines: write the skill (then run verify again), or change
-  the check to `manual` in `SPEC.md` (then it is theirs at the PR).
+  the round as below, but instead of passing, ask (`orq:task`, Messages): headline
+  `**No verify-<surface> skill for V3**`, and a question: write the skill (then run verify
+  again), or change the check to `manual` in `SPEC.md` (then it is theirs at the PR).
 - **No failing items:** `status: passed`. Continue with the next step of the task's playbook.
 - **Failing items, round < 3, and no root cause repeated from the round before:**
   `status: failed`, outcome "back to impl: <items>". Run
   `orq state <id> impl "IN PROGRESS" "verify round <n>: <count> items"` and continue
   with `orq:impl` round 2+.
 - **Round 3 failed, or a root cause repeated:** `status: escalated`. Run
-  `orq ask <id> "<one line>"`, and on the next lines, in a few lines: what passed, what
-  still fails, the repeated cause, and your recommendation (change the spec, accept a
-  risk, or one more round with a different approach).
+  ask (`orq:task`, Messages): the round's verdicts as the list, the repeated cause, and a
+  question: change the spec, accept a risk, or one more round with a different approach.
+
+  ```
+  **Verify round 3: 2 of 5 checks fail, I'm stopping**
+  - ✅ V1 AC1 a booked slot cannot be booked again
+  - ❌ V3 AC3 expected "cancelled", saw an error page
+  - ❌ quality gate: lint, 2 errors in src/booking.ts
+  - Repeated cause: check:V3:POST /bookings/:id/cancel 500
+
+  **Q<n> - How do we go on?** <the options>
+  - Recommended: one more round on V3 - the error is in one handler
+  ```
 
 Commit `VERIFY.md` and the evidence: `docs(<id>): verify round <n>`.
 

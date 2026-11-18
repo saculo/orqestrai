@@ -13,9 +13,9 @@ import { Command } from "effect/cli"
 import type { ChildProcessSpawner } from "effect/process/ChildProcessSpawner"
 import { OrqConfig } from "./config.ts"
 import { Db } from "./db.ts"
-import { OrqError } from "./domain.ts"
+import { headline, OrqError } from "./domain.ts"
 import { baseBranch } from "./git.ts"
-import { listen, post, type Slack, type SlackEvent } from "./slack.ts"
+import { blocks, listen, post, type Slack, type SlackEvent } from "./slack.ts"
 import { withState } from "./state.ts"
 import { startTask } from "./task.ts"
 import { ensureSession, sendToTask } from "./zellij.ts"
@@ -89,7 +89,13 @@ const bridge = Command.make("bridge", {}, () =>
         const asked = withPlaybook(request(e.text))
         const { task, tab } = yield* startTask(root, asked.request, asked.playbook)
         yield* db.link(task.id, "slack-thread", threadRef(e.channel, e.ts), "origin")
-        yield* post(slack, e.channel, `${task.id} started: \`${task.branch}\`. ${tab.split("\n")[0]}`, e.ts)
+        yield* post(
+          slack,
+          e.channel,
+          `${task.id} started: \`${task.branch}\``,
+          e.ts,
+          blocks(`**${task.id} started:** \`${task.branch}\``, tab.split("\n")[0] ?? ""),
+        )
       }).pipe(Effect.catch(reportTo(e.channel, e.ts)))
 
     const reply = (e: SlackEvent, thread: string) =>
@@ -121,7 +127,14 @@ const bridge = Command.make("bridge", {}, () =>
           yield* db.link(id, "slack-thread", ref, "related")
         }
         const [channel = "", thread] = ref.split("/", 2)
-        yield* post(slack, channel, `<@${user}> ${text}`, thread)
+        const asks = task.status === "BLOCKED" ? "blocked · reply in this thread" : "reply in this thread"
+        yield* post(
+          slack,
+          channel,
+          `<@${user}> ${id}: ${headline(text)}`,
+          thread,
+          blocks(text, `<@${user}> · ${id} · ${task.step} · ${asks}`),
+        )
       })
 
     const services = yield* Effect.context<Db | OrqConfig | ChildProcessSpawner>()

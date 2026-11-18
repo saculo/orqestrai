@@ -22,6 +22,7 @@ interface Posted {
   channel: string
   text: string
   thread_ts?: string
+  blocks?: unknown[]
 }
 
 let dir: string, repo: string, bridge: Subprocess | undefined
@@ -148,7 +149,8 @@ describe("orq bridge", () => {
     await until("the reply in the thread", () => posts.length > 0)
 
     expect(posts[0]).toMatchObject({ channel: "C1", thread_ts: "100.1" })
-    expect(posts[0]?.text).toContain("T-0001 started: `orq/T-0001-add-search`")
+    expect(posts[0]?.text).toBe("T-0001 started: `orq/T-0001-add-search`")
+    expect(posts[0]?.blocks?.[0]).toEqual({ type: "markdown", text: "**T-0001 started:** `orq/T-0001-add-search`" })
     expect(acks).toEqual(["env-1"])
     expect(orq(["show", "T-0001"]).out).toContain("link slack-thread C1/100.1 (origin)")
     // nobody attached: the tab, then its pane by the tab's id
@@ -194,15 +196,37 @@ describe("orq bridge", () => {
     expect(zellijLog()).toMatch(/new-pane --tab-id 1 .* claude --model opus --continue use the new API/)
   })
 
-  test("orq ask posts the question in the task's thread, mentioning you, and sets WAITING FOR ME", async () => {
+  test("orq ask posts the message in the task's thread as written (Markdown), mentioning you, and sets WAITING FOR ME", async () => {
     await startBridge()
     mention("Add search", "100.1")
     await until("the task", () => posts.length > 0)
 
-    const asked = await orqAsync(["ask", "T-0001", "1. Which index?\nI recommend the GIN one."])
+    const message = "**Triage round 1: the index**\n\n**Q2 - Index:** GIN or B-tree?\n- Recommended: GIN - full text"
+    const asked = await orqAsync(["ask", "T-0001", message])
     expect(asked.out).toContain("posted in the task's Slack thread")
-    expect(posts[1]).toEqual({ channel: "C1", thread_ts: "100.1", text: "<@U1> 1. Which index?\nI recommend the GIN one." })
-    expect(orq(["show", "T-0001"]).out).toMatch(/status = WAITING FOR ME[\s\S]*triage: WAITING FOR ME\s+1\. Which index\?/)
+    expect(posts[1]).toEqual({
+      channel: "C1",
+      thread_ts: "100.1",
+      text: "<@U1> T-0001: Triage round 1: the index",
+      blocks: [
+        { type: "markdown", text: message },
+        { type: "context", elements: [{ type: "mrkdwn", text: "<@U1> · T-0001 · triage · reply in this thread" }] },
+      ],
+    })
+    expect(orq(["show", "T-0001"]).out).toMatch(/status = WAITING FOR ME[\s\S]*triage: WAITING FOR ME\s+Triage round 1: the index/)
+  })
+
+  test("orq ask --blocked sets BLOCKED and says so under the message", async () => {
+    await startBridge()
+    mention("Add search", "100.1")
+    await until("the task", () => posts.length > 0)
+
+    expect((await orqAsync(["ask", "--blocked", "T-0001", "**No git remote**"])).out).toContain("T-0001: BLOCKED; posted")
+    expect(posts[1]?.blocks?.[1]).toEqual({
+      type: "context",
+      elements: [{ type: "mrkdwn", text: "<@U1> · T-0001 · triage · blocked · reply in this thread" }],
+    })
+    expect(orq(["show", "T-0001"]).out).toMatch(/status = BLOCKED[\s\S]*triage: BLOCKED\s+No git remote/)
   })
 
   test("a task started in a terminal gets its thread at its first question", async () => {
@@ -212,7 +236,7 @@ describe("orq bridge", () => {
     expect((await orqAsync(["ask", "T-0001", "Which provider?"])).out).toContain("posted")
     expect(posts).toEqual([
       { channel: "C1", text: "T-0001: Fix login" },
-      { channel: "C1", thread_ts: "201.000", text: "<@U1> Which provider?" },
+      { channel: "C1", thread_ts: "201.000", text: "<@U1> T-0001: Which provider?", blocks: expect.any(Array) },
     ])
     expect(orq(["show", "T-0001"]).out).toContain("link slack-thread C1/201.000 (related)")
   })
