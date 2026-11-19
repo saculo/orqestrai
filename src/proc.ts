@@ -1,4 +1,4 @@
-// Running other programs (git, zellij). A non-zero exit is an OrqError.
+// Running other programs (git, hc). A non-zero exit is an OrqError.
 import { Effect, Stream } from "effect"
 import { ChildProcess } from "effect/process"
 import { OrqError } from "./domain.ts"

@@ -17,10 +17,9 @@ const run = (args: string[]) => {
     ...process.env,
     ORQ_DATA: join(dir, "home"),
     ORQ_SERVER: socket,
-    ORQ_ZELLIJ_SESSION: "orq-test-none",
+    ORQ_HC: "orq-test-no-hc",
     ORQ_BRIDGE: join(dir, "no-bridge.sock"),
   }
-  delete env.ZELLIJ
   const p = Bun.spawnSync([...ORQ, ...args], { cwd: repo, env, stdout: "pipe", stderr: "pipe" })
   return { code: p.exitCode, stdout: p.stdout.toString(), stderr: p.stderr.toString() }
 }

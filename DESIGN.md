@@ -337,8 +337,8 @@ task's PR and set `MERGED` when it is merged (no webhook, no daemon; when `gh` f
 task stays as it is). Changes you ask for at the PR go through impl → verify → ship again,
 which updates the body with `gh pr edit`.
 
-`orq clean <id>` (you run it; the guard blocks it in a task session) removes the
-worktree and the local branch of a `MERGED` or `DROPPED` task. The task row, its links and
+`orq clean <id>` (you run it; the guard blocks it in a task session) ends the task's
+session and removes the worktree and the local branch of a `MERGED` or `DROPPED` task. The task row, its links and
 its events stay. It refuses when the worktree has uncommitted changes, or when the branch
 has commits the PR does not have. A merged task's files are in the base branch already;
 a dropped task is never merged, so its task folder and the out-of-scope notes on its
@@ -387,17 +387,19 @@ orq knows no machines. One setting decides how the pieces find each other: `serv
 
 The pieces:
 
-- **Task sessions**: Claude Code with the orqestrai plugin, one per task, in a **zellij
-  tab**, in the task's own **git worktree**, inside the sandbox command you choose (or
-  none). You can attach to a tab at any time. No fleet-level agent in v1.
+- **Task sessions**: Claude Code with the orqestrai plugin, one per task, in a
+  **herdr-core terminal** (`orq-<id>`), in the task's own **git worktree**, inside the
+  sandbox command you choose (or none). It stays alive with nobody watching; you attach
+  with `hc attach` or the Herdr app (desktop or phone, over SSH) at any time. No
+  fleet-level agent in v1.
 - **`orq serve`** (optional): the state for every machine, over HTTP. It only touches its
   database and never runs a command.
 - **`orq bridge`** (optional): Slack. It runs on the machine of the sessions, because it
-  types into their tabs.
+  types into their terminals.
 - **The app under test**: started by the verifier, or deployed by something else (a
   preview). The project's `verify-<surface>` skill says which (§5).
 
-Required: Claude Code, Bun, git, `gh` (GitHub) and zellij. Slack, a sandbox, a second
+Required: Claude Code, Bun, git, `gh` (GitHub) and herdr-core (`hc`). Slack, a sandbox, a second
 machine, containers, Kubernetes and CI are optional; orqestrai does not know about them.
 My own setup (servers, k3s, Argo CD, OpenBao, Tailscale, a home repo of shared skills)
 is my own repositories' business, not orqestrai's.
@@ -428,7 +430,7 @@ sandbox  = "fence --"                   # a command prefix for task sessions; un
 add_dirs = ["~/shared-skills"]          # more directories for every task session (--add-dir)
 model    = "opus"                       # the task session's model
 data     = "~/.orqestrai"               # worktrees, archive, the local SQLite file
-zellij_session = "orq"                  # the zellij session for tabs when orq runs outside zellij
+hc       = "hc"                         # the herdr-core command, which keeps the task sessions
 
 [slack]
 user     = "U0123"                      # the bridge listens to this user only
@@ -453,7 +455,7 @@ example a home directory whose `CLAUDE.md` lists your projects).
 ### The `orq` CLI
 
 TypeScript on Bun, with Effect 4 (`src/`). Rule: **the code does mechanics only** —
-ids, state, worktrees, tabs, Slack. Routing, gates, step order and the choice of
+ids, state, worktrees, sessions, Slack. Routing, gates, step order and the choice of
 playbook stay in the skills. Size budget: about 150 lines per module. `src/domain.ts` is the one definition of
 steps, statuses and task fields. Tests drive the CLI (`test/`).
 
@@ -466,8 +468,8 @@ Skills and agents are named `orq:<name>` (`/orq:task`); the folder name is the n
 |----------------------------|-------------------------------------------------------------|
 | `orq init`                 | creates `.orqestrai/config.toml`                            |
 | `orq guard`                | the PreToolUse guard hook (§6)                              |
-| `orq new [--playbook <name>] "<request>"` | task id, task row, worktree, branch, zellij tab |
-| `orq open <id>`            | opens the task's tab again (after a restart)                |
+| `orq new [--playbook <name>] "<request>"` | task id, task row, worktree, branch, session |
+| `orq open <id>`            | starts the task's session again (after a restart)           |
 | `orq state <id> <step> <status> [note]` | updates the task row, adds an event            |
 | `orq playbook <id> <name>` | records the playbook the task runs                          |
 | `orq show <id>`            | one task, its links and its last events                     |
@@ -477,7 +479,7 @@ Skills and agents are named `orq:<name>` (`/orq:task`); the folder name is the n
 | `orq send <id> "<text>"`   | types text into the task's session (reopens it if closed)   |
 | `orq bridge`               | the Slack bridge (below)                                    |
 | `orq ls`                   | lists tasks and status; reads merged PRs from `gh`          |
-| `orq clean <id>`           | removes a merged or dropped task's worktree and branch      |
+| `orq clean <id>`           | ends a merged or dropped task's session, removes its worktree and branch |
 | `orq serve`                | the state over HTTP, on a Unix socket, a TCP address or both; the dashboard at `/` |
 
 **Server and clients.** `orq serve` offers the `Db` service as an HTTP API (`src/api.ts`,
@@ -495,8 +497,8 @@ in keeps the commands, the guard and the tests the same for every caller.
 
 Optional. One long-running process, `orq bridge` (`src/bridge.ts`; Socket Mode, so no open
 port; no SDK, no LLM), on the sessions' machine, outside the sandbox. It reads the Slack
-tokens from the file `[slack] tokens` names, never from its environment, so the zellij
-session it starts and the task sessions in it do not inherit them. It listens to
+tokens from the file `[slack] tokens` names, never from its environment, so the task
+sessions it starts do not inherit them (herdr-core gives them its own login environment). It listens to
 `[slack] user` only, in the channels of `[slack] channels`, each mapped to the checkout
 where its tasks start.
 
@@ -512,11 +514,12 @@ where its tasks start.
   Claude gets an action, never the token. Without a bridge, the question stays in the
   terminal.
 - Your reply in the thread → typed into the task's session as a paste, then Enter
-  (`orq send`). If its tab is closed, the session opens again with
+  (`orq send`, `hc send`). If its session has ended, it opens again with
   `claude --continue <reply>`: the worktree's last conversation, so nothing is lost.
-- zellij 0.45 gives a tab no pane when nobody is attached, so `orq new` then adds the
-  pane to the tab by its id (`src/zellij.ts`). The bridge starts the session in the
-  background if it is not running.
+- A session waiting for a permission decision is not typed into: the bridge says so in the
+  thread, and you answer it in the session (`src/herdr.ts`). orq starts sessions with no
+  parent terminal (`--outlive-parent`, no `HC_TERMINAL_ID`), so a session started from
+  another one outlives it.
 - Later: `/orq ls`, `/orq show <id>` in Slack. Artifacts are read in the dashboard.
 - **Git and GitHub:** the session itself pushes its branch and opens the PR with `gh`
   (see Security).

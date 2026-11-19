@@ -86,7 +86,7 @@ duplicates, timeouts, partial failure.
 - Each side of an integration can have its own class. Classify them apart.
 
 *Business:* after a shipment leaves, send the invoice data to the accounting system.
-*Technical:* `orq new` — a branch and a worktree in git, a row in SQLite, a zellij tab.
+*Technical:* `orq new` — a branch and a worktree in git, a row in SQLite, a herdr-core terminal.
 What if git succeeds and the insert fails?
 
 ### Resource contention — a shared, limited thing

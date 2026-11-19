@@ -6,7 +6,8 @@ learn → ship. The design is in [DESIGN.md](DESIGN.md).
 
 ## What you need
 
-Claude Code, Bun, git, `gh` (logged in to GitHub) and zellij. Optional: Slack, a sandbox
+Claude Code, Bun, git, `gh` (logged in to GitHub) and [herdr-core](https://github.com/herdrdev/herdr-core)
+(`hc`), which keeps the task sessions. Optional: Slack, a sandbox
 for the task sessions (e.g. [Fence](https://github.com/fencesandbox/fence)), a second
 machine.
 
@@ -39,7 +40,7 @@ channels = { C0123 = "~/Projects/my-app" }   # channel → the checkout where it
 ```
 
 Other keys: `model` (the task session's, default `opus`), `data` (worktrees, archive and
-state, default `~/.orqestrai`), `zellij_session` (default `orq`). `ORQ_CONFIG` names
+state, default `~/.orqestrai`), `hc` (the herdr-core command, default `hc`). `ORQ_CONFIG` names
 another file. Secrets never go in this file; it only names the file that holds them. An
 environment variable `ORQ_<KEY>` (e.g. `ORQ_SERVER`) overrides a key. A key orq does not
 know is an error.
@@ -83,17 +84,19 @@ reports (`orq new`, `orq state`, `orq ask`), so they show wherever `orq serve` r
 In a project's git repository:
 
 ```bash
-orq new "what you want"         # id, branch, worktree, zellij tab running /orq:task <id>
+orq new "what you want"         # id, branch, worktree, session running /orq:task <id>
 orq new --playbook feature "…"  # the same, with the playbook chosen by you
 orq ls                          # all tasks
 orq show T-0001                 # one task, its links and its last events
-orq open T-0001                 # open the task's tab again, for example after a restart
+orq open T-0001                 # start the task's session again, for example after a restart
 orq send T-0001 "go on"         # type a message into the task's session
 ```
 
 Always start a task session with `orq new` or `orq open`. They set `ORQ_TASK`, and the
-guard hooks are active only when it is set. Inside zellij, `orq new` opens a new tab.
-Outside, it uses the zellij session `orq` if it exists, or prints the command to run.
+guard hooks are active only when it is set. Each session runs in a herdr-core terminal
+named `orq-<id>`, which stays alive when nobody watches: `hc attach orq-T-0001` in a
+terminal, or the Herdr app (desktop or phone, over SSH), shows it and lets you type. Without
+`hc`, `orq new` prints the command to run.
 
 A project's own skills, agents and hooks go in its `.claude/` as usual. Shared ones can go
 in a directory of your own, given to every task session with `add_dirs`.

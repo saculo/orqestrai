@@ -14,8 +14,7 @@ const sh = (cmd: string[], cwd: string) => {
 }
 
 const orq = (args: string[], cwd = repo, extra: Record<string, string> = {}) => {
-  const env = { ...process.env, ORQ_DATA: home, ORQ_ZELLIJ_SESSION: "orq-test-none", ...extra } as Record<string, string | undefined>
-  delete env.ZELLIJ
+  const env = { ...process.env, ORQ_DATA: home, ORQ_HC: "orq-test-no-hc", ...extra } as Record<string, string | undefined>
   if (!("ORQ_SANDBOX" in extra)) delete env.ORQ_SANDBOX
   const p = Bun.spawnSync([...ORQ, ...args], { cwd, env, stdout: "pipe", stderr: "pipe" })
   return { code: p.exitCode, out: p.stdout.toString(), err: p.stderr.toString() }
@@ -49,7 +48,7 @@ describe("orq new", () => {
     expect(orq(["show", "T-0001"]).out).toMatch(/step = triage[\s\S]*status = TODO/)
   })
 
-  test("without zellij, prints a start command that sets the guard variables", () => {
+  test("without herdr-core, prints a start command that sets the guard variables", () => {
     const r = orq(["new", "x"])
     expect(r.out).toContain("ORQ_TASK=T-0001")
     expect(r.out).toContain("ORQ_BASE=main")
@@ -69,8 +68,7 @@ describe("orq new", () => {
   })
 
   test("gives two tasks started at the same moment different ids", async () => {
-    const env = { ...process.env, ORQ_DATA: home, ORQ_ZELLIJ_SESSION: "orq-test-none" } as Record<string, string | undefined>
-    delete env.ZELLIJ
+    const env = { ...process.env, ORQ_DATA: home, ORQ_HC: "orq-test-no-hc" } as Record<string, string | undefined>
     const start = (request: string) => Bun.spawn([...ORQ, "new", request], { cwd: repo, env, stdout: "pipe", stderr: "pipe" })
     const runs = [start("one"), start("two"), start("three")]
     const codes = await Promise.all(runs.map((p) => p.exited))
@@ -245,8 +243,7 @@ test("the state is one SQLite file in ORQ_DATA, made on first use; orq init neve
 })
 
 test("parallel runs never share an id", async () => {
-  const env = { ...process.env, ORQ_DATA: home, ORQ_ZELLIJ_SESSION: "orq-test-none" } as Record<string, string | undefined>
-  delete env.ZELLIJ
+  const env = { ...process.env, ORQ_DATA: home, ORQ_HC: "orq-test-no-hc" } as Record<string, string | undefined>
   const runs = Array.from(
     { length: 6 },
     (_, i) => Bun.spawn([...ORQ, "new", `task ${i}`], { cwd: repo, env, stdout: "pipe", stderr: "pipe" }).exited,
