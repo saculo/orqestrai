@@ -7,9 +7,8 @@ type Json<T> = { [K in keyof T]: T[K] extends Date ? string : T[K] }
 /** A task on the board: the row, its last state note, the message it waits on, its links. */
 export type BoardTask = Json<Task> & { note: string; message: string | null; links: ReadonlyArray<TaskLink> }
 export type Event = Json<TaskEvent>
+/** The server's copy of the task's files, as the CLI last sent it (src/files.ts). */
 export type Files = {
-  /** false when the task's worktree is on another machine than orq serve */
-  here: boolean
   files: ReadonlyArray<{ name: string; status: string | null }>
   /** image paths under the task's evidence folder */
   evidence: ReadonlyArray<string>

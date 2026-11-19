@@ -11,6 +11,7 @@ import { clean } from "./clean.ts"
 import { OrqConfig } from "./config.ts"
 import { Db } from "./db.ts"
 import { headline, LINK_ROLES, OrqError, STATUSES, STEPS, stamp, TaskType, TEMPLATES } from "./domain.ts"
+import { syncFilesOrWarn } from "./files.ts"
 import { baseBranch, topLevel } from "./git.ts"
 import { install } from "./init.ts"
 import { syncMerged } from "./pr.ts"
@@ -79,9 +80,11 @@ const state = Command.make(
   },
   ({ id, step, status, note }) =>
     Effect.gen(function* () {
-      yield* (yield* Db).setState(id, step, status, note)
+      const db = yield* Db
+      yield* db.setState(id, step, status, note)
+      yield* syncFilesOrWarn(yield* db.get(id))
     }),
-).pipe(Command.withDescription("record step and status"), withState)
+).pipe(Command.withDescription("record step and status; the task's files go to the server too (the dashboard)"), withState)
 
 const playbook = Command.make("playbook", { id, name: playbookName("name") }, ({ id, name }) =>
   Effect.gen(function* () {
@@ -134,6 +137,7 @@ const ask = Command.make(
       const task = yield* db.get(id)
       const status = blocked ? "BLOCKED" : "WAITING FOR ME"
       yield* db.setState(id, task.step, status, headline(text), text)
+      yield* syncFilesOrWarn(task)
       const { bridge } = yield* OrqConfig
       const sent = yield* Effect.tryPromise(() =>
         // a local Unix socket (mode 0600), not the network; the host name is a placeholder

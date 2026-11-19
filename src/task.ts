@@ -5,10 +5,11 @@ import { Effect } from "effect"
 import { OrqConfig } from "./config.ts"
 import { Db } from "./db.ts"
 import { slugify } from "./domain.ts"
+import { syncFilesOrWarn } from "./files.ts"
 import { addWorktree, baseBranch, requireRef } from "./git.ts"
 import { openTab } from "./zellij.ts"
 
-/** Task id, row, worktree, branch, REQUEST.md and its zellij tab, for the project at `root`.
+/** Task id, row, worktree, branch, REQUEST.md (and its copy on the server) and its zellij tab, for the project at `root`.
  * With `playbook`, the task runs that one; without, the session chooses. Gives back the task
  * and what happened to the tab. */
 export const startTask = (root: string, request: string, playbook?: string) =>
@@ -33,5 +34,6 @@ export const startTask = (root: string, request: string, playbook?: string) =>
     const dir = join(task.worktree, ".orqestrai", "tasks", task.id)
     mkdirSync(dir, { recursive: true })
     writeFileSync(join(dir, "REQUEST.md"), `---\nid: ${task.id}\ncreated: ${new Date().toISOString()}\n---\n\n${request}\n`)
+    yield* syncFilesOrWarn(task)
     return { task, tab: yield* openTab(task.id, task.worktree, base) }
   })

@@ -1,16 +1,14 @@
 // The dashboard: one read-only React page (src/dashboard/, which Bun bundles and serves at /) and
-// the reads it needs, served by `orq serve` next to the API. A task's files and evidence are read from its worktree when the
-// worktree is on this machine; elsewhere the page shows the database's view only.
-import { existsSync, readdirSync, readFileSync, statSync } from "node:fs"
-import { extname, join, relative, resolve, sep } from "node:path"
+// the reads it needs, served by `orq serve` next to the API. Everything comes from the database:
+// a task's files and evidence too, from the copy the CLI sends (src/files.ts), so the page is the
+// same whether the worktrees are on this machine or another.
+import { existsSync } from "node:fs"
+import { join } from "node:path"
 import { Effect, Layer } from "effect"
 import { HttpRouter, HttpServerResponse } from "effect/http"
 import page from "./dashboard/index.html"
 import { Db } from "./db.ts"
-import { OrqError, type Task, TEMPLATES } from "./domain.ts"
-
-/** The task files the page shows, in the order of the steps. */
-export const FILES = ["REQUEST", ...TEMPLATES] as const
+import { IMAGE_TYPES, isTaskFilePath, OrqError, TASK_FILES } from "./domain.ts"
 
 /** The page: Bun bundles its TSX and CSS and serves it (Bun.serve `routes`, src/server.ts). */
 export const PAGE = { "/": page }
@@ -23,37 +21,13 @@ export const enterPageDir = () => {
   if (existsSync(join(dir, "index.html"))) process.chdir(dir)
 }
 
-const IMAGES: Record<string, string> = {
-  ".png": "image/png",
-  ".jpg": "image/jpeg",
-  ".jpeg": "image/jpeg",
-  ".webp": "image/webp",
-  ".gif": "image/gif",
-}
-
 const json = (body: unknown) => HttpServerResponse.text(JSON.stringify(body), { contentType: "application/json" })
 const notFound = (e: OrqError) => Effect.succeed(HttpServerResponse.text(e.message, { status: 404 }))
-
-const taskDir = (task: Task) => join(task.worktree, ".orqestrai", "tasks", task.id)
 
 /** The `status:` line of a file's frontmatter, if it has one. */
 const frontmatterStatus = (text: string) => /^---\n[\s\S]*?^status:\s*(\S+)[\s\S]*?^---$/m.exec(text)?.[1] ?? null
 
-/** Image files under `dir`, as paths relative to it, newest folders last. */
-const images = (dir: string): string[] => {
-  if (!existsSync(dir)) return []
-  const found: string[] = []
-  const walk = (d: string) => {
-    for (const name of readdirSync(d).sort()) {
-      const path = join(d, name)
-      if (statSync(path).isDirectory()) walk(path)
-      else if (IMAGES[extname(name).toLowerCase()]) found.push(relative(dir, path))
-      if (found.length >= 60) return
-    }
-  }
-  walk(dir)
-  return found
-}
+const utf8 = new TextDecoder()
 
 /** What the page needs, from the database, in one call: every task with its last state note,
  * the message it waits on (when it waits) and its links. */
@@ -96,13 +70,12 @@ export const dashboard = Layer.unwrap(
         "/tasks/:id/files",
         Effect.gen(function* () {
           const task = yield* db.get(yield* id)
-          const dir = taskDir(task)
-          if (!existsSync(dir)) return json({ here: false, files: [], evidence: [] })
-          const files = FILES.filter((f) => existsSync(join(dir, `${f}.md`))).map((name) => ({
-            name,
-            status: frontmatterStatus(readFileSync(join(dir, `${name}.md`), "utf8")),
-          }))
-          return json({ here: true, files, evidence: images(join(dir, "evidence")) })
+          const paths = (yield* db.fileSums(task.id)).map((f) => f.path)
+          const files = yield* Effect.forEach(
+            TASK_FILES.filter((name) => paths.includes(`${name}.md`)),
+            (name) => db.file(task.id, `${name}.md`).pipe(Effect.map((c) => ({ name, status: frontmatterStatus(utf8.decode(c)) }))),
+          )
+          return json({ files, evidence: paths.filter((p) => p.startsWith("evidence/")).map((p) => p.slice("evidence/".length)) })
         }).pipe(Effect.catch(notFound)),
       ),
       HttpRouter.add(
@@ -111,11 +84,9 @@ export const dashboard = Layer.unwrap(
         Effect.gen(function* () {
           const params = yield* HttpRouter.params
           const name = params.name ?? ""
-          const task = yield* db.get(params.id ?? "")
-          const path = join(taskDir(task), `${name}.md`)
-          if (!(FILES as ReadonlyArray<string>).includes(name) || !existsSync(path))
-            return yield* new OrqError({ message: `no ${name}.md in ${task.id}` })
-          return HttpServerResponse.text(readFileSync(path, "utf8"), { contentType: "text/markdown; charset=utf-8" })
+          if (!(TASK_FILES as ReadonlyArray<string>).includes(name)) return yield* new OrqError({ message: `no ${name}.md` })
+          const content = yield* db.file(params.id ?? "", `${name}.md`)
+          return HttpServerResponse.text(utf8.decode(content), { contentType: "text/markdown; charset=utf-8" })
         }).pipe(Effect.catch(notFound)),
       ),
       HttpRouter.add(
@@ -123,13 +94,11 @@ export const dashboard = Layer.unwrap(
         "/tasks/:id/evidence/*",
         Effect.gen(function* () {
           const params = yield* HttpRouter.params
-          const task = yield* db.get(params.id ?? "")
-          const dir = resolve(taskDir(task), "evidence")
-          const path = resolve(dir, params["*"] ?? "")
-          const type = IMAGES[extname(path).toLowerCase()]
-          // only images, and only inside the task's evidence folder
-          if (!type || !path.startsWith(dir + sep) || !existsSync(path)) return yield* new OrqError({ message: "no such image" })
-          return HttpServerResponse.uint8Array(readFileSync(path), { contentType: type })
+          const path = `evidence/${params["*"] ?? ""}`
+          const type = IMAGE_TYPES[path.split(".").pop()?.toLowerCase() ?? ""]
+          // only evidence images: the database holds nothing else, and the path is checked anyway
+          if (!type || !isTaskFilePath(path)) return yield* new OrqError({ message: "no such image" })
+          return HttpServerResponse.uint8Array(yield* db.file(params.id ?? "", path), { contentType: type })
         }).pipe(Effect.catch(notFound)),
       ),
     )

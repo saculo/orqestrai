@@ -1,8 +1,24 @@
-// The index of tasks in SQLite (src/sqlite.ts). Content lives in Markdown and git; this is only the index.
+// The index of tasks in SQLite (src/sqlite.ts). Content lives in Markdown and git; the database
+// keeps the index, and a copy of each task's files for the dashboard (putFiles).
+import { createHash } from "node:crypto"
 import { join } from "node:path"
 import { Context, Effect, Layer } from "effect"
 import { SqlClient } from "effect/sql/SqlClient"
-import { type LinkRole, type NewTask, OrqError, type Status, type Step, Task, TaskEvent, TaskLink, taskId } from "./domain.ts"
+import {
+  FileSum,
+  isTaskFilePath,
+  type LinkRole,
+  MAX_FILE_BYTES,
+  MAX_IMAGES,
+  type NewTask,
+  OrqError,
+  type Status,
+  type Step,
+  Task,
+  TaskEvent,
+  TaskLink,
+  taskId,
+} from "./domain.ts"
 import { asOrqError, rows } from "./sqlite.ts"
 
 const noTask = (id: string) => new OrqError({ message: `no task ${id}` })
@@ -26,6 +42,17 @@ export class Db extends Context.Service<
     readonly findLink: (kind: string, ref: string) => Effect.Effect<string | null, OrqError>
     /** Records the task's type: the playbook it runs. */
     readonly setType: (id: string, type: string) => Effect.Effect<void, OrqError>
+    /** The task's files the database has a copy of, with their SHA-256. */
+    readonly fileSums: (id: string) => Effect.Effect<ReadonlyArray<FileSum>, OrqError>
+    /** Stores `put` and forgets every other copy not in `keep`: the folder as it is now, when
+     * `put` holds what changed and `keep` what did not. Only task files and evidence images. */
+    readonly putFiles: (
+      id: string,
+      put: ReadonlyArray<{ readonly path: string; readonly content: Uint8Array }>,
+      keep: ReadonlyArray<string>,
+    ) => Effect.Effect<void, OrqError>
+    /** One file's copy. */
+    readonly file: (id: string, path: string) => Effect.Effect<Uint8Array, OrqError>
   }
 >()("orq/Db") {
   static readonly layer = Layer.effect(
@@ -83,6 +110,30 @@ export class Db extends Context.Service<
           yield* addEvent(id, "linked", `${kind} ${ref} (${role})`)
         }).pipe(sql.withTransaction, asOrqError("link"))
 
+      const putFiles = (
+        id: string,
+        put: ReadonlyArray<{ readonly path: string; readonly content: Uint8Array }>,
+        keep: ReadonlyArray<string>,
+      ) =>
+        Effect.gen(function* () {
+          const bad = [...put.map((f) => f.path), ...keep].find((p) => !isTaskFilePath(p))
+          if (bad !== undefined) return yield* new OrqError({ message: `not a task file or evidence image: ${bad}` })
+          const big = put.find((f) => f.content.byteLength > MAX_FILE_BYTES)
+          if (big) return yield* new OrqError({ message: `${big.path} is over ${MAX_FILE_BYTES / 1024 / 1024} MB` })
+          const all = new Set([...keep, ...put.map((f) => f.path)])
+          if ([...all].filter((p) => p.startsWith("evidence/")).length > MAX_IMAGES)
+            return yield* new OrqError({ message: `more than ${MAX_IMAGES} evidence images` })
+          yield* lockTask(id)
+          for (const { path } of yield* sql<{ path: string }>`SELECT path FROM task_files WHERE task_id = ${id}`)
+            if (!all.has(path)) yield* sql`DELETE FROM task_files WHERE task_id = ${id} AND path = ${path}`
+          for (const { path, content } of put) {
+            const sha256 = createHash("sha256").update(content).digest("hex")
+            yield* sql`INSERT INTO task_files ${sql.insert({ task_id: id, path, sha256, content })}
+                       ON CONFLICT (task_id, path) DO UPDATE SET sha256 = excluded.sha256, content = excluded.content,
+                       updated_at = strftime('%Y-%m-%dT%H:%M:%fZ')`
+          }
+        }).pipe(sql.withTransaction, asOrqError("put files"))
+
       return {
         create,
         remove: (id) => sql`DELETE FROM tasks WHERE id = ${id}`.pipe(Effect.asVoid, asOrqError("remove")),
@@ -106,6 +157,17 @@ export class Db extends Context.Service<
             asOrqError("find link"),
           ),
         setType,
+        fileSums: (id) =>
+          sql`SELECT path, sha256 FROM task_files WHERE task_id = ${id} ORDER BY path`.pipe(
+            Effect.flatMap(rows(FileSum)),
+            asOrqError("file sums"),
+          ),
+        putFiles,
+        file: (id, path) =>
+          sql<{ content: Uint8Array }>`SELECT content FROM task_files WHERE task_id = ${id} AND path = ${path}`.pipe(
+            asOrqError("file"),
+            Effect.flatMap(([row]) => (row ? Effect.succeed(row.content) : Effect.fail(new OrqError({ message: `no ${path} in ${id}` })))),
+          ),
       }
     }),
   )

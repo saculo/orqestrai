@@ -1,4 +1,4 @@
-// The SQLite file that holds orq's state: tasks, events and links, in $ORQ_DATA/state.db.
+// The SQLite file that holds orq's state: tasks, events, links and a copy of the task files, in $ORQ_DATA/state.db.
 // Without a server each orq run opens it; with one, only `orq serve` does and its clients set
 // ORQ_SERVER. Transactions take the write lock (BEGIN IMMEDIATE), so parallel runs wait their turn.
 import { mkdirSync } from "node:fs"
@@ -11,9 +11,10 @@ import { SqlClient } from "effect/sql/SqlClient"
 import { OrqConfig } from "./config.ts"
 import { OrqError } from "./domain.ts"
 import init from "./migrations/0001_init.ts"
+import files from "./migrations/0002_files.ts"
 
 /** Every migration, in order. A schema change is a new file in src/migrations/ and a line here. */
-const MIGRATIONS = { "0001_init": init }
+const MIGRATIONS = { "0001_init": init, "0002_files": files }
 
 /** Any failure becomes a message the CLI prints; an OrqError passes through as it is. */
 export const asOrqError =

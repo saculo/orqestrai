@@ -7,7 +7,7 @@ import { Md, StatusChip } from "./parts.tsx"
 const TABS = ["REQUEST", "RESEARCH", "BRIEF", "SPEC", "VERIFY", "LEARN", "PR"]
 /** Shown even before the file exists, so the steps ahead are visible. */
 const ALWAYS = ["REQUEST", "BRIEF", "SPEC", "VERIFY", "PR"]
-const NO_FILES: Files = { here: true, files: [], evidence: [] }
+const NO_FILES: Files = { files: [], evidence: [] }
 
 const evidenceUrl = (id: string, path: string) => `tasks/${id}/evidence/${path.split("/").map(encodeURIComponent).join("/")}`
 
@@ -89,45 +89,39 @@ export const Panel = ({ task, now, onClose }: { task: BoardTask; now: number; on
         </section>
       )}
 
-      {!files.value.here ? (
-        <p className="file muted">The task's files are on the machine of its session, not here.</p>
-      ) : (
-        <>
-          <div className="tabs" role="tablist" aria-label="Task files">
-            {TABS.filter((t) => have.has(t) || ALWAYS.includes(t)).map((t) => (
-              <button
-                key={t}
-                type="button"
-                role="tab"
-                className={`tab${have.has(t) ? "" : " missing"}`}
-                aria-selected={t === tab}
-                onClick={() => setChosen(t)}
-              >
-                {t}
-                <span className={`st st-${have.get(t) ?? "none"}`} aria-hidden="true" />
-              </button>
+      <div className="tabs" role="tablist" aria-label="Task files">
+        {TABS.filter((t) => have.has(t) || ALWAYS.includes(t)).map((t) => (
+          <button
+            key={t}
+            type="button"
+            role="tab"
+            className={`tab${have.has(t) ? "" : " missing"}`}
+            aria-selected={t === tab}
+            onClick={() => setChosen(t)}
+          >
+            {t}
+            <span className={`st st-${have.get(t) ?? "none"}`} aria-hidden="true" />
+          </button>
+        ))}
+      </div>
+      <div className="file" role="tabpanel">
+        <p className="small">
+          {tab}.md · {have.has(tab) ? (status ?? "written") : "not written yet"}
+        </p>
+        {text !== null && <Md text={text} />}
+        {tab === "VERIFY" && files.value.evidence.length > 0 && (
+          <div className="shots">
+            {files.value.evidence.map((p) => (
+              <figure key={p}>
+                <a href={evidenceUrl(id, p)} target="_blank" rel="noopener noreferrer">
+                  <img loading="lazy" alt={p} src={evidenceUrl(id, p)} />
+                </a>
+                <figcaption>{p}</figcaption>
+              </figure>
             ))}
           </div>
-          <div className="file" role="tabpanel">
-            <p className="small">
-              {tab}.md · {have.has(tab) ? (status ?? "written") : "not written yet"}
-            </p>
-            {text !== null && <Md text={text} />}
-            {tab === "VERIFY" && files.value.evidence.length > 0 && (
-              <div className="shots">
-                {files.value.evidence.map((p) => (
-                  <figure key={p}>
-                    <a href={evidenceUrl(id, p)} target="_blank" rel="noopener noreferrer">
-                      <img loading="lazy" alt={p} src={evidenceUrl(id, p)} />
-                    </a>
-                    <figcaption>{p}</figcaption>
-                  </figure>
-                ))}
-              </div>
-            )}
-          </div>
-        </>
-      )}
+        )}
+      </div>
 
       <section className="timeline" aria-label="Timeline">
         <h3 className="label">Timeline</h3>

@@ -1,5 +1,7 @@
 // The dashboard, as a browser gets it from `orq serve`: the page and its bundle, the board, a
-// task's files and evidence. The tasks are made by orq through the server, as on a real machine.
+// task's files and evidence. The tasks are made by orq through the server, as on a real machine;
+// the server keeps its state elsewhere (ORQ_DATA=server) than the worktrees (home), as on another
+// machine, so the task files reach it only as the copies orq sends.
 import { afterAll, beforeAll, describe, expect, test } from "bun:test"
 import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
@@ -8,7 +10,7 @@ import type { Subprocess } from "bun"
 import { ORQ } from "./orq.ts"
 import { startServer } from "./server.ts"
 
-let dir: string, repo: string, socket: string, server: Subprocess, url: string
+let dir: string, repo: string, socket: string, server: Subprocess, url: string, files: string
 
 const orq = (args: string[]) => {
   const env: Record<string, string | undefined> = {
@@ -47,14 +49,16 @@ beforeAll(async () => {
   orq(["new", "Weekly shopping list"])
   orq(["new", "Dark mode"])
   orq(["state", "T-0001", "plan", "IN PROGRESS"])
-  orq(["ask", "T-0001", "**SPEC.md ready: 4 ACs**\n- AC1 sums\n\n**Q9 - Approve SPEC.md?**\n- Recommended: yes"])
-  orq(["link", "T-0001", "slack-thread", "C1/100.1", "origin"])
 
-  const files = join(dir, "home", "worktrees", "proj", "T-0001-weekly-shopping-list", ".orqestrai", "tasks", "T-0001")
+  files = join(dir, "home", "worktrees", "proj", "T-0001-weekly-shopping-list", ".orqestrai", "tasks", "T-0001")
   writeFileSync(join(files, "SPEC.md"), "---\nid: T-0001\nstatus: draft\n---\n\n# Spec\n")
+  writeFileSync(join(files, "NOTES.md"), "not a task file")
   mkdirSync(join(files, "evidence", "V1"), { recursive: true })
   writeFileSync(join(files, "evidence", "V1", "V1-list.png"), new Uint8Array([0x89, 0x50, 0x4e, 0x47]))
   writeFileSync(join(files, "evidence", "V1", "trace.md"), "# trace")
+  // orq ask sends the files, as orq state does
+  orq(["ask", "T-0001", "**SPEC.md ready: 4 ACs**\n- AC1 sums\n\n**Q9 - Approve SPEC.md?**\n- Recommended: yes"])
+  orq(["link", "T-0001", "slack-thread", "C1/100.1", "origin"])
 })
 
 afterAll(() => {
@@ -95,7 +99,6 @@ describe("the dashboard", () => {
 
   test("a task's files, with the status in their frontmatter, and its evidence images", async () => {
     expect(await json("/tasks/T-0001/files")).toEqual({
-      here: true,
       files: [
         { name: "REQUEST", status: null },
         { name: "SPEC", status: "draft" },
@@ -120,9 +123,37 @@ describe("the dashboard", () => {
       expect([path, (await get(path)).status]).toEqual([path, 404])
   })
 
-  test("a task whose worktree is on another machine: the database's view only", async () => {
+  test("orq state sends what changed, and the server forgets what is gone", async () => {
+    writeFileSync(join(files, "SPEC.md"), "---\nid: T-0001\nstatus: approved\n---\n\n# Spec, approved\n")
+    rmSync(join(files, "evidence", "V1", "V1-list.png"))
+    writeFileSync(join(files, "evidence", "V1", "V1-total.webp"), new Uint8Array([1, 2, 3]))
+    orq(["state", "T-0001", "impl", "IN PROGRESS"])
+    expect(await json("/tasks/T-0001/files")).toEqual({
+      files: [
+        { name: "REQUEST", status: null },
+        { name: "SPEC", status: "approved" },
+      ],
+      evidence: ["V1/V1-total.webp"],
+    })
+    expect(await (await get("/tasks/T-0001/files/SPEC")).text()).toContain("# Spec, approved")
+    expect((await get("/tasks/T-0001/evidence/V1/V1-list.png")).status).toBe(404)
+  })
+
+  test("the server keeps only task files and evidence images, whoever sends them", async () => {
+    for (const path of ["../state.db", "NOTES.md", "evidence/trace.md", "evidence/../SPEC.png", "/etc/x.png"]) {
+      const r = await fetch(`${url}/tasks/T-0001/files`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ put: [{ path, content: "AAAA" }], keep: [] }),
+      })
+      expect([path, r.status]).toEqual([path, 422])
+    }
+  })
+
+  test("a task whose worktree is gone: the server still has its files", async () => {
     rmSync(join(dir, "home", "worktrees", "proj", "T-0002-dark-mode"), { recursive: true, force: true })
-    expect(await json("/tasks/T-0002/files")).toEqual({ here: false, files: [], evidence: [] })
+    orq(["state", "T-0002", "triage", "IN PROGRESS"])
+    expect(await json("/tasks/T-0002/files")).toEqual({ files: [{ name: "REQUEST", status: null }], evidence: [] })
   })
 
   test("orq show leaves the whole messages out; the note is enough there", () => {

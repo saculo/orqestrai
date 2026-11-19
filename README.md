@@ -68,15 +68,15 @@ know is an error.
 
 `orq serve` also serves a read-only dashboard at `/` of its TCP address: the board of tasks
 by step, what waits for you on top (with the whole message), and each task's files, verify
-screenshots and timeline. It works on a phone too. Give the server a port next to its socket,
-on an address only you reach (a private network such as Tailscale):
+screenshots and timeline. It works on a phone too. Give the server a TCP port (next to its
+socket, if it has one) and reach it only over a private network, such as Tailscale:
 
 ```bash
-orq serve --socket ~/.orqestrai/orq.sock --host <private address> --port 7400
+orq serve --socket ~/.orqestrai/orq.sock --port 7400     # 127.0.0.1:7400
 ```
 
-The task files and screenshots are read from the task's worktree, so they show when
-`orq serve` runs on the machine of the sessions.
+The task files and screenshots come from copies the CLI sends to the server whenever a step
+reports (`orq new`, `orq state`, `orq ask`), so they show wherever `orq serve` runs.
 
 ## Use
 

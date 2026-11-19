@@ -47,6 +47,9 @@ const db = Layer.effect(
       links: (id) => call(tasks.links({ params: { id } })),
       findLink: (kind, ref) => call(tasks.findLink({ query: { kind, ref } })),
       setType: (id, playbook) => call(tasks.setPlaybook({ params: { id }, payload: { playbook } })),
+      fileSums: (id) => call(tasks.fileSums({ params: { id } })),
+      putFiles: (id, put, keep) => call(tasks.putFiles({ params: { id }, payload: { put, keep } })),
+      file: (id, path) => call(tasks.file({ params: { id }, query: { path } })),
     })
   }),
 )
