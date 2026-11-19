@@ -1,6 +1,6 @@
 {
   "name": "orqestrai",
-  "version": "0.5.5",
+  "version": "0.6.0",
   "description": "An orchestrated software factory with human gates: the orq CLI and server",
   "repository": {
     "type": "git",
@@ -19,7 +19,7 @@
   "license": "MIT",
   "type": "module",
   "scripts": {
-    "build": "bun build --compile src/main.ts --outfile dist/orq",
+    "build": "bun build --compile --production src/main.ts --outfile dist/orq",
     "test": "bun test",
     "check": "tsc --noEmit"
   },
@@ -27,11 +27,17 @@
     "@effect/platform-bun": "4.1.2",
     "@effect/sql-sqlite-bun": "4.1.2",
     "effect": "4.1.2",
+    "react": "19.3.1",
+    "react-dom": "19.3.1",
+    "react-markdown": "10.1.0",
+    "remark-gfm": "4.0.1",
     "shell-quote": "1.8.1"
   },
   "devDependencies": {
     "@biomejs/biome": "2.5.15",
     "@types/bun": "1.4.4",
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
     "@types/shell-quote": "1.7.5",
     "typescript": "6.0.3"
   },

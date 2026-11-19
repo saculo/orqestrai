@@ -3,7 +3,7 @@
 // It mirrors the Db service one to one; a remote client is just another implementation.
 import { Schema } from "effect"
 import { HttpApi, HttpApiEndpoint, HttpApiGroup } from "effect/http-api"
-import { LinkRole, NewTask, OrqError, Status, Step, Task, TaskEvent, TaskLink, TaskType } from "./domain.ts"
+import { FileSum, LinkRole, NewTask, OrqError, Status, Step, Task, TaskEvent, TaskLink, TaskNow, TaskType } from "./domain.ts"
 
 const id = { id: Schema.String }
 
@@ -14,7 +14,7 @@ export class TasksApi extends HttpApiGroup.make("tasks").add(
   HttpApiEndpoint.get("list", "/tasks", { success: Schema.Array(Task), error: OrqError }),
   HttpApiEndpoint.post("setState", "/tasks/:id/state", {
     params: id,
-    payload: Schema.Struct({ step: Step, status: Status, note: Schema.String }),
+    payload: Schema.Struct({ step: Step, status: Status, note: Schema.String, message: Schema.optional(Schema.String) }),
     error: OrqError,
   }),
   HttpApiEndpoint.get("events", "/tasks/:id/events", {
@@ -37,6 +37,23 @@ export class TasksApi extends HttpApiGroup.make("tasks").add(
   HttpApiEndpoint.post("setPlaybook", "/tasks/:id/playbook", {
     params: id,
     payload: Schema.Struct({ playbook: TaskType }),
+    error: OrqError,
+  }),
+  HttpApiEndpoint.get("now", "/tasks/:id/now", { params: id, success: TaskNow, error: OrqError }),
+  HttpApiEndpoint.get("fileSums", "/tasks/:id/sums", { params: id, success: Schema.Array(FileSum), error: OrqError }),
+  // the contents travel as base64 in JSON
+  HttpApiEndpoint.post("putFiles", "/tasks/:id/files", {
+    params: id,
+    payload: Schema.Struct({
+      put: Schema.Array(Schema.Struct({ path: Schema.String, content: Schema.Uint8ArrayFromBase64 })),
+      keep: Schema.Array(Schema.String),
+    }),
+    error: OrqError,
+  }),
+  HttpApiEndpoint.get("file", "/tasks/:id/copy", {
+    params: id,
+    query: { path: Schema.String },
+    success: Schema.Uint8ArrayFromBase64,
     error: OrqError,
   }),
 ) {}

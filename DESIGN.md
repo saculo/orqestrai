@@ -478,7 +478,7 @@ Skills and agents are named `orq:<name>` (`/orq:task`); the folder name is the n
 | `orq bridge`               | the Slack bridge (below)                                    |
 | `orq ls`                   | lists tasks and status; reads merged PRs from `gh`          |
 | `orq clean <id>`           | removes a merged or dropped task's worktree and branch      |
-| `orq serve`                | the state over HTTP, on a Unix socket or a TCP address      |
+| `orq serve`                | the state over HTTP, on a Unix socket, a TCP address or both; the dashboard at `/` |
 
 **Server and clients.** `orq serve` offers the `Db` service as an HTTP API (`src/api.ts`,
 Effect's `HttpApi`), on a Unix socket or a TCP address. With `server` set (a socket path
@@ -556,7 +556,9 @@ plain TS (no `bun:*` imports), because pi loads extensions under Node.
   by the CLI itself (`bun:sqlite`). No database to install. A transaction takes the write
   lock (`BEGIN IMMEDIATE`), so parallel runs wait their turn and never share an id.
   `tasks(id, repo, title, branch, worktree, step, status, type, created_at, updated_at)`,
-  `events(seq, task_id, at, kind, detail)` and `task_links(seq, task_id, kind, ref, role)`.
+  `events(seq, task_id, at, kind, detail)`, `task_links(seq, task_id, kind, ref, role)` and
+  `task_files(task_id, path, sha256, content)`: a copy of each task's files for the dashboard
+  (below).
   Step, status and the type (the playbook's name) are checked by the database too.
   - Several machines share one state through `orq serve`, the only process that opens the
     file.
@@ -571,7 +573,19 @@ plain TS (no `bun:*` imports), because pi loads extensions under Node.
   Only the adapter that owns a kind reads its refs, so a new trigger adds no column.
 - Statuses: `TODO`, `IN PROGRESS`, `WAITING FOR ME`, `BLOCKED`, `DROPPED` (triage decided not to do it), `MERGED`.
 - Archive: `<data>/archive/<repo>/<id>/`, the files of dropped tasks after `orq clean`.
-- Dashboard (later): a small web app that reads the state through `orq serve`.
+- **Dashboard:** `orq serve` serves it at `/` (`src/dashboard.ts`, the page in
+  `src/dashboard/`: React, bundled by Bun itself, so there is no build step and it is
+  inside the compiled binary too). The page keeps its logic in plain, tested modules
+  (`serverApi.ts`, `tasks.ts`, `board.ts`, `taskFiles.ts`, `hooks.ts`) and draws with small
+  components named for what they show (`components/`: `NeedsYou`, `TaskBoard`, `TaskPanel`,
+  `TaskFileViewer`, `Timeline`…). Read-only: a board by step, "needs you" on top with the
+  whole message (`orq ask` keeps it as a `message` event), and per task its files, the verify
+  screenshots and the timeline. The files come from the database: whenever a step reports
+  (`orq new`, `orq state`, `orq ask`) the CLI sends what changed in the task's folder
+  (`src/files.ts`; only `<NAME>.md` task files and images under `evidence/`, at most 60
+  images of 10 MB), so the page is the same when the worktrees are on another machine. It polls
+  `/board` every 5 s. `orq serve` listens on a socket and a TCP port at once, so the
+  sessions keep the socket and a browser uses the port, on a private address.
 
 ## 5. Verification environment
 

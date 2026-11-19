@@ -72,12 +72,14 @@ jobs:
           git -C "$RUNNER_TEMP/rules" fetch -q --depth 1 https://github.com/opengrep/opengrep-rules "$OPENGREP_RULES_COMMIT"
           git -C "$RUNNER_TEMP/rules" checkout -q FETCH_HEAD
           # Rule ids start with the rules path, so run from $RUNNER_TEMP and load them as rules/...
-          # no-replaceall is about old browsers; orq runs on Bun.
+          # no-replaceall is about old browsers; orq runs on Bun. jsx-not-internationalized wants
+          # i18next for every string; the dashboard is in English only.
           cd "$RUNNER_TEMP"
           W="$GITHUB_WORKSPACE"
           "$RUNNER_TEMP/opengrep" scan --error --quiet \
             --config rules/typescript --config rules/javascript --config rules/bash --config rules/yaml/github-actions \
             --exclude-rule "rules.javascript.lang.correctness.no-replaceall" \
+            --exclude-rule "rules.typescript.react.portability.i18next.jsx-not-internationalized" \
             "$W/src" "$W/test" "$W/bin" "$W/.github"
       - name: shell (shellcheck)
         run: shellcheck bin/orq

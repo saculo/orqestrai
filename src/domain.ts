@@ -78,3 +78,49 @@ export const headline = (message: string) =>
     .replace(/^\s*#+\s*/, "")
     .replace(/\*\*|__/g, "")
     .trim()
+
+/** The task files the dashboard shows, in the order of the steps: `<name>.md` in the task's folder. */
+export const TASK_FILES = ["REQUEST", ...TEMPLATES] as const
+
+/** The evidence the dashboard shows: images under the task's `evidence/` folder. */
+export const IMAGE_TYPES: Readonly<Record<string, string>> = {
+  png: "image/png",
+  jpg: "image/jpeg",
+  jpeg: "image/jpeg",
+  webp: "image/webp",
+  gif: "image/gif",
+}
+
+/** The MIME type of an evidence image's path, or null when it is not one. */
+export const imageType = (path: string): string | null => {
+  const ext = path.split(".").pop()?.toLowerCase() ?? ""
+  return Object.hasOwn(IMAGE_TYPES, ext) ? (IMAGE_TYPES[ext] ?? null) : null
+}
+
+/** The most the server keeps of one task: so many images, each at most so big. */
+export const MAX_IMAGES = 60
+export const MAX_FILE_BYTES = 10 * 1024 * 1024
+
+/** A path the server keeps a copy of, relative to the task's folder: `SPEC.md`, or an image
+ * under `evidence/` (`evidence/V1/V1-list.png`), with no `..`, `.` or empty parts. */
+export const isTaskFilePath = (path: string) => {
+  if ((TASK_FILES as ReadonlyArray<string>).some((name) => path === `${name}.md`)) return true
+  const parts = path.split("/")
+  const ext = path.split(".").pop()?.toLowerCase() ?? ""
+  return (
+    parts.length >= 2 &&
+    parts[0] === "evidence" &&
+    parts.every((p) => p !== "" && p !== "." && p !== "..") &&
+    !path.includes("\\") &&
+    Object.hasOwn(IMAGE_TYPES, ext)
+  )
+}
+
+/** A file's path and the SHA-256 of its content, hex: what the server has. */
+export const FileSum = Schema.Struct({ path: Schema.String, sha256: Schema.String })
+export type FileSum = typeof FileSum.Type
+
+/** What a task's last report said: its state note, and the whole message when that report was
+ * an `orq ask` (null after any later state change). */
+export const TaskNow = Schema.Struct({ note: Schema.String, message: Schema.NullOr(Schema.String) })
+export type TaskNow = typeof TaskNow.Type
