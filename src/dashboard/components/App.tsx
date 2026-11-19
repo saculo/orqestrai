@@ -1,6 +1,6 @@
 import { useState } from "react"
-import { ALL_PROJECTS, buildBoard } from "../board.ts"
-import { useClock, usePolling, useRememberedChoice, useSelectedTaskId } from "../hooks.ts"
+import { buildBoard } from "../board.ts"
+import { useClock, usePolling, useRememberedProject, useSelectedTaskId } from "../hooks.ts"
 import { fetchBoard } from "../serverApi.ts"
 import { projectLabels } from "../tasks.ts"
 import { Header } from "./Header.tsx"
@@ -15,7 +15,7 @@ export const App = () => {
   const polledBoard = usePolling(fetchBoard, [])
   const tasks = polledBoard.value
   const now = useClock()
-  const [project, selectProject] = useRememberedChoice("orq.repo", ALL_PROJECTS)
+  const [project, selectProject] = useRememberedProject()
   const [selectedId, selectTask] = useSelectedTaskId()
   const [boardShownOnPhone, setBoardShownOnPhone] = useState(false)
 

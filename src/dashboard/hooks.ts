@@ -1,6 +1,7 @@
 // The page's React hooks: polling the server, a clock for "5m ago", the selected task in the
-// URL, and a choice remembered in the browser.
+// URL, and the project filter remembered in the browser.
 import { useCallback, useEffect, useRef, useState } from "react"
+import { ALL_PROJECTS } from "./board.ts"
 
 export const POLL_MS = 5000
 
@@ -79,26 +80,27 @@ export const useSelectedTaskId = () => {
   return [selected, select] as const
 }
 
-/** A choice this browser remembers (localStorage), such as the project filter. Works, without
- * remembering, where the browser refuses storage. */
-export const useRememberedChoice = (key: string, fallback: string) => {
-  const [choice, setChoice] = useState(() => {
+const PROJECT_KEY = "orq.repo"
+
+const rememberedProject = () => {
+  try {
+    return localStorage.getItem(PROJECT_KEY) ?? ALL_PROJECTS
+  } catch {
+    return ALL_PROJECTS
+  }
+}
+
+/** The project filter (a repo path, or ALL_PROJECTS), remembered by this browser
+ * (localStorage). Works, without remembering, where the browser refuses storage. */
+export const useRememberedProject = () => {
+  const [project, setProject] = useState(rememberedProject)
+
+  const selectProject = useCallback((repo: string) => {
+    setProject(repo)
     try {
-      return localStorage.getItem(key) ?? fallback
-    } catch {
-      return fallback
-    }
-  })
+      localStorage.setItem(PROJECT_KEY, repo)
+    } catch {}
+  }, [])
 
-  const choose = useCallback(
-    (value: string) => {
-      setChoice(value)
-      try {
-        localStorage.setItem(key, value)
-      } catch {}
-    },
-    [key],
-  )
-
-  return [choice, choose] as const
+  return [project, selectProject] as const
 }
