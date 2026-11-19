@@ -2,36 +2,65 @@
 // state, ask), the CLI sends what changed in the task's folder of its worktree. The server may be
 // on another machine than the worktree; the copy is how the dashboard sees the files anyway.
 import { createHash } from "node:crypto"
-import { existsSync, readdirSync, readFileSync, statSync } from "node:fs"
+import { closeSync, constants, existsSync, lstatSync, openSync, readdirSync, readFileSync, realpathSync } from "node:fs"
 import { join, relative, sep } from "node:path"
-import { Effect } from "effect"
+import { Cause, Effect } from "effect"
 import { Db } from "./db.ts"
-import { isTaskFilePath, MAX_FILE_BYTES, MAX_IMAGES, type OrqError, TASK_FILES, type Task } from "./domain.ts"
+import { isTaskFilePath, MAX_FILE_BYTES, MAX_IMAGES, OrqError, TASK_FILES, type Task } from "./domain.ts"
 
 /** One request carries at most this much (before base64); more goes in the next one. */
 const BATCH_BYTES = 16 * 1024 * 1024
 
 export const taskDir = (task: Task) => join(task.worktree, ".orqestrai", "tasks", task.id)
 
+/** A regular file, not a symbolic link: a link could point anywhere on the machine. */
+const isPlainFile = (path: string) => {
+  const st = lstatSync(path, { throwIfNoEntry: false })
+  return st?.isFile() === true && st.size <= MAX_FILE_BYTES
+}
+
 /** The files the server keeps a copy of, as paths relative to `dir`: the task files, then the
- * evidence images (sorted, at most MAX_IMAGES, none over MAX_FILE_BYTES). */
+ * evidence images (sorted, at most MAX_IMAGES, none over MAX_FILE_BYTES). Symbolic links, to
+ * files or folders, are left out. */
 export const taskFiles = (dir: string): string[] => {
-  if (!existsSync(dir)) return []
-  const files = TASK_FILES.map((name) => `${name}.md`).filter((f) => existsSync(join(dir, f)))
+  const files = TASK_FILES.map((name) => `${name}.md`).filter((f) => isPlainFile(join(dir, f)))
   const images: string[] = []
   const walk = (d: string) => {
     for (const name of readdirSync(d).sort()) {
       if (images.length >= MAX_IMAGES) return
       const path = join(d, name)
-      const st = statSync(path)
+      const st = lstatSync(path)
       const rel = relative(dir, path).split(sep).join("/")
       if (st.isDirectory()) walk(path)
-      else if (isTaskFilePath(rel) && st.size <= MAX_FILE_BYTES) images.push(rel)
+      else if (isTaskFilePath(rel) && isPlainFile(path)) images.push(rel)
     }
   }
-  if (existsSync(join(dir, "evidence"))) walk(join(dir, "evidence"))
+  if (lstatSync(join(dir, "evidence"), { throwIfNoEntry: false })?.isDirectory()) walk(join(dir, "evidence"))
   return [...files, ...images]
 }
+
+/** Reads a file, refusing a symbolic link even if one replaced the file since taskFiles. */
+const readPlain = (path: string) => {
+  const fd = openSync(path, constants.O_RDONLY | constants.O_NOFOLLOW)
+  try {
+    return new Uint8Array(readFileSync(fd))
+  } finally {
+    closeSync(fd)
+  }
+}
+
+/** The task's folder, as it is now; nothing when the worktree is not on this machine. The folder
+ * itself must be inside the worktree (not a link to elsewhere). */
+const readTaskFolder = (task: Task) =>
+  Effect.try({
+    try: () => {
+      const dir = taskDir(task)
+      if (!existsSync(dir)) return null
+      if (!realpathSync(dir).startsWith(realpathSync(task.worktree) + sep)) throw new Error(`${dir} is a link out of the worktree`)
+      return taskFiles(dir).map((path) => ({ path, content: readPlain(join(dir, path)) }))
+    },
+    catch: (e) => new OrqError({ message: `cannot read the task files: ${e instanceof Error ? e.message : String(e)}` }),
+  })
 
 const sha256 = (content: Uint8Array) => createHash("sha256").update(content).digest("hex")
 
@@ -39,14 +68,12 @@ const sha256 = (content: Uint8Array) => createHash("sha256").update(content).dig
  * ones that are gone. Nothing to do when the worktree is not on this machine. */
 export const syncFiles = (task: Task): Effect.Effect<number, OrqError, Db> =>
   Effect.gen(function* () {
-    const dir = taskDir(task)
-    if (!existsSync(dir)) return 0
+    const local = yield* readTaskFolder(task)
+    if (local === null) return 0
     const db = yield* Db
     const have = new Map((yield* db.fileSums(task.id)).map((f) => [f.path, f.sha256]))
-    const paths = taskFiles(dir)
-    const changed = paths
-      .map((path) => ({ path, content: new Uint8Array(readFileSync(join(dir, path))) }))
-      .filter((f) => have.get(f.path) !== sha256(f.content))
+    const paths = local.map((f) => f.path)
+    const changed = local.filter((f) => have.get(f.path) !== sha256(f.content))
     const gone = [...have.keys()].some((p) => !paths.includes(p))
     if (changed.length === 0 && !gone) return 0
 
@@ -67,9 +94,15 @@ export const syncFiles = (task: Task): Effect.Effect<number, OrqError, Db> =>
     return changed.length
   })
 
-/** syncFiles after a step reported: a failure is a warning, the report itself stands. */
+/** syncFiles after a step reported: any failure, even an unexpected one, is a warning; the
+ * report itself stands. */
 export const syncFilesOrWarn = (task: Task) =>
   syncFiles(task).pipe(
     Effect.asVoid,
-    Effect.catch((e) => Effect.sync(() => console.error(`orq: warning: the task files did not reach the dashboard: ${e.message}`))),
+    Effect.catchCause((cause) =>
+      Effect.sync(() => {
+        const e = Cause.squash(cause)
+        console.error(`orq: warning: the task files did not reach the dashboard: ${e instanceof Error ? e.message : String(e)}`)
+      }),
+    ),
   )

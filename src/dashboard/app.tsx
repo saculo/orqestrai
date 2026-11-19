@@ -3,7 +3,7 @@
 // Bun bundles it from index.html (src/dashboard.ts); styles in style.css.
 import { useCallback, useEffect, useState } from "react"
 import { createRoot } from "react-dom/client"
-import { ago, type BoardTask, DONE, getJson, POLL_MS, project, STEPS, usePoll, waits } from "./data.ts"
+import { ago, type BoardTask, DONE, getJson, POLL_MS, project, projectLabels, STEPS, usePoll, waits } from "./data.ts"
 import { Panel } from "./panel.tsx"
 import { StatusChip, Tags } from "./parts.tsx"
 
@@ -37,7 +37,7 @@ const useNow = () => {
 const App = () => {
   const { value: tasks, at, failed } = usePoll(loadBoard, [])
   const now = useNow()
-  const [filter, setFilter] = useState(readLocal("orq.project") ?? "all")
+  const [filter, setFilter] = useState(readLocal("orq.repo") ?? "all")
   const [selected, setSelected] = useState<string | null>(location.hash.slice(1) || null)
   const [boardOnPhone, setBoardOnPhone] = useState(false)
 
@@ -51,9 +51,11 @@ const App = () => {
     return () => window.removeEventListener("hashchange", onHash)
   }, [])
 
-  const projects = ["all", ...new Set(tasks.map(project))]
+  // the filter is the repo's path; two repos with the same folder name stay apart
+  const labels = projectLabels(tasks)
+  const projects = ["all", ...labels.keys()]
   const fresh = (t: BoardTask) => !DONE.includes(t.status) || now - new Date(t.updated_at).getTime() < DONE_DAYS * 86_400_000
-  const shown = tasks.filter((t) => (filter === "all" || project(t) === filter) && fresh(t))
+  const shown = tasks.filter((t) => (filter === "all" || t.repo === filter) && fresh(t))
   const needs = shown
     .filter((t) => waits(t.status))
     .sort((a, b) => (a.status === b.status ? a.updated_at.localeCompare(b.updated_at) : a.status === "BLOCKED" ? -1 : 1))
@@ -84,10 +86,10 @@ const App = () => {
               aria-pressed={p === filter}
               onClick={() => {
                 setFilter(p)
-                writeLocal("orq.project", p)
+                writeLocal("orq.repo", p)
               }}
             >
-              {p === "all" ? "All projects" : p}
+              {p === "all" ? "All projects" : (labels.get(p) ?? p)}
             </button>
           ))}
         </nav>

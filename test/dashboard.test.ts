@@ -3,7 +3,7 @@
 // the server keeps its state elsewhere (ORQ_DATA=server) than the worktrees (home), as on another
 // machine, so the task files reach it only as the copies orq sends.
 import { afterAll, beforeAll, describe, expect, test } from "bun:test"
-import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs"
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import type { Subprocess } from "bun"
@@ -12,7 +12,7 @@ import { startServer } from "./server.ts"
 
 let dir: string, repo: string, socket: string, server: Subprocess, url: string, files: string
 
-const orq = (args: string[]) => {
+const run = (args: string[]) => {
   const env: Record<string, string | undefined> = {
     ...process.env,
     ORQ_DATA: join(dir, "home"),
@@ -22,8 +22,12 @@ const orq = (args: string[]) => {
   }
   delete env.ZELLIJ
   const p = Bun.spawnSync([...ORQ, ...args], { cwd: repo, env, stdout: "pipe", stderr: "pipe" })
-  if (p.exitCode !== 0) throw new Error(`orq ${args.join(" ")}: ${p.stderr}`)
-  return p.stdout.toString()
+  return { code: p.exitCode, stdout: p.stdout.toString(), stderr: p.stderr.toString() }
+}
+const orq = (args: string[]) => {
+  const p = run(args)
+  if (p.code !== 0) throw new Error(`orq ${args.join(" ")}: ${p.stderr}`)
+  return p.stdout
 }
 
 const get = (path: string) => fetch(`${url}${path}`)
@@ -109,6 +113,7 @@ describe("the dashboard", () => {
     const image = await get("/tasks/T-0001/evidence/V1/V1-list.png")
     expect(image.status).toBe(200)
     expect(image.headers.get("content-type")).toBe("image/png")
+    expect(new Uint8Array(await image.arrayBuffer())).toEqual(new Uint8Array([0x89, 0x50, 0x4e, 0x47]))
   })
 
   test("only the task files and the evidence images: nothing else on the machine", async () => {
@@ -140,7 +145,7 @@ describe("the dashboard", () => {
   })
 
   test("the server keeps only task files and evidence images, whoever sends them", async () => {
-    for (const path of ["../state.db", "NOTES.md", "evidence/trace.md", "evidence/../SPEC.png", "/etc/x.png"]) {
+    for (const path of ["../state.db", "NOTES.md", "evidence/trace.md", "evidence/../SPEC.png", "/etc/x.png", "evidence/x.constructor"]) {
       const r = await fetch(`${url}/tasks/T-0001/files`, {
         method: "POST",
         headers: { "content-type": "application/json" },
@@ -150,11 +155,49 @@ describe("the dashboard", () => {
     }
   })
 
+  test("symbolic links are not followed: a link to a file elsewhere is never sent", async () => {
+    const t3 = join(dir, "home", "worktrees", "proj", "T-0003-portions", ".orqestrai", "tasks", "T-0003")
+    const secret = join(dir, "secret.png")
+    writeFileSync(secret, "a private file")
+    symlinkSync(secret, join(t3, "LEARN.md"))
+    mkdirSync(join(t3, "evidence"))
+    symlinkSync(secret, join(t3, "evidence", "shot.png"))
+    symlinkSync(dir, join(t3, "evidence", "all"))
+    orq(["state", "T-0003", "triage", "IN PROGRESS"])
+    expect(await json("/tasks/T-0003/files")).toEqual({ files: [{ name: "REQUEST", status: null }], evidence: [] })
+  })
+
+  test("a frontmatter with CRLF line ends has its status too", async () => {
+    const t3 = join(dir, "home", "worktrees", "proj", "T-0003-portions", ".orqestrai", "tasks", "T-0003")
+    writeFileSync(join(t3, "BRIEF.md"), "---\r\nid: T-0003\r\nstatus: approved\r\n---\r\n\r\n# Brief\r\n")
+    orq(["state", "T-0003", "plan", "IN PROGRESS"])
+    const { files } = await json<{ files: unknown[] }>("/tasks/T-0003/files")
+    expect(files).toContainEqual({ name: "BRIEF", status: "approved" })
+  })
+
+  test("a file orq cannot read: a warning, and the state is recorded all the same", async () => {
+    const brief = join(dir, "home", "worktrees", "proj", "T-0003-portions", ".orqestrai", "tasks", "T-0003", "BRIEF.md")
+    chmodSync(brief, 0o000)
+    const p = run(["state", "T-0003", "impl", "IN PROGRESS"])
+    chmodSync(brief, 0o644)
+    expect(p.code).toBe(0)
+    expect(p.stderr).toContain("warning: the task files did not reach the dashboard")
+    expect((await json<BoardTask[]>("/board")).find((t) => t.id === "T-0003")).toMatchObject({ step: "impl" })
+  })
+
   test("a task whose worktree is gone: the server still has its files", async () => {
     rmSync(join(dir, "home", "worktrees", "proj", "T-0002-dark-mode"), { recursive: true, force: true })
     orq(["state", "T-0002", "triage", "IN PROGRESS"])
     expect(await json("/tasks/T-0002/files")).toEqual({ files: [{ name: "REQUEST", status: null }], evidence: [] })
   })
+
+  test("the message stays on the board however many events come after it", async () => {
+    orq(["new", "Many links"])
+    orq(["ask", "T-0004", "**Which store?**\n- Recommended: the one nearby"])
+    for (let n = 0; n < 31; n++) orq(["link", "T-0004", "note", `ref-${n}`])
+    const task = (await json<BoardTask[]>("/board")).find((t) => t.id === "T-0004")
+    expect(task).toMatchObject({ note: "Which store?", message: expect.stringContaining("Recommended: the one nearby") })
+  }, 60_000)
 
   test("orq show leaves the whole messages out; the note is enough there", () => {
     const shown = orq(["show", "T-0001"])

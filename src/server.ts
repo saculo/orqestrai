@@ -30,6 +30,7 @@ const tasks = HttpApiBuilder.group(
       links: ({ params }) => db.links(params.id),
       findLink: ({ query }) => db.findLink(query.kind, query.ref),
       setPlaybook: ({ params, payload }) => db.setType(params.id, payload.playbook),
+      now: ({ params }) => db.now(params.id),
       fileSums: ({ params }) => db.fileSums(params.id),
       putFiles: ({ params, payload }) => db.putFiles(params.id, payload.put, payload.keep),
       file: ({ params, query }) => db.file(params.id, query.path),
@@ -57,10 +58,7 @@ export const serve = Command.make(
   {
     socket: Flag.String("socket").pipe(Flag.optional, Flag.withDescription("listen on this Unix socket")),
     port: Flag.Int("port").pipe(Flag.optional, Flag.withDescription("listen on this TCP port")),
-    host: Flag.String("host").pipe(
-      Flag.withDefault("127.0.0.1"),
-      Flag.withDescription("with --port: the address to listen on"),
-    ),
+    host: Flag.String("host").pipe(Flag.withDefault("127.0.0.1"), Flag.withDescription("with --port: the address to listen on")),
   },
   ({ socket, port, host }) => {
     // both at once: the sessions on the socket, a browser (the dashboard) on the port

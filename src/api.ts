@@ -3,7 +3,7 @@
 // It mirrors the Db service one to one; a remote client is just another implementation.
 import { Schema } from "effect"
 import { HttpApi, HttpApiEndpoint, HttpApiGroup } from "effect/http-api"
-import { FileSum, LinkRole, NewTask, OrqError, Status, Step, Task, TaskEvent, TaskLink, TaskType } from "./domain.ts"
+import { FileSum, LinkRole, NewTask, OrqError, Status, Step, Task, TaskEvent, TaskLink, TaskNow, TaskType } from "./domain.ts"
 
 const id = { id: Schema.String }
 
@@ -39,6 +39,7 @@ export class TasksApi extends HttpApiGroup.make("tasks").add(
     payload: Schema.Struct({ playbook: TaskType }),
     error: OrqError,
   }),
+  HttpApiEndpoint.get("now", "/tasks/:id/now", { params: id, success: TaskNow, error: OrqError }),
   HttpApiEndpoint.get("fileSums", "/tasks/:id/sums", { params: id, success: Schema.Array(FileSum), error: OrqError }),
   // the contents travel as base64 in JSON
   HttpApiEndpoint.post("putFiles", "/tasks/:id/files", {

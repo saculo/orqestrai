@@ -17,6 +17,7 @@ import {
   Task,
   TaskEvent,
   TaskLink,
+  type TaskNow,
   taskId,
 } from "./domain.ts"
 import { asOrqError, rows } from "./sqlite.ts"
@@ -51,6 +52,8 @@ export class Db extends Context.Service<
       put: ReadonlyArray<{ readonly path: string; readonly content: Uint8Array }>,
       keep: ReadonlyArray<string>,
     ) => Effect.Effect<void, OrqError>
+    /** The task's last state note, and the message it was asked with, if that is still current. */
+    readonly now: (id: string) => Effect.Effect<TaskNow, OrqError>
     /** One file's copy. */
     readonly file: (id: string, path: string) => Effect.Effect<Uint8Array, OrqError>
   }
@@ -163,6 +166,19 @@ export class Db extends Context.Service<
             asOrqError("file sums"),
           ),
         putFiles,
+        now: (id) =>
+          Effect.gen(function* () {
+            const last = (kind: string) =>
+              sql<{ seq: number; detail: string | null }>`SELECT seq, detail FROM events
+                WHERE task_id = ${id} AND kind LIKE ${kind} ORDER BY seq DESC LIMIT 1`
+            const [state] = yield* last("%: %")
+            const [message] = yield* last("message")
+            // orq ask writes its state event, then its message: a later state change makes it old
+            return {
+              note: state?.detail ?? "",
+              message: message && (!state || message.seq > state.seq) ? message.detail : null,
+            }
+          }).pipe(asOrqError("now")),
         file: (id, path) =>
           sql<{ content: Uint8Array }>`SELECT content FROM task_files WHERE task_id = ${id} AND path = ${path}`.pipe(
             asOrqError("file"),

@@ -8,7 +8,7 @@ import { Effect, Layer } from "effect"
 import { HttpRouter, HttpServerResponse } from "effect/http"
 import page from "./dashboard/index.html"
 import { Db } from "./db.ts"
-import { IMAGE_TYPES, isTaskFilePath, OrqError, TASK_FILES } from "./domain.ts"
+import { imageType, isTaskFilePath, OrqError, TASK_FILES } from "./domain.ts"
 
 /** The page: Bun bundles its TSX and CSS and serves it (Bun.serve `routes`, src/server.ts). */
 export const PAGE = { "/": page }
@@ -25,7 +25,7 @@ const json = (body: unknown) => HttpServerResponse.text(JSON.stringify(body), { 
 const notFound = (e: OrqError) => Effect.succeed(HttpServerResponse.text(e.message, { status: 404 }))
 
 /** The `status:` line of a file's frontmatter, if it has one. */
-const frontmatterStatus = (text: string) => /^---\n[\s\S]*?^status:\s*(\S+)[\s\S]*?^---$/m.exec(text)?.[1] ?? null
+const frontmatterStatus = (text: string) => /^---\r?\n[\s\S]*?^status:[ \t]*(\S+)[\s\S]*?^---\r?$/m.exec(text)?.[1] ?? null
 
 const utf8 = new TextDecoder()
 
@@ -36,16 +36,9 @@ const board = (db: Db["Service"]) =>
     Effect.flatMap((tasks) =>
       Effect.forEach(tasks, (task) =>
         Effect.gen(function* () {
-          const events = yield* db.events(task.id, 30)
-          const iState = events.findIndex((e) => e.kind.includes(": "))
-          const iMessage = events.findIndex((e) => e.kind === "message")
+          const { note, message } = yield* db.now(task.id)
           const waits = task.status === "WAITING FOR ME" || task.status === "BLOCKED"
-          return {
-            ...task,
-            note: iState >= 0 ? (events[iState]?.detail ?? "") : "",
-            message: waits && iMessage >= 0 && (iState < 0 || iMessage < iState) ? (events[iMessage]?.detail ?? null) : null,
-            links: yield* db.links(task.id),
-          }
+          return { ...task, note, message: waits ? message : null, links: yield* db.links(task.id) }
         }),
       ),
     ),
@@ -95,7 +88,7 @@ export const dashboard = Layer.unwrap(
         Effect.gen(function* () {
           const params = yield* HttpRouter.params
           const path = `evidence/${params["*"] ?? ""}`
-          const type = IMAGE_TYPES[path.split(".").pop()?.toLowerCase() ?? ""]
+          const type = imageType(path)
           // only evidence images: the database holds nothing else, and the path is checked anyway
           if (!type || !isTaskFilePath(path)) return yield* new OrqError({ message: "no such image" })
           return HttpServerResponse.uint8Array(yield* db.file(params.id ?? "", path), { contentType: type })

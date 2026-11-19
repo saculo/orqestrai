@@ -1,6 +1,6 @@
 // What the dashboard reads from `orq serve` (src/dashboard.ts), as JSON: dates are ISO strings.
-import { useCallback, useEffect, useState } from "react"
-import type { Status, Step, Task, TaskEvent, TaskLink } from "../domain.ts"
+import { useEffect, useRef, useState } from "react"
+import type { Status, Step, TASK_FILES, Task, TaskEvent, TaskLink } from "../domain.ts"
 
 type Json<T> = { [K in keyof T]: T[K] extends Date ? string : T[K] }
 
@@ -22,6 +22,13 @@ export const STEPS = ["triage", "plan", "impl", "verify", "learn", "ship"] as co
 const sameSteps: Exclude<Step, (typeof STEPS)[number]> extends never ? true : false = true
 void sameSteps
 
+/** The task files, in the order of the steps; checked against domain.ts like STEPS. */
+export const FILE_NAMES = ["REQUEST", "RESEARCH", "BRIEF", "SPEC", "VERIFY", "LEARN", "PR"] as const satisfies ReadonlyArray<
+  (typeof TASK_FILES)[number]
+>
+const sameFiles: Exclude<(typeof TASK_FILES)[number], (typeof FILE_NAMES)[number]> extends never ? true : false = true
+void sameFiles
+
 export const getJson = async <T>(url: string): Promise<T> => {
   const r = await fetch(url, { cache: "no-store" })
   if (!r.ok) throw new Error(`${url}: ${r.status} ${await r.text()}`)
@@ -33,34 +40,56 @@ export const getText = async (url: string): Promise<string | null> => {
   return r.ok ? r.text() : null
 }
 
-/** `load` now and every POLL_MS; the last value, and when the last call failed. */
+/** `load` now and every POLL_MS; the last value, and when the last call failed. A response
+ * older than one already shown is dropped (a slow poll must not undo a newer one), and a new
+ * `load` (another task, another file) starts again from `initial`, never with the old value. */
 export const usePoll = <T>(load: () => Promise<T>, initial: T) => {
+  const first = useRef(initial)
   const [value, setValue] = useState<T>(initial)
   const [at, setAt] = useState<number | null>(null)
   const [failed, setFailed] = useState(false)
-  const run = useCallback(
-    () =>
+  useEffect(() => {
+    let live = true
+    let started = 0
+    let shown = 0
+    setValue(first.current)
+    setAt(null)
+    const run = () => {
+      const n = ++started
       load().then(
         (v) => {
+          if (!live || n < shown) return
+          shown = n
           setValue(v)
           setAt(Date.now())
           setFailed(false)
         },
-        () => setFailed(true),
-      ),
-    [load],
-  )
-  useEffect(() => {
+        () => {
+          if (live && n >= shown) setFailed(true)
+        },
+      )
+    }
     run()
     const timer = setInterval(run, POLL_MS)
-    return () => clearInterval(timer)
-  }, [run])
+    return () => {
+      live = false
+      clearInterval(timer)
+    }
+  }, [load])
   return { value, at, failed }
 }
 
 export const waits = (s: Status) => s === "WAITING FOR ME" || s === "BLOCKED"
 export const DONE: ReadonlyArray<Status> = ["MERGED", "DROPPED"]
 export const project = (t: BoardTask) => t.repo.split("/").filter(Boolean).pop() ?? t.repo
+
+/** Each repo's label for the project filter: its folder's name, or with its parent's when
+ * two repos share a name (`client/api`, `server/api`). */
+export const projectLabels = (tasks: ReadonlyArray<BoardTask>) => {
+  const repos = [...new Set(tasks.map((t) => t.repo))]
+  const base = (repo: string, n: number) => repo.split("/").filter(Boolean).slice(-n).join("/") || repo
+  return new Map(repos.map((r) => [r, repos.some((o) => o !== r && base(o, 1) === base(r, 1)) ? base(r, 2) : base(r, 1)]))
+}
 
 export const ago = (iso: string, now = Date.now()) => {
   const s = Math.max(0, (now - new Date(iso).getTime()) / 1000)

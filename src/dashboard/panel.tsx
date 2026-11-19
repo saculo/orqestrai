@@ -1,10 +1,23 @@
 // One task: its header and links, the message it waits on, its files as tabs (with the verify
 // screenshots), and its timeline.
 import { useCallback, useState } from "react"
-import { ago, type BoardTask, type Event, type Files, getJson, getText, prOf, project, slackOf, usePoll, waits } from "./data.ts"
+import {
+  ago,
+  type BoardTask,
+  type Event,
+  FILE_NAMES,
+  type Files,
+  getJson,
+  getText,
+  prOf,
+  project,
+  slackOf,
+  usePoll,
+  waits,
+} from "./data.ts"
 import { Md, StatusChip } from "./parts.tsx"
 
-const TABS = ["REQUEST", "RESEARCH", "BRIEF", "SPEC", "VERIFY", "LEARN", "PR"]
+const TABS: ReadonlyArray<string> = FILE_NAMES
 /** Shown even before the file exists, so the steps ahead are visible. */
 const ALWAYS = ["REQUEST", "BRIEF", "SPEC", "VERIFY", "PR"]
 const NO_FILES: Files = { files: [], evidence: [] }
@@ -82,7 +95,7 @@ export const Panel = ({ task, now, onClose }: { task: BoardTask; now: number; on
           <p className="label">
             {blocked ? "Blocked" : "Waiting for you"} · {ago(task.updated_at, now)} ago
           </p>
-          <Md text={task.message ?? task.note} />
+          <Md text={task.message ?? task.note} task={id} />
           <p className="small answer">
             Answer {slack ? "in the Slack thread, or " : ""}in the session: <span className="mono">orq open {id}</span>
           </p>
@@ -108,7 +121,7 @@ export const Panel = ({ task, now, onClose }: { task: BoardTask; now: number; on
         <p className="small">
           {tab}.md · {have.has(tab) ? (status ?? "written") : "not written yet"}
         </p>
-        {text !== null && <Md text={text} />}
+        {text !== null && <Md text={text} task={id} />}
         {tab === "VERIFY" && files.value.evidence.length > 0 && (
           <div className="shots">
             {files.value.evidence.map((p) => (
