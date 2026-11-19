@@ -575,7 +575,10 @@ plain TS (no `bun:*` imports), because pi loads extensions under Node.
 - Archive: `<data>/archive/<repo>/<id>/`, the files of dropped tasks after `orq clean`.
 - **Dashboard:** `orq serve` serves it at `/` (`src/dashboard.ts`, the page in
   `src/dashboard/`: React, bundled by Bun itself, so there is no build step and it is
-  inside the compiled binary too). Read-only: a board by step, "needs you" on top with the
+  inside the compiled binary too). The page keeps its logic in plain, tested modules
+  (`serverApi.ts`, `tasks.ts`, `board.ts`, `taskFiles.ts`, `hooks.ts`) and draws with small
+  components named for what they show (`components/`: `NeedsYou`, `TaskBoard`, `TaskPanel`,
+  `TaskFileViewer`, `Timeline`…). Read-only: a board by step, "needs you" on top with the
   whole message (`orq ask` keeps it as a `message` event), and per task its files, the verify
   screenshots and the timeline. The files come from the database: whenever a step reports
   (`orq new`, `orq state`, `orq ask`) the CLI sends what changed in the task's folder
