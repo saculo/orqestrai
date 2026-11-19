@@ -94,8 +94,9 @@ orq send T-0001 "go on"         # type a message into the task's session
 
 Always start a task session with `orq new` or `orq open`. They set `ORQ_TASK`, and the
 guard hooks are active only when it is set. Each session runs in a herdr-core terminal
-named `orq-<id>`, which stays alive when nobody watches: `hc attach orq-T-0001` in a
-terminal, or the Herdr app (desktop or phone, over SSH), shows it and lets you type. Without
+named after the task (`orq-t-0001`), which stays alive when nobody watches: `hc attach
+orq-t-0001` in a terminal, or the Herdr app (desktop or phone, over SSH), shows it and lets
+you type. Without
 `hc`, `orq new` prints the command to run.
 
 A project's own skills, agents and hooks go in its `.claude/` as usual. Shared ones can go

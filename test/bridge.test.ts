@@ -149,7 +149,7 @@ describe("orq bridge", () => {
     expect(acks).toEqual(["env-1"])
     expect(orq(["show", "T-0001"]).out).toContain("link slack-thread C1/100.1 (origin)")
     expect(hcLog()).toMatch(
-      /^run --bg --outlive-parent --name orq-T-0001 --cwd \S+ -- env ORQ_TASK=T-0001 .* claude --model opus \/orq:task T-0001$/m,
+      /^run --bg --outlive-parent --name orq-t-0001 --cwd \S+ -- env ORQ_TASK=T-0001 .* claude --model opus \/orq:task T-0001$/m,
     )
   })
 
@@ -174,7 +174,7 @@ describe("orq bridge", () => {
     await startBridge()
     mention("Add search", "100.1")
     await until("the task", () => posts.length > 0)
-    writeFileSync(join(dir, "terminals.json"), JSON.stringify({ terminals: [{ address: "t1", name: "orq-T-0001" }] }))
+    writeFileSync(join(dir, "terminals.json"), JSON.stringify({ terminals: [{ address: "t1", name: "orq-t-0001" }] }))
 
     replyIn("100.1", "use the new API", "100.5")
     await until("the typing", () => hcLog().includes("send t1 use the new API"))

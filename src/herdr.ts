@@ -37,8 +37,8 @@ export const sessionCommand = (
 
 const shellQuote = (s: string) => (/^[\w@%+=:,./-]+$/.test(s) ? s : `'${s.replaceAll("'", `'\\''`)}'`)
 
-/** The task's terminal name in herdr-core. */
-export const terminalName = (id: string) => `orq-${id}`
+/** The task's terminal name in herdr-core, which takes lowercase names only: orq-t-0001. */
+export const terminalName = (id: string) => `orq-${id.toLowerCase()}`
 
 /** hc's exit code when the terminal waits for a person (a permission prompt). */
 const BLOCKED = 9

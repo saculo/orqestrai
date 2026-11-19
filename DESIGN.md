@@ -388,7 +388,7 @@ orq knows no machines. One setting decides how the pieces find each other: `serv
 The pieces:
 
 - **Task sessions**: Claude Code with the orqestrai plugin, one per task, in a
-  **herdr-core terminal** (`orq-<id>`), in the task's own **git worktree**, inside the
+  **herdr-core terminal** (`orq-t-0001`), in the task's own **git worktree**, inside the
   sandbox command you choose (or none). It stays alive with nobody watching; you attach
   with `hc attach` or the Herdr app (desktop or phone, over SSH) at any time. No
   fleet-level agent in v1.

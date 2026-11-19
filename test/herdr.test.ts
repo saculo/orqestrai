@@ -35,7 +35,7 @@ const orq = (args: string[]) => {
 }
 
 const hcCalls = () => readFileSync(join(dir, "log"), "utf8").trim().split("\n")
-const running = () => writeFileSync(join(dir, "terminals.json"), JSON.stringify({ terminals: [{ address: "t4", name: "orq-T-0001" }] }))
+const running = () => writeFileSync(join(dir, "terminals.json"), JSON.stringify({ terminals: [{ address: "t4", name: "orq-t-0001" }] }))
 
 beforeEach(() => {
   dir = mkdtempSync(join(tmpdir(), "orq-herdr-"))
@@ -51,11 +51,11 @@ afterEach(() => rmSync(dir, { recursive: true, force: true }))
 describe("task sessions in herdr-core", () => {
   test("orq new starts the session in a terminal named after the task, in its worktree, with no parent", () => {
     const r = orq(["new", "Add search"])
-    expect(r.out).toContain("started orq-T-0001 in herdr-core (hc attach orq-T-0001)")
+    expect(r.out).toContain("started orq-t-0001 in herdr-core (hc attach orq-t-0001)")
     // no HC_TERMINAL_ID: the session would end with the terminal orq ran in
     expect(hcCalls()).toContainEqual(
       expect.stringMatching(
-        /^\|run --bg --outlive-parent --name orq-T-0001 --cwd \S+\/T-0001-add-search -- env ORQ_TASK=T-0001 .* claude --model opus \/orq:task T-0001$/,
+        /^\|run --bg --outlive-parent --name orq-t-0001 --cwd \S+\/T-0001-add-search -- env ORQ_TASK=T-0001 .* claude --model opus \/orq:task T-0001$/,
       ),
     )
   })
@@ -63,7 +63,7 @@ describe("task sessions in herdr-core", () => {
   test("orq open leaves a running session as it is", () => {
     orq(["new", "Add search"])
     running()
-    expect(orq(["open", "T-0001"]).out).toContain("orq-T-0001 is already running")
+    expect(orq(["open", "T-0001"]).out).toContain("orq-t-0001 is already running")
     expect(hcCalls().filter((c) => c.startsWith("|run "))).toHaveLength(1)
   })
 
@@ -71,7 +71,7 @@ describe("task sessions in herdr-core", () => {
     orq(["new", "Add search"])
     running()
     const r = orq(["send", "T-0001", "use the new API\nand keep the old one"])
-    expect(r.out).toContain("typed into orq-T-0001")
+    expect(r.out).toContain("typed into orq-t-0001")
     expect(readFileSync(join(dir, "log"), "utf8")).toContain("|send t4 use the new API\nand keep the old one\n")
   })
 
@@ -81,7 +81,7 @@ describe("task sessions in herdr-core", () => {
     writeFileSync(join(dir, "send-code"), "9")
     const r = orq(["send", "T-0001", "go on"])
     expect(r.code).not.toBe(0)
-    expect(r.err).toContain("orq-T-0001 waits for a permission decision")
+    expect(r.err).toContain("orq-t-0001 waits for a permission decision")
   })
 
   test("orq clean ends the session and removes its terminal", () => {
@@ -92,7 +92,7 @@ describe("task sessions in herdr-core", () => {
     sh(["git", "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "request"], worktree)
     running()
     const r = orq(["clean", "T-0001"])
-    expect(r.out).toContain("orq-T-0001: session ended")
+    expect(r.out).toContain("orq-t-0001: session ended")
     expect(hcCalls()).toEqual(expect.arrayContaining(["|kill t4", "|rm t4"]))
   })
 })
