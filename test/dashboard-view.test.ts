@@ -17,6 +17,7 @@ const task = (fields: Partial<BoardTask> & Pick<BoardTask, "id">): BoardTask => 
   step: "triage",
   status: "TODO",
   type: null,
+  source: "cli",
   created_at: minutesAgo(60),
   updated_at: minutesAgo(10),
   note: "",

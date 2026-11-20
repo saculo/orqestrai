@@ -17,6 +17,11 @@ export const TaskType = Schema.String.pipe(Schema.check(Schema.isPattern(/^[a-z]
 
 export const TEMPLATES = ["BRIEF", "RESEARCH", "SPEC", "VERIFY", "LEARN", "PR"] as const
 
+/** Where a task was started: `orq new` in a terminal, a Slack mention, a GitHub issue (`orq issues`). */
+export const SOURCES = ["cli", "slack", "github"] as const
+export const Source = Schema.Literals(SOURCES)
+export type Source = typeof Source.Type
+
 export const Task = Schema.Struct({
   id: Schema.String,
   repo: Schema.String,
@@ -26,6 +31,7 @@ export const Task = Schema.Struct({
   step: Step,
   status: Status,
   type: Schema.NullOr(Schema.String),
+  source: Source,
   created_at: Schema.DateFromString,
   updated_at: Schema.DateFromString,
 })
@@ -41,6 +47,8 @@ export const NewTask = Schema.Struct({
   base: Schema.String,
   /** set when the user chose it; else the task session chooses */
   type: Schema.optional(TaskType),
+  /** cli when not given */
+  source: Schema.optional(Source),
 })
 export type NewTask = typeof NewTask.Type
 

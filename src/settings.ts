@@ -14,7 +14,7 @@ const KEYS: Record<string, string> = {
   data: "ORQ_DATA",
   hc: "ORQ_HC",
 }
-const TABLES = ["add_dirs", "slack"]
+const TABLES = ["add_dirs", "slack", "github"]
 
 const path = (v: unknown, key: string) => {
   if (typeof v !== "string") throw new Error(`${key} must be a string`)
@@ -48,6 +48,16 @@ export const settingsEnv = (s: Settings): Record<string, string> => {
     if (slack.channels !== undefined)
       env.ORQ_SLACK_CHANNELS = Object.entries(table(slack.channels, "slack.channels"))
         .map(([channel, dir]) => `${channel}=${path(dir, `slack.channels.${channel}`)}`)
+        .join(",")
+  }
+  if (s.github !== undefined) {
+    const github = table(s.github, "github")
+    only(github, ["user", "repos"], "github.")
+    if (github.user !== undefined) env.ORQ_GITHUB_USER = path(github.user, "github.user")
+    // each repo and the checkout where its tasks start
+    if (github.repos !== undefined)
+      env.ORQ_GITHUB_REPOS = Object.entries(table(github.repos, "github.repos"))
+        .map(([repo, dir]) => `${repo}=${path(dir, `github.repos.${repo}`)}`)
         .join(",")
   }
   return env

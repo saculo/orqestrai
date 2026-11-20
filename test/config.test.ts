@@ -77,4 +77,13 @@ describe("settingsEnv", () => {
     const env = settingsEnv({ slack: { user: "U1", tokens: "/t/slack.env", channels: { C1: "/p/app", C2: "/p/lib" } } })
     expect(env).toEqual({ ORQ_SLACK_USER: "U1", ORQ_SLACK_TOKENS: "/t/slack.env", ORQ_SLACK_CHANNELS: "C1=/p/app,C2=/p/lib" })
   })
+
+  test("maps [github] to orq issues' variables, a repo to the checkout where its tasks start", () => {
+    const env = settingsEnv({ github: { user: "me", repos: { "me/app": "/p/app", "me/lib": "/p/lib" } } })
+    expect(env).toEqual({ ORQ_GITHUB_USER: "me", ORQ_GITHUB_REPOS: "me/app=/p/app,me/lib=/p/lib" })
+  })
+
+  test("rejects a key [github] does not know", () => {
+    expect(() => settingsEnv({ github: { user: "me", label: "orq" } })).toThrow("unknown key github.label")
+  })
 })

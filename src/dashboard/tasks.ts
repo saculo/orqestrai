@@ -41,6 +41,13 @@ export const pullRequestOf = (task: BoardTask) => {
   return { url: ref.startsWith("http") ? ref : null, label: number ? `#${number}` : "PR" }
 }
 
+/** The GitHub issue the task was started from (`orq issues`): its URL, and its number as a label. */
+export const issueOf = (task: BoardTask) => {
+  const url = linkedRef(task, "gh-issue")
+  if (!url) return null
+  return { url, label: `#${/\/issues\/(\d+)/.exec(url)?.[1] ?? "?"}` }
+}
+
 /** The task's Slack thread (`C123/1700000000.000100`), as a link Slack opens in your workspace. */
 export const slackThreadUrl = (task: BoardTask) => {
   const ref = linkedRef(task, "slack-thread")
