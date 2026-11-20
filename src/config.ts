@@ -15,8 +15,8 @@ const settings = Config.all({
     Config.withDefault(join(homedir(), ".orqestrai", "bridge.sock")),
     Config.map((p) => resolve(p)),
   ),
-  /** zellij session used when orq runs outside zellij */
-  session: Config.String("ORQ_ZELLIJ_SESSION").pipe(Config.withDefault("orq")),
+  /** herdr-core's `hc`, which keeps the task sessions (the settings file's `hc`) */
+  hc: Config.String("ORQ_HC").pipe(Config.withDefault("hc")),
   /** command the task session runs inside, e.g. "fence --" for the Fence sandbox; empty: none */
   sandbox: Config.String("ORQ_SANDBOX").pipe(Config.withDefault("")),
   /** directories every task session also gets, with --add-dir, separated by ":" (e.g. a home repo's shared skills) */

@@ -1,4 +1,4 @@
-// orq: the mechanics of orqestrai. Task ids, state, worktrees, zellij tabs, task files, PR state.
+// orq: the mechanics of orqestrai. Task ids, state, worktrees, sessions (herdr-core), task files, PR state.
 // The workflow lives in skills/. This program does not decide. It only does.
 
 import { existsSync, writeFileSync } from "node:fs"
@@ -13,6 +13,7 @@ import { Db } from "./db.ts"
 import { headline, LINK_ROLES, OrqError, STATUSES, STEPS, stamp, TaskType, TEMPLATES } from "./domain.ts"
 import { syncFilesOrWarn } from "./files.ts"
 import { baseBranch, topLevel } from "./git.ts"
+import { closeSession, openSession, sendToTask } from "./herdr.ts"
 import { install } from "./init.ts"
 import { syncMerged } from "./pr.ts"
 import { serve } from "./server.ts"
@@ -20,7 +21,6 @@ import { withState } from "./state.ts"
 import { startTask } from "./task.ts"
 import { templates } from "./templates.ts"
 import { VERSION } from "./version.ts"
-import { openTab, sendToTask } from "./zellij.ts"
 
 /** The plugin's guard hook and skills start `orq` by name. Without it on PATH they do not run. */
 const warnIfNotOnPath = Effect.gen(function* () {
@@ -55,20 +55,20 @@ const newTask = Command.make(
   },
   ({ request, playbook }) =>
     Effect.gen(function* () {
-      const { task, tab } = yield* startTask(yield* topLevel(), request, Option.getOrUndefined(playbook))
+      const { task, session } = yield* startTask(yield* topLevel(), request, Option.getOrUndefined(playbook))
       yield* Console.log(`${task.id}  ${task.branch}  ${task.worktree}`)
-      yield* Console.log(tab)
+      yield* Console.log(session)
       yield* warnIfNotOnPath
     }),
-).pipe(Command.withDescription("new task: id, branch, worktree, zellij tab"), withState)
+).pipe(Command.withDescription("new task: id, branch, worktree, session"), withState)
 
 const open = Command.make("open", { id }, ({ id }) =>
   Effect.gen(function* () {
     const task = yield* (yield* Db).get(id)
     if (!existsSync(task.worktree)) return yield* new OrqError({ message: `worktree ${task.worktree} is gone` })
-    yield* Console.log(yield* openTab(id, task.worktree, yield* baseBranch(task.repo)))
+    yield* Console.log(yield* openSession(id, task.worktree, yield* baseBranch(task.repo)))
   }),
-).pipe(Command.withDescription("open the task's tab again (after a restart)"), withState)
+).pipe(Command.withDescription("start the task's session again (after a restart)"), withState)
 
 const state = Command.make(
   "state",
@@ -172,9 +172,12 @@ const ls = Command.make("ls", {}, () =>
 const cleanTask = Command.make("clean", { id }, ({ id }) =>
   Effect.gen(function* () {
     for (const line of yield* clean(id)) yield* Console.log(line)
-    yield* Console.log(`close the zellij tab orq-${id} if it is still open`)
+    yield* Console.log(yield* closeSession(id))
   }),
-).pipe(Command.withDescription("remove a merged or dropped task's worktree and branch; the task stays in orq ls"), withState)
+).pipe(
+  Command.withDescription("end a merged or dropped task's session, remove its worktree and branch; the task stays in orq ls"),
+  withState,
+)
 
 const file = Command.make("file", { id, name: Argument.Literals("name", TEMPLATES) }, ({ id, name }) =>
   Effect.gen(function* () {

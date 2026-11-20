@@ -16,8 +16,8 @@ const sh = (cmd: string[], cwd: string) => {
 
 const orq = (args: string[], toml: string, extra: Record<string, string> = {}) => {
   writeFileSync(config, toml)
-  const env = { ...process.env, ORQ_CONFIG: config, ORQ_ZELLIJ_SESSION: "orq-test-none", ...extra } as Record<string, string | undefined>
-  for (const k of ["ZELLIJ", "ORQ_DATA", "ORQ_SANDBOX", "ORQ_ADD_DIRS", "ORQ_MODEL"]) if (!(k in extra)) delete env[k]
+  const env = { ...process.env, ORQ_CONFIG: config, ORQ_HC: "orq-test-no-hc", ...extra } as Record<string, string | undefined>
+  for (const k of ["ORQ_DATA", "ORQ_SANDBOX", "ORQ_ADD_DIRS", "ORQ_MODEL"]) if (!(k in extra)) delete env[k]
   const p = Bun.spawnSync([...ORQ, ...args], { cwd: repo, env, stdout: "pipe", stderr: "pipe" })
   return { code: p.exitCode, out: p.stdout.toString(), err: p.stderr.toString() }
 }
@@ -50,11 +50,10 @@ describe("the settings file", () => {
     rmSync(config, { force: true })
     const env: Record<string, string | undefined> = {
       ...process.env,
-
+      ORQ_HC: "orq-test-no-hc",
       ORQ_CONFIG: join(dir, "missing.toml"),
       ORQ_DATA: join(dir, "data"),
     }
-    delete env.ZELLIJ
     const p = Bun.spawnSync([...ORQ, "new", "x"], { cwd: repo, env, stdout: "pipe", stderr: "pipe" })
     expect(p.exitCode).toBe(0)
     expect(p.stdout.toString()).toContain("claude --model opus")

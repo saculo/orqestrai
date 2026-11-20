@@ -1,10 +1,10 @@
 // `orq bridge`: Slack ⇄ the task sessions, on the sessions' machine, outside the sandbox. No LLM.
-//   @bot [playbook=<name>] <request> in a project's channel → a new task (`orq new`), its tab,
+//   @bot [playbook=<name>] <request> in a project's channel → a new task (`orq new`), its session,
 //     one thread for it.
 //   your reply in that thread → typed into the task's session (reopened if closed).
 //   `orq ask` from a session → posted in the task's thread, over a local socket.
 // The Slack tokens are read from a file the sandbox hides, never from the environment, so the
-// zellij session it may start (and every task session in it) does not inherit them.
+// task sessions it starts do not inherit them.
 import { chmodSync, existsSync, readFileSync, rmSync } from "node:fs"
 import { homedir } from "node:os"
 import { join } from "node:path"
@@ -15,10 +15,10 @@ import { OrqConfig } from "./config.ts"
 import { Db } from "./db.ts"
 import { headline, OrqError } from "./domain.ts"
 import { baseBranch } from "./git.ts"
+import { sendToTask } from "./herdr.ts"
 import { blocks, listen, post, type Slack, type SlackEvent } from "./slack.ts"
 import { withState } from "./state.ts"
 import { startTask } from "./task.ts"
-import { ensureSession, sendToTask } from "./zellij.ts"
 
 const settings = Config.all({
   /** SLACK_APP_TOKEN=xapp-… and SLACK_BOT_TOKEN=xoxb-… lines; hidden from the sandbox (Fence) */
@@ -77,7 +77,6 @@ const bridge = Command.make("bridge", {}, () =>
     const channelOf = (repo: string) => [...channels].find(([, path]) => path === repo)?.[0]
     const { bridge: socket } = yield* OrqConfig
     const db = yield* Db
-    yield* ensureSession
 
     const reportTo = (channel: string, thread: string) => (e: OrqError) =>
       Console.error(`orq bridge: ${e.message}`).pipe(Effect.andThen(post(slack, channel, `orq: ${e.message}`, thread)), Effect.ignore)
@@ -87,14 +86,14 @@ const bridge = Command.make("bridge", {}, () =>
         const root = channels.get(e.channel)
         if (root === undefined) return yield* new OrqError({ message: `this channel is no project's (ORQ_SLACK_CHANNELS)` })
         const asked = withPlaybook(request(e.text))
-        const { task, tab } = yield* startTask(root, asked.request, asked.playbook)
+        const { task, session } = yield* startTask(root, asked.request, asked.playbook)
         yield* db.link(task.id, "slack-thread", threadRef(e.channel, e.ts), "origin")
         yield* post(
           slack,
           e.channel,
           `${task.id} started: \`${task.branch}\``,
           e.ts,
-          blocks(`**${task.id} started:** \`${task.branch}\``, tab.split("\n")[0] ?? ""),
+          blocks(`**${task.id} started:** \`${task.branch}\``, session.split("\n")[0] ?? ""),
         )
       }).pipe(Effect.catch(reportTo(e.channel, e.ts)))
 

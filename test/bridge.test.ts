@@ -1,5 +1,5 @@
 // `orq bridge` against a fake Slack (its Web API and a Socket Mode WebSocket, on localhost) and a
-// fake `zellij` on PATH that logs its calls and answers like a session nobody is attached to.
+// fake herdr-core `hc` that logs its calls and lists the terminals in terminals.json.
 import { afterEach, beforeEach, describe, expect, test } from "bun:test"
 import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
@@ -7,14 +7,11 @@ import { join } from "node:path"
 import type { Server, ServerWebSocket, Subprocess } from "bun"
 import { ORQ } from "./orq.ts"
 
-const FAKE_ZELLIJ = `#!/usr/bin/env bash
-printf '%s\\n' "$*" >> "$FAKE_ZELLIJ_DIR/log"
-case "$*" in
-  "list-sessions"*) echo orq-bridge-test ;;
-  *"list-clients"*) echo "CLIENT_ID ZELLIJ_PANE_ID RUNNING_COMMAND" ;;
-  *"new-tab"*) echo 1 ;;
-  *"new-pane"*) echo terminal_2 ;;
-  *"list-panes"*) cat "$FAKE_ZELLIJ_DIR/panes.json" 2>/dev/null || echo "[]" ;;
+const FAKE_HC = `#!/usr/bin/env bash
+printf '%s\\n' "$*" >> "$FAKE_HC_DIR/log"
+case "$1" in
+  ls) cat "$FAKE_HC_DIR/terminals.json" 2>/dev/null || echo '{"terminals":[]}' ;;
+  run) echo '{"address":"t1"}' ;;
 esac
 `
 
@@ -32,19 +29,17 @@ let posts: Posted[], acks: string[], envelopes: number
 const env = (extra: Record<string, string> = {}) => {
   const e: Record<string, string | undefined> = {
     ...process.env,
-
     ORQ_DATA: join(dir, "home"),
     ORQ_BRIDGE: join(dir, "bridge.sock"),
-    ORQ_ZELLIJ_SESSION: "orq-bridge-test",
+    ORQ_HC: join(dir, "bin", "hc"),
     ORQ_SLACK_TOKENS: join(dir, "slack.env"),
     ORQ_SLACK_USER: "U1",
     ORQ_SLACK_CHANNELS: `C1=${repo}`,
     ORQ_SLACK_API: `http://127.0.0.1:${slack.port}/api`,
     PATH: `${join(dir, "bin")}:${process.env.PATH}`,
-    FAKE_ZELLIJ_DIR: dir,
+    FAKE_HC_DIR: dir,
     ...extra,
   }
-  delete e.ZELLIJ
   delete e.ORQ_SANDBOX
   return e
 }
@@ -69,7 +64,7 @@ const until = async (what: string, check: () => boolean) => {
   throw new Error(`timed out waiting for ${what}`)
 }
 
-const zellijLog = () => {
+const hcLog = () => {
   try {
     return readFileSync(join(dir, "log"), "utf8")
   } catch {
@@ -97,8 +92,8 @@ beforeEach(() => {
   repo = join(dir, "proj")
   mkdirSync(repo)
   mkdirSync(join(dir, "bin"))
-  writeFileSync(join(dir, "bin", "zellij"), FAKE_ZELLIJ)
-  chmodSync(join(dir, "bin", "zellij"), 0o755)
+  writeFileSync(join(dir, "bin", "hc"), FAKE_HC)
+  chmodSync(join(dir, "bin", "hc"), 0o755)
   writeFileSync(join(dir, "slack.env"), "SLACK_APP_TOKEN=xapp-test\nSLACK_BOT_TOKEN=xoxb-test\n")
   for (const args of [
     ["init", "-q", "-b", "main"],
@@ -143,7 +138,7 @@ afterEach(async () => {
 })
 
 describe("orq bridge", () => {
-  test("your mention in a project's channel starts a task, in a tab, with a thread of its own", async () => {
+  test("your mention in a project's channel starts a task, in its session, with a thread of its own", async () => {
     await startBridge()
     mention("Add search", "100.1")
     await until("the reply in the thread", () => posts.length > 0)
@@ -153,9 +148,9 @@ describe("orq bridge", () => {
     expect(posts[0]?.blocks?.[0]).toEqual({ type: "markdown", text: "**T-0001 started:** `orq/T-0001-add-search`" })
     expect(acks).toEqual(["env-1"])
     expect(orq(["show", "T-0001"]).out).toContain("link slack-thread C1/100.1 (origin)")
-    // nobody attached: the tab, then its pane by the tab's id
-    expect(zellijLog()).toContain("action new-tab --name orq-T-0001 --cwd")
-    expect(zellijLog()).toMatch(/action new-pane --tab-id 1 --cwd \S+ -- env ORQ_TASK=T-0001 .* claude --model opus \/orq:task T-0001/)
+    expect(hcLog()).toMatch(
+      /^run --bg --outlive-parent --name orq-t-0001 --cwd \S+ -- env ORQ_TASK=T-0001 .* claude --model opus \/orq:task T-0001$/m,
+    )
   })
 
   test("playbook=<name> at the start of your mention chooses the task's playbook", async () => {
@@ -179,21 +174,20 @@ describe("orq bridge", () => {
     await startBridge()
     mention("Add search", "100.1")
     await until("the task", () => posts.length > 0)
-    writeFileSync(join(dir, "panes.json"), JSON.stringify([{ id: 2, is_plugin: false, exited: false, tab_name: "orq-T-0001" }]))
+    writeFileSync(join(dir, "terminals.json"), JSON.stringify({ terminals: [{ address: "t1", name: "orq-t-0001" }] }))
 
     replyIn("100.1", "use the new API", "100.5")
-    await until("the typing", () => zellijLog().includes("write --pane-id terminal_2 13"))
-    expect(zellijLog()).toContain("write-chars --pane-id terminal_2 \x1b[200~use the new API\x1b[201~")
+    await until("the typing", () => hcLog().includes("send t1 use the new API"))
   })
 
-  test("with the tab closed, your reply opens the session again and continues it", async () => {
+  test("with its session gone, your reply opens the session again and continues it", async () => {
     await startBridge()
     mention("Add search", "100.1")
     await until("the task", () => posts.length > 0)
 
     replyIn("100.1", "use the new API", "100.5")
-    await until("the session to open again", () => zellijLog().includes("--continue"))
-    expect(zellijLog()).toMatch(/new-pane --tab-id 1 .* claude --model opus --continue use the new API/)
+    await until("the session to open again", () => hcLog().includes("--continue"))
+    expect(hcLog()).toMatch(/^run --bg .* claude --model opus --continue use the new API$/m)
   })
 
   test("orq ask posts the message in the task's thread as written (Markdown), mentioning you, and sets WAITING FOR ME", async () => {

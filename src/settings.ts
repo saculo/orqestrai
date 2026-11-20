@@ -12,7 +12,7 @@ const KEYS: Record<string, string> = {
   sandbox: "ORQ_SANDBOX",
   model: "ORQ_MODEL",
   data: "ORQ_DATA",
-  zellij_session: "ORQ_ZELLIJ_SESSION",
+  hc: "ORQ_HC",
 }
 const TABLES = ["add_dirs", "slack"]
 

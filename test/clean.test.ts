@@ -16,8 +16,7 @@ const sh = (cmd: string[], cwd: string) => {
 const git = (args: string[], cwd: string) => sh(["git", "-c", "user.name=t", "-c", "user.email=t@t", ...args], cwd)
 
 const orq = (args: string[], gh: Record<string, string> = {}) => {
-  const env = { ...process.env, ORQ_DATA: home, ORQ_ZELLIJ_SESSION: "orq-test-none", PATH: `${fakeBin}:${process.env.PATH}`, ...gh }
-  delete (env as Record<string, string | undefined>).ZELLIJ
+  const env = { ...process.env, ORQ_DATA: home, ORQ_HC: "orq-test-no-hc", PATH: `${fakeBin}:${process.env.PATH}`, ...gh }
   const p = Bun.spawnSync([...ORQ, ...args], { cwd: repo, env, stdout: "pipe", stderr: "pipe" })
   return { code: p.exitCode, out: p.stdout.toString(), err: p.stderr.toString() }
 }

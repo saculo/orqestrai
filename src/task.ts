@@ -7,11 +7,11 @@ import { Db } from "./db.ts"
 import { slugify } from "./domain.ts"
 import { syncFilesOrWarn } from "./files.ts"
 import { addWorktree, baseBranch, requireRef } from "./git.ts"
-import { openTab } from "./zellij.ts"
+import { openSession } from "./herdr.ts"
 
-/** Task id, row, worktree, branch, REQUEST.md (and its copy on the server) and its zellij tab, for the project at `root`.
+/** Task id, row, worktree, branch, REQUEST.md (and its copy on the server) and its session, for the project at `root`.
  * With `playbook`, the task runs that one; without, the session chooses. Gives back the task
- * and what happened to the tab. */
+ * and what happened to the session. */
 export const startTask = (root: string, request: string, playbook?: string) =>
   Effect.gen(function* () {
     const { home } = yield* OrqConfig
@@ -35,5 +35,5 @@ export const startTask = (root: string, request: string, playbook?: string) =>
     mkdirSync(dir, { recursive: true })
     writeFileSync(join(dir, "REQUEST.md"), `---\nid: ${task.id}\ncreated: ${new Date().toISOString()}\n---\n\n${request}\n`)
     yield* syncFilesOrWarn(task)
-    return { task, tab: yield* openTab(task.id, task.worktree, base) }
+    return { task, session: yield* openSession(task.id, task.worktree, base) }
   })
