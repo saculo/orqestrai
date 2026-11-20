@@ -15,6 +15,7 @@ import { syncFilesOrWarn } from "./files.ts"
 import { baseBranch, topLevel } from "./git.ts"
 import { closeSession, openSession, sendToTask } from "./herdr.ts"
 import { install } from "./init.ts"
+import { issues } from "./issues.ts"
 import { syncMerged } from "./pr.ts"
 import { serve } from "./server.ts"
 import { withState } from "./state.ts"
@@ -55,7 +56,7 @@ const newTask = Command.make(
   },
   ({ request, playbook }) =>
     Effect.gen(function* () {
-      const { task, session } = yield* startTask(yield* topLevel(), request, Option.getOrUndefined(playbook))
+      const { task, session } = yield* startTask(yield* topLevel(), request, { playbook: Option.getOrUndefined(playbook) })
       yield* Console.log(`${task.id}  ${task.branch}  ${task.worktree}`)
       yield* Console.log(session)
       yield* warnIfNotOnPath
@@ -191,7 +192,7 @@ const file = Command.make("file", { id, name: Argument.Literals("name", TEMPLATE
 
 const orq = Command.make("orq").pipe(
   Command.withDescription("orqestrai mechanics. The workflow is in the skills."),
-  Command.withSubcommands([init, newTask, open, state, playbook, show, link, ask, send, ls, file, cleanTask, serve, bridge]),
+  Command.withSubcommands([init, newTask, open, state, playbook, show, link, ask, send, ls, file, cleanTask, serve, bridge, issues]),
 )
 
 const AppLayer = OrqConfig.layer.pipe(Layer.provideMerge(BunServices.layer))

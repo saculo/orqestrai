@@ -37,6 +37,10 @@ add_dirs = ["~/shared-skills"]          # more directories for every task sessio
 user     = "U0123"
 tokens   = "~/.config/orq-bridge/slack.env"
 channels = { C0123 = "~/Projects/my-app" }   # channel → the checkout where its tasks start
+
+[github]
+user  = "me"                                 # orq issues reads issues you opened, nobody else's
+repos = { "me/my-app" = "~/Projects/my-app" } # repo → the checkout where its tasks start
 ```
 
 Other keys: `model` (the task session's, default `opus`), `data` (worktrees, archive and
@@ -111,6 +115,17 @@ sessions needs the browser's system libraries once (`npx playwright install-deps
 root). The session installs the browser itself (`npx @e2e-dev/web install chromium`); in a
 sandbox, allow Playwright's download hosts: `cdn.playwright.dev`,
 `playwright.download.prss.microsoft.com` and `storage.googleapis.com`.
+
+### GitHub issues (optional)
+
+`orq issues`, on the machine of the sessions, looks at GitHub every minute (with `gh`, so
+no open port): each open issue you opened in a repo of `[github] repos` that no task came
+from yet becomes a task, as `orq new` in that repo's checkout. The issue's title is the
+task's title, its text the request; the task's source is `github`, the issue is linked as
+its origin, and orq comments on the issue with the task's id and branch. Issues by anyone
+else are never read, so a public repo is fine. Every open issue of yours counts, so close
+the ones you do not want as tasks before you add a repo. `gh` needs read and write on the
+repo's issues.
 
 ### Slack (optional)
 

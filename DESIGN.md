@@ -436,6 +436,10 @@ hc       = "hc"                         # the herdr-core command, which keeps th
 user     = "U0123"                      # the bridge listens to this user only
 tokens   = "~/.config/orq-bridge/slack.env"  # the file with the tokens (hide it from the sandbox)
 channels = { C0123 = "~/Projects/my-app" }   # a channel and the checkout where its tasks start
+
+[github]
+user     = "me"                         # orq issues reads issues you opened only
+repos    = { "me/my-app" = "~/Projects/my-app" }  # a repo and the checkout where its tasks start
 ```
 
 orq keeps no list of projects. `orq new` starts the task in the repo it runs in, so it
@@ -478,6 +482,7 @@ Skills and agents are named `orq:<name>` (`/orq:task`); the folder name is the n
 | `orq ask [--blocked] <id> "<text>"` | status → WAITING FOR ME (or BLOCKED), posts to the task's Slack thread |
 | `orq send <id> "<text>"`   | types text into the task's session (reopens it if closed)   |
 | `orq bridge`               | the Slack bridge (below)                                    |
+| `orq issues`               | a task for each new GitHub issue of yours (below)           |
 | `orq ls`                   | lists tasks and status; reads merged PRs from `gh`          |
 | `orq clean <id>`           | ends a merged or dropped task's session, removes its worktree and branch |
 | `orq serve`                | the state over HTTP, on a Unix socket, a TCP address or both; the dashboard at `/` |
@@ -525,6 +530,18 @@ where its tasks start.
   (see Security).
 - orq pre-trusts each worktree, so the folder trust dialog never blocks.
 
+### GitHub issues
+
+Optional. One long-running process, `orq issues` (`src/issues.ts`; no open port, no LLM),
+on the sessions' machine, outside the sandbox. Every minute it lists, with `gh`, the open
+issues `[github] user` opened in each repo of `[github] repos`, and starts a task for each
+one that no task is linked to (`gh-issue`, the issue's URL): `orq new` in that repo's
+checkout, with the issue's title as the title and its text as the request, source `github`,
+the issue linked as its origin before the session starts. Then it comments on the issue
+with the task's id, status and branch. A failure is printed and tried again a minute later.
+Issues by anyone else are never read. That is all for now: questions, replies and the PR
+stay in the session, the dashboard and GitHub as before.
+
 ### Files in a project
 
 Everything orqestrai keeps in a project is in one folder, committed with the project.
@@ -558,11 +575,12 @@ plain TS (no `bun:*` imports), because pi loads extensions under Node.
 - Index: one **SQLite** file, `<data>/state.db`, opened by `orq serve` or, without a server,
   by the CLI itself (`bun:sqlite`). No database to install. A transaction takes the write
   lock (`BEGIN IMMEDIATE`), so parallel runs wait their turn and never share an id.
-  `tasks(id, repo, title, branch, worktree, step, status, type, created_at, updated_at)`,
+  `tasks(id, repo, title, branch, worktree, step, status, type, source, created_at, updated_at)`,
   `events(seq, task_id, at, kind, detail)`, `task_links(seq, task_id, kind, ref, role)` and
   `task_files(task_id, path, sha256, content)`: a copy of each task's files for the dashboard
   (below).
-  Step, status and the type (the playbook's name) are checked by the database too.
+  Step, status, the type (the playbook's name) and the source (where the task was started:
+  `cli`, `slack`, `github`) are checked by the database too.
   - Several machines share one state through `orq serve`, the only process that opens the
     file.
   - Nothing opens it until a command needs state, so `orq guard` and `orq init` work

@@ -86,8 +86,11 @@ const bridge = Command.make("bridge", {}, () =>
         const root = channels.get(e.channel)
         if (root === undefined) return yield* new OrqError({ message: `this channel is no project's (ORQ_SLACK_CHANNELS)` })
         const asked = withPlaybook(request(e.text))
-        const { task, session } = yield* startTask(root, asked.request, asked.playbook)
-        yield* db.link(task.id, "slack-thread", threadRef(e.channel, e.ts), "origin")
+        const { task, session } = yield* startTask(root, asked.request, {
+          playbook: asked.playbook,
+          source: "slack",
+          origin: { kind: "slack-thread", ref: threadRef(e.channel, e.ts) },
+        })
         yield* post(
           slack,
           e.channel,

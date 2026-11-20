@@ -79,12 +79,12 @@ export class Db extends Context.Service<
           asOrqError("get"),
         )
 
-      const create = ({ repo, title, slug, worktrees, base, type }: NewTask) =>
+      const create = ({ repo, title, slug, worktrees, base, type, source }: NewTask) =>
         Effect.gen(function* () {
           const [next] = yield* sql<{ n: number }>`SELECT coalesce(max(CAST(substr(id, 3) AS INTEGER)), 0) + 1 AS n FROM tasks`
           const id = taskId(next?.n ?? 1)
           const branch = `orq/${id}-${slug}`
-          const row = { id, repo, title, branch, worktree: join(worktrees, `${id}-${slug}`), type: type ?? null }
+          const row = { id, repo, title, branch, worktree: join(worktrees, `${id}-${slug}`), type: type ?? null, source: source ?? "cli" }
           yield* sql`INSERT INTO tasks ${sql.insert(row)}`
           yield* addEvent(id, "created", `${branch} from ${base}`)
           return yield* get(id)

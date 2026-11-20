@@ -1,5 +1,5 @@
 import type { BoardTask } from "../serverApi.ts"
-import { isWaitingForYou, projectName, pullRequestOf, slackThreadUrl, timeAgo } from "../tasks.ts"
+import { issueOf, isWaitingForYou, projectName, pullRequestOf, slackThreadUrl, timeAgo } from "../tasks.ts"
 import { CloseIcon } from "./icons.tsx"
 import { StatusChip } from "./StatusChip.tsx"
 import { TaskFileViewer } from "./TaskFileViewer.tsx"
@@ -38,13 +38,19 @@ const PanelHeader = ({ task, onClose }: { task: BoardTask; onClose: () => void }
   </div>
 )
 
-/** The task's Slack thread and pull request, when it has them. */
+/** The task's issue, Slack thread and pull request, when it has them. */
 const TaskLinks = ({ task }: { task: BoardTask }) => {
+  const issue = issueOf(task)
   const slack = slackThreadUrl(task)
   const pullRequest = pullRequestOf(task)
-  if (!slack && !pullRequest?.url) return null
+  if (!issue && !slack && !pullRequest?.url) return null
   return (
     <div className="meta links">
+      {issue && (
+        <a href={issue.url} target="_blank" rel="noopener noreferrer">
+          Issue {issue.label} on GitHub ↗
+        </a>
+      )}
       {slack && (
         <a href={slack} target="_blank" rel="noopener noreferrer">
           Slack thread ↗

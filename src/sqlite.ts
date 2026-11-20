@@ -12,9 +12,10 @@ import { OrqConfig } from "./config.ts"
 import { OrqError } from "./domain.ts"
 import init from "./migrations/0001_init.ts"
 import files from "./migrations/0002_files.ts"
+import source from "./migrations/0003_source.ts"
 
 /** Every migration, in order. A schema change is a new file in src/migrations/ and a line here. */
-const MIGRATIONS = { "0001_init": init, "0002_files": files }
+const MIGRATIONS = { "0001_init": init, "0002_files": files, "0003_source": source }
 
 /** Any failure becomes a message the CLI prints; an OrqError passes through as it is. */
 export const asOrqError =
