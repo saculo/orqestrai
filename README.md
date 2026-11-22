@@ -7,8 +7,7 @@ learn → ship. The design is in [DESIGN.md](DESIGN.md).
 ## What you need
 
 Claude Code, Bun, git, `gh` (logged in to GitHub) and [herdr-core](https://github.com/herdrdev/herdr-core)
-(`hc`), which keeps the task sessions, and [just](https://just.systems), which runs each
-component's checks. Optional: Slack, a sandbox
+(`hc`), which keeps the task sessions. Optional: Slack, a sandbox
 for the task sessions (e.g. [Fence](https://github.com/fencesandbox/fence)), a second
 machine.
 
@@ -23,14 +22,11 @@ claude plugin install orq@orqestrai     # skills, agents and the guard hook
 Update with `bun update -g orqestrai` and `claude plugin update orq@orqestrai`.
 
 Then, in each project's git repository, `orq init` writes `.orqestrai/config.toml`: the
-base branch and the project's components.
+base branch.
 
-**The quality gate** (`orq check`, in verify and ship) runs [`just`](https://just.systems)
-`check` in each component the task's branch changed. A component is a folder with a
-`justfile` whose `check` recipe holds all of its checks, the same ones CI runs, so orq keeps
-no commands. One app: no `components`, and the repository's own `justfile`. A repository of
-services: `components = ["recipes", "planning", "web"]` (folders or globs), each with its
-own `justfile`.
+**The quality gate** (in verify and ship) runs the commands under `## Checks` in the
+`AGENTS.md` nearest to each file the task's branch changed: the repository's own, or a
+service's (`recipes/AGENTS.md`) in a repository of services. orq keeps no commands.
 
 ## Configure
 

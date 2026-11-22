@@ -22,7 +22,7 @@ Load `orq:git`, `orq:principle-prove-it-works`.
 
 ## 2. Quality gate, again
 
-Run `orq check`, as `orq:verify` step 1 says. The base
+Run the quality gate, as `orq:verify` step 1 says. The base
 branch may have changed under the task.
 
 If a component fails: do not open the PR. Ask (`orq:task`, Messages): headline
