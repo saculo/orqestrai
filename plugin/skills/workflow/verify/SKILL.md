@@ -1,6 +1,6 @@
 ---
 name: verify
-description: orqestrai verify step. Runs the quality gate from config.toml, then runs the verifier (e2e tests and driven checks against one running app, through the verify-<surface> skills, e2e-inc/e2e for the surfaces it drives) and the reviewer in fresh contexts, writes VERIFY.md, and sends failures back to impl at most 3 rounds. Loaded by orq:task; do not run it alone.
+description: orqestrai verify step. Runs the quality gate (orq check), then runs the verifier (e2e tests and driven checks against one running app, through the verify-<surface> skills, e2e-inc/e2e for the surfaces it drives) and the reviewer in fresh contexts, writes VERIFY.md, and sends failures back to impl at most 3 rounds. Loaded by orq:task; do not run it alone.
 ---
 
 # orqestrai: verify
@@ -21,13 +21,13 @@ under the old ones and set `round: <n>` in the frontmatter. Old rounds stay.
 
 ## 1. Quality gate
 
-Read `[commands]` in `.orqestrai/config.toml`. Run each command that is set, in the
-worktree, in this order: `types`, `lint`, `test`, then any other keys. No app runs here:
-the e2e suite is the verifier's, against the app.
+Run `orq check` in the worktree. It runs `just check` in each component the branch changed
+(the folders in `components` of `.orqestrai/config.toml`, or the whole repository), the
+same checks CI runs. No app runs here: the e2e suite is the verifier's, against the app.
 
-- Record each one: `pass` or `fail`, and the command with the last lines of its output.
-- A command that is **not set** is `not configured`. Do not guess one, and do not fail
-  the gate for it. Report the list once at the end.
+- Record each component: `pass` or `fail`, with the last lines of its output.
+- A component with **no justfile** is `not configured`. Do not guess its checks, and do not
+  fail the gate for it. Report the list once at the end.
 - A `fail` is a failing item. Still run the review: one round should find as much as it
   can.
 

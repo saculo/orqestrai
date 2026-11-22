@@ -7,6 +7,7 @@ import { BunRuntime, BunServices } from "@effect/platform-bun"
 import { Console, Effect, Layer, Option } from "effect"
 import { Argument, CliError, Command, Flag } from "effect/cli"
 import { bridge } from "./bridge.ts"
+import { check } from "./check.ts"
 import { clean } from "./clean.ts"
 import { OrqConfig } from "./config.ts"
 import { Db } from "./db.ts"
@@ -33,7 +34,11 @@ const init = Command.make("init", {}, () =>
   Effect.gen(function* () {
     const project = yield* topLevel()
     const wrote = yield* install(project, yield* baseBranch(project))
-    yield* Console.log(wrote ? ".orqestrai/config.toml: written; set the quality gate's commands in it" : ".orqestrai/config.toml: kept")
+    yield* Console.log(
+      wrote
+        ? ".orqestrai/config.toml: written; list the components in it, each with a justfile (recipe check)"
+        : ".orqestrai/config.toml: kept",
+    )
     yield* Console.log("skills, agents and the guard hook: claude plugin install orq@orqestrai (once per machine)")
     yield* warnIfNotOnPath
   }),
@@ -192,7 +197,7 @@ const file = Command.make("file", { id, name: Argument.Literals("name", TEMPLATE
 
 const orq = Command.make("orq").pipe(
   Command.withDescription("orqestrai mechanics. The workflow is in the skills."),
-  Command.withSubcommands([init, newTask, open, state, playbook, show, link, ask, send, ls, file, cleanTask, serve, bridge, issues]),
+  Command.withSubcommands([init, check, newTask, open, state, playbook, show, link, ask, send, ls, file, cleanTask, serve, bridge, issues]),
 )
 
 const AppLayer = OrqConfig.layer.pipe(Layer.provideMerge(BunServices.layer))

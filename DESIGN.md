@@ -244,7 +244,7 @@ test is driven by hand. Only what no agent can judge goes to you. Nothing is pro
 One round:
 
 ```
-1. Quality gate     [commands] types, lint, test (unit / integration / contract); no app
+1. Quality gate     orq check: just check in each changed component; no app
 2. In parallel:
    Verifier (never reads source)            Reviewer (never runs the app)
      starts the app once, free ports          reads diff + SPEC
@@ -284,17 +284,18 @@ same failure repeats. After the third failed round, or a repeated root cause, th
 goes to `WAITING FOR ME` with a short summary from `VERIFY.md`. Non-critical findings go
 into the PR body, with no notification.
 
-The quality gate runs the commands in `.orqestrai/config.toml`, with no app:
+The quality gate is `orq check`, with no app. A project is made of **components**: folders,
+listed in `.orqestrai/config.toml` (folders or globs; without the list, the whole repository
+is one). Each component says how it is checked in its own `justfile`, recipe `check`: types,
+lint, tests, whatever its stack needs, the same recipe CI runs. orq keeps no commands.
 
 ```toml
-[commands]
-types = "bun run check"
-lint  = "bunx biome ci ."
-test  = "bun test"
+components = ["recipes", "planning", "web"]
 ```
 
-Any command not set is skipped and reported as "not configured". It is never guessed,
-and a missing command never fails the gate. orq knows nothing about the e2e suite: the
+`orq check` runs `just check` in each component the branch changed (committed or not, since
+it left the base branch); `--all` in every one. A component with no `justfile` is reported
+as "not configured": its checks are never guessed, and it never fails the gate. orq knows nothing about the e2e suite: the
 surface's verify skill names it and how to run it (§5). A surface whose skill names no
 suite has its e2e checks driven by hand, and the round says so.
 
@@ -399,7 +400,7 @@ The pieces:
 - **The app under test**: started by the verifier, or deployed by something else (a
   preview). The project's `verify-<surface>` skill says which (§5).
 
-Required: Claude Code, Bun, git, `gh` (GitHub) and herdr-core (`hc`). Slack, a sandbox, a second
+Required: Claude Code, Bun, git, `gh` (GitHub), herdr-core (`hc`) and `just` (the quality gate). Slack, a sandbox, a second
 machine, containers, Kubernetes and CI are optional; orqestrai does not know about them.
 My own setup (servers, k3s, Argo CD, OpenBao, Tailscale, a home repo of shared skills)
 is my own repositories' business, not orqestrai's.
@@ -454,7 +455,7 @@ example a home directory whose `CLAUDE.md` lists your projects).
   `src/settings.ts` reads the file into these variables at start, and the rest of orq
   reads only variables. A key orq does not know is an error, so a typo is not ignored.
 - What belongs to a project is in the project: `.orqestrai/config.toml` (base branch, the
-  quality gate's `[commands]`), written by `orq init`.
+  components), written by `orq init`, and each component's `justfile`.
 
 ### The `orq` CLI
 
@@ -471,6 +472,7 @@ Skills and agents are named `orq:<name>` (`/orq:task`); the folder name is the n
 | Command                    | Does                                                        |
 |----------------------------|-------------------------------------------------------------|
 | `orq init`                 | creates `.orqestrai/config.toml`                            |
+| `orq check [--all]`        | the quality gate: `just check` in each changed component    |
 | `orq guard`                | the PreToolUse guard hook (§6)                              |
 | `orq new [--playbook <name>] "<request>"` | task id, task row, worktree, branch, session |
 | `orq open <id>`            | starts the task's session again (after a restart)           |
@@ -549,7 +551,7 @@ The skills, agents and hook come from the plugin, not from files in the project.
 
 ```
 .orqestrai/
-  config.toml            base branch, [commands] for the quality gate
+  config.toml            base branch, components (the quality gate)
   out-of-scope/<concept>.md
   tasks/<id>/
     RESEARCH.md
