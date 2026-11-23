@@ -1,10 +1,11 @@
 // herdr-core mechanics: run a task's session in a terminal that stays alive, find it again,
 // end it. herdr-core (`hc`) keeps the terminals; the Herdr app and `hc attach`
 // show them, on this machine or over SSH.
+
+import { OrqConfig } from "@orqestrai/core/config.ts"
+import { OrqError } from "@orqestrai/core/domain.ts"
+import { run } from "@orqestrai/core/proc.ts"
 import { Effect, Schema } from "effect"
-import { OrqConfig } from "./config.ts"
-import { OrqError } from "./domain.ts"
-import { run } from "./proc.ts"
 
 /** The command that starts a task session, inside the sandbox command if one is set (ORQ_SANDBOX).
  * ORQ_* switch on the guard hook (orq guard); ORQ_DATA is for the skills (the archive). Each of `addDirs` (ORQ_ADD_DIRS) is added with --add-dir. */

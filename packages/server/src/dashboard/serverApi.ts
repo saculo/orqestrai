@@ -1,7 +1,7 @@
 // What the page reads from `orq serve` (src/dashboard.ts): the shapes of its JSON, and one
 // function per request. Dates arrive as ISO strings. Only types come from domain.ts: importing
 // its values would bring Effect into the page.
-import type { TaskEvent as DomainEvent, Status, Step, TASK_FILES, Task, TaskLink } from "../domain.ts"
+import type { TaskEvent as DomainEvent, Status, Step, TASK_FILES, Task, TaskLink } from "@orqestrai/core/domain.ts"
 
 type AsJson<T> = { [K in keyof T]: T[K] extends Date ? string : T[K] }
 

@@ -1,37 +1,14 @@
 {
-  "name": "orqestrai",
-  "version": "0.9.0",
-  "description": "An orchestrated software factory with human gates: the orq CLI and server",
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/saculo/orqestrai.git"
-  },
-  "bin": {
-    "orq": "src/main.ts"
-  },
-  "files": [
-    "src",
-    "templates"
-  ],
-  "engines": {
-    "bun": ">=1.4.4"
-  },
-  "license": "MIT",
+  "name": "orqestrai-workspace",
+  "private": true,
   "type": "module",
+  "workspaces": [
+    "packages/*"
+  ],
   "scripts": {
-    "build": "bun build --compile --production src/main.ts --outfile dist/orq",
     "test": "bun test",
-    "check": "tsc --noEmit"
-  },
-  "dependencies": {
-    "@effect/platform-bun": "4.1.2",
-    "@effect/sql-sqlite-bun": "4.1.2",
-    "effect": "4.1.2",
-    "react": "19.3.1",
-    "react-dom": "19.3.1",
-    "react-markdown": "10.1.0",
-    "remark-gfm": "4.0.1",
-    "shell-quote": "1.8.1"
+    "check": "tsc --noEmit",
+    "build": "bun run --filter orqestrai build && bun run --filter orqestrai-server build"
   },
   "devDependencies": {
     "@biomejs/biome": "2.5.15",

@@ -42,11 +42,11 @@ A **playbook** is the order of steps a task runs. The playbooks are skills,
 lists the steps, the gates and what the task ends with. `orq:task` is the base every
 playbook shares (where the task is, the records, the gates, talking to you). At its start
 it reads the task's playbook from `orq show`; when none is set, it compares `REQUEST.md`
-with the playbook descriptions, picks one and records it (`orq playbook <id> <name>`), or
-asks you when none fits clearly or two do. You can set it yourself: `orq new --playbook
-<name>`, or `@bot playbook=<name> …` in Slack. A task that turns out to be of another kind
+with the playbook descriptions, picks one and records it (`orq set-state <id> triage
+"IN PROGRESS" --playbook <name>`), or asks you when none fits clearly or two do. You can set
+it yourself: `orq new --playbook <name>`. A task that turns out to be of another kind
 stops and asks before it switches. A new playbook is one new skill; it reuses the step
-skills, and steps are the ones in `src/domain.ts`.
+skills, and steps are the ones in `packages/core/src/domain.ts`.
 
 There is one playbook now, **feature**, the flow below.
 
@@ -57,7 +57,7 @@ triage ⇄ you ─⛩─▶ plan ⇄ you ─⛩─▶ impl ─▶ verify ─▶ 
 ```
 
 `⛩` = waits for you. `⇄ you` = iterative: the agent writes questions as plain text, you
-answer in the pane or in the Slack thread.
+answer in the session (the Herdr app or `hc attach`).
 
 | Step   | Runs as                      | Model  | Reads                         | Writes                    |
 |--------|------------------------------|--------|-------------------------------|---------------------------|
@@ -333,8 +333,8 @@ learner's work: no evidence, generic, or already known → reverted.
 3. `PR.md` from the task files: what and why (brief), each AC with its verdict and
    evidence, the manual checks for you, verify rounds, open findings, learn proposals,
    decisions, risk. Copied, not invented.
-4. Push the task branch, `gh pr create --body-file PR.md`, `orq link <id> gh-pr <url>`,
-   `WAITING FOR ME`.
+4. Push the task branch, `gh pr create --body-file PR.md`, `WAITING FOR ME`. orq finds the
+   PR by the task's branch and records it as the task's `gh-pr` link.
 
 After that: **merge is yours.** `orq ls` / `orq show` ask `gh` for the state of each open
 task's PR and set `MERGED` when it is merged (no webhook, no daemon; when `gh` fails, the
@@ -386,7 +386,7 @@ orq knows no machines. One setting decides how the pieces find each other: `serv
 
 - **No `server`** (one machine: a laptop or one server): orq keeps its state in a local
   SQLite file. There is no server process.
-- **`server` set** (several machines): one machine runs `orq serve`, as a process, a
+- **`server` set** (several machines): one machine runs `orq-server`, as a process, a
   container or anything else; every other machine points `server` at it.
 
 The pieces:
@@ -396,31 +396,32 @@ The pieces:
   sandbox command you choose (or none). It stays alive with nobody watching; you attach
   with `hc attach` or the Herdr app (desktop or phone, over SSH) at any time. No
   fleet-level agent in v1.
-- **`orq serve`** (optional): the state for every machine, over HTTP. It only touches its
-  database and never runs a command.
-- **`orq bridge`** (optional): Slack. It runs on the machine of the sessions, because it
-  types into their terminals.
+- **orq-server** (optional): the state for every machine, over HTTP, and the dashboard. It
+  only touches its database and never runs a command.
 - **The app under test**: started by the verifier, or deployed by something else (a
   preview). The project's `verify-<surface>` skill says which (§5).
 
-Required: Claude Code, Bun, git, `gh` (GitHub) and herdr-core (`hc`). Slack, a sandbox, a second
+Required: Claude Code, Bun, git, `gh` (GitHub) and herdr-core (`hc`). A sandbox, a second
 machine, containers, Kubernetes and CI are optional; orqestrai does not know about them.
 My own setup (servers, k3s, Argo CD, OpenBao, Tailscale, a home repo of shared skills)
 is my own repositories' business, not orqestrai's.
 
 ### Parts and install
 
-Three parts, installed on their own, one version:
+Three parts, installed on their own, one version, from one repository with three
+packages (`packages/`): `core` (the state and its API, shared, not published), `cli` and
+`server`.
 
 | Part | Install | Run |
 |---|---|---|
-| CLI and server, one package | `bun add -g orqestrai` | `orq …`, `orq serve`, `orq bridge` |
+| The CLI | `bun add -g orqestrai` (npm; one bundled file, core in it) | `orq …` |
 | Skills, agents, the guard hook | `claude plugin install orq@orqestrai` (user scope), or the plugin in a project's committed `.claude/settings.json` | Claude Code |
-| Server as a container (optional) | `ghcr.io/saculo/orqestrai:<version>` | `orq serve` |
+| The server (optional) | the image `ghcr.io/saculo/orqestrai:<version>`, or `orq-server-linux-x64` from the release | `orq-server` |
 
-A tag `v<version>` publishes the package to npm and the image to GHCR. One package for
-the CLI and the server, so they always agree on the API (`src/api.ts`). The plugin needs
-`orq` on PATH: its hook and its skills run it by name. A project can also keep its own
+A tag `v<version>` publishes the CLI to npm, both binaries to the release and the server's
+image to GHCR. The CLI and the server share core, so they always agree on the API
+(`packages/core/src/api.ts`). The plugin needs `orq` on PATH: its hook and its skills run
+it by name. A project can also keep its own
 skills, agents and hooks in its `.claude/`; that works with or without anything else.
 
 ### Configuration
@@ -436,11 +437,6 @@ model    = "opus"                       # the task session's model
 data     = "~/.orqestrai"               # worktrees, archive, the local SQLite file
 hc       = "hc"                         # the herdr-core command, which keeps the task sessions
 
-[slack]
-user     = "U0123"                      # the bridge listens to this user only
-tokens   = "~/.config/orq-bridge/slack.env"  # the file with the tokens (hide it from the sandbox)
-channels = { C0123 = "~/Projects/my-app" }   # a channel and the checkout where its tasks start
-
 [github]
 user     = "me"                         # orq issues reads issues you opened only
 repos    = { "me/my-app" = "~/Projects/my-app" }  # a repo and the checkout where its tasks start
@@ -450,21 +446,20 @@ orq keeps no list of projects. `orq new` starts the task in the repo it runs in,
 works the same from inside a project as from anywhere that `cd`s there first (for
 example a home directory whose `CLAUDE.md` lists your projects).
 
-- **Secrets are never in this file.** It only names where they are, so a sandbox can hide
-  them and still let sessions read the config.
+- **Secrets are never in this file**, so sessions can read the config.
 - An environment variable `ORQ_<KEY>` overrides a key, for tests and containers
-  (`ORQ_SERVER`, `ORQ_SANDBOX`, `ORQ_DATA`, …; `[slack]` is `ORQ_SLACK_USER` and
-  `ORQ_SLACK_TOKENS` and `ORQ_SLACK_CHANNELS=C0123=/path,…`).
-  `src/settings.ts` reads the file into these variables at start, and the rest of orq
+  (`ORQ_SERVER`, `ORQ_SANDBOX`, `ORQ_DATA`, …; `[github]` is `ORQ_GITHUB_USER` and
+  `ORQ_GITHUB_REPOS=me/app=/path,…`). `packages/core/src/settings.ts` reads the file into these variables at start, and the rest of orq
   reads only variables. A key orq does not know is an error, so a typo is not ignored.
 - What belongs to a project is in the project: `.orqestrai/config.toml` (base branch),
   written by `orq init`, and the `## Checks` of its `AGENTS.md` files.
 
 ### The `orq` CLI
 
-TypeScript on Bun, with Effect 4 (`src/`). Rule: **the code does mechanics only** —
-ids, state, worktrees, sessions, Slack. Routing, gates, step order and the choice of
-playbook stay in the skills. Size budget: about 150 lines per module. `src/domain.ts` is the one definition of
+TypeScript on Bun, with Effect 4 (`packages/cli/src/`, on `packages/core/src/`). Rule:
+**the code does mechanics only** — ids, state, worktrees, sessions. Routing, gates, step
+order and the choice of playbook stay in the skills. Size budget: about 150 lines per
+module. `packages/core/src/domain.ts` is the one definition of
 steps, statuses and task fields. Tests drive the CLI (`test/`).
 
 The plugin `orq` (`plugin/`; the repository is its marketplace,
@@ -476,24 +471,19 @@ Skills and agents are named `orq:<name>` (`/orq:task`); the folder name is the n
 |----------------------------|-------------------------------------------------------------|
 | `orq init`                 | creates `.orqestrai/config.toml`                            |
 | `orq guard`                | the PreToolUse guard hook (§6)                              |
-| `orq new [--playbook <name>] "<request>"` | task id, task row, worktree, branch, session |
-| `orq open <id>`            | starts the task's session again (after a restart)           |
-| `orq state <id> <step> <status> [note]` | updates the task row, adds an event            |
-| `orq playbook <id> <name>` | records the playbook the task runs                          |
+| `orq new [--playbook <name>] [--origin <kind>:<ref>] "<request>"` | task id, task row, worktree, branch, session; the origin linked |
+| `orq resume <id>`          | starts the task's session again if it is not running (after a restart) |
+| `orq set-state <id> <step> <status> [--note <text>] [--playbook <name>]` | updates the task row, adds an event; a waiting note is the whole message |
 | `orq show <id>`            | one task, its links and its last events                     |
-| `orq link <id> <kind> <ref> [origin\|related]` | links the task to an outside reference |
-| `orq file <id> <NAME>`     | new task file from `templates/`                             |
-| `orq ask [--blocked] <id> "<text>"` | status → WAITING FOR ME (or BLOCKED), posts to the task's Slack thread |
-| `orq send <id> "<text>"`   | types text into the task's session (reopens it if closed)   |
-| `orq bridge`               | the Slack bridge (below)                                    |
+| `orq create-artifact <id> <NAME>` | a task file from `templates/`                        |
 | `orq issues`               | a task for each new GitHub issue of yours (below)           |
 | `orq ls`                   | lists tasks and status; reads merged PRs from `gh`          |
 | `orq clean <id>`           | ends a merged or dropped task's session, removes its worktree and branch |
-| `orq serve`                | the state over HTTP, on a Unix socket, a TCP address or both; the dashboard at `/` |
 
-**Server and clients.** `orq serve` offers the `Db` service as an HTTP API (`src/api.ts`,
-Effect's `HttpApi`), on a Unix socket or a TCP address. With `server` set (a socket path
-or a URL), every other command uses the API's generated client (`src/remote.ts`).
+**Server and clients.** `orq-server` (`packages/server/`) offers the `Db` service as an
+HTTP API (`packages/core/src/api.ts`, Effect's `HttpApi`), on a Unix socket, a TCP
+address or both, and the dashboard at `/`. With `server` set (a socket path or a URL),
+the CLI uses the API's generated client (`packages/core/src/remote.ts`).
 Without it, orq opens the local SQLite file itself. Task sessions in a sandbox use a server
 even on one machine (a socket, the server outside the sandbox), so the state is never
 writable from inside it. Over TCP the server does not
@@ -502,41 +492,18 @@ authenticate callers: put it where only your machines reach it.
 Skills and agents reach orq only through the CLI, over Bash. There is no MCP server: one way
 in keeps the commands, the guard and the tests the same for every caller.
 
-### Slack bridge
+### Sessions
 
-Optional. One long-running process, `orq bridge` (`src/bridge.ts`; Socket Mode, so no open
-port; no SDK, no LLM), on the sessions' machine, outside the sandbox. It reads the Slack
-tokens from the file `[slack] tokens` names, never from its environment, so the task
-sessions it starts do not inherit them (herdr-core gives them its own login environment). It listens to
-`[slack] user` only, in the channels of `[slack] channels`, each mapped to the checkout
-where its tasks start.
-
-- `@bot <request>` at the top of a project's channel → a new task, as `orq new` in that
-  checkout (`src/task.ts`). `@bot playbook=<name> <request>` sets its playbook. The thread under your message is the task's (link
-  `slack-thread`, origin); the bridge answers there with the id and the branch.
-- `orq ask [--blocked] <id> "<text>"` (from a session) → status WAITING FOR ME (or
-  BLOCKED), its headline as the note, and the text goes to the bridge over a local socket
-  (mode 0600), which posts it in the thread: the session's Markdown as written (Slack's
-  markdown block), under it a grey line with you, the id and the step. Every message
-  has one shape, in every step (`orq:task`, Messages): a headline, a short list,
-  `Q<n>` questions each with its recommendation, as in the terminal. A task started in a terminal gets its thread at its first question.
-  Claude gets an action, never the token. Without a bridge, the question stays in the
-  terminal.
-- Your reply in the thread → typed into the task's session as a paste, then Enter
-  (`orq send`, `hc send`). If its session has ended, it opens again with
-  `claude --continue <reply>`: the worktree's last conversation, so nothing is lost.
-- A session waiting for a permission decision is not typed into: the bridge says so in the
-  thread, and you answer it in the session (`src/herdr.ts`). orq starts sessions with no
-  parent terminal (`--outlive-parent`, no `HC_TERMINAL_ID`), so a session started from
-  another one outlives it.
-- Later: `/orq ls`, `/orq show <id>` in Slack. Artifacts are read in the dashboard.
+- orq starts sessions with no parent terminal (`--outlive-parent`, no `HC_TERMINAL_ID`), so
+  a session started from another one outlives it. You answer a session by typing in it
+  (the Herdr app, or `hc attach orq-t-0001`).
 - **Git and GitHub:** the session itself pushes its branch and opens the PR with `gh`
   (see Security).
 - orq pre-trusts each worktree, so the folder trust dialog never blocks.
 
 ### GitHub issues
 
-Optional. One long-running process, `orq issues` (`src/issues.ts`; no open port, no LLM),
+Optional. One long-running process, `orq issues` (`packages/cli/src/issues.ts`; no open port, no LLM),
 on the sessions' machine, outside the sandbox. Every minute it lists, with `gh`, the open
 issues `[github] user` opened in each repo of `[github] repos`, and starts a task for each
 one that no task is linked to (`gh-issue`, the issue's URL): `orq new` in that repo's
@@ -576,7 +543,7 @@ plain TS (no `bun:*` imports), because pi loads extensions under Node.
 ### State
 
 - Content: Markdown files + git.
-- Index: one **SQLite** file, `<data>/state.db`, opened by `orq serve` or, without a server,
+- Index: one **SQLite** file, `<data>/state.db`, opened by `orq-server` or, without a server,
   by the CLI itself (`bun:sqlite`). No database to install. A transaction takes the write
   lock (`BEGIN IMMEDIATE`), so parallel runs wait their turn and never share an id.
   `tasks(id, repo, title, branch, worktree, step, status, type, source, created_at, updated_at)`,
@@ -584,32 +551,32 @@ plain TS (no `bun:*` imports), because pi loads extensions under Node.
   `task_files(task_id, path, sha256, content)`: a copy of each task's files for the dashboard
   (below).
   Step, status, the type (the playbook's name) and the source (where the task was started:
-  `cli`, `slack`, `github`) are checked by the database too.
-  - Several machines share one state through `orq serve`, the only process that opens the
+  `cli`, `github`, and `slack` for tasks from the Slack bridge orq once had) are checked by the database too.
+  - Several machines share one state through `orq-server`, the only process that opens the
     file.
   - Nothing opens it until a command needs state, so `orq guard` and `orq init` work
     without one.
-  - The schema is **migrations**: numbered files in `src/migrations/`, run in order and
+  - The schema is **migrations**: numbered files in `packages/core/src/migrations/`, run in order and
     recorded. A merged migration is frozen; a change is a new file.
   - Tests use a fresh file per test. No containers.
 - The task holds only what is orqestrai's own. Everything outside — the GitHub issue,
-  the Linear or Jira ticket, the Slack thread, the PR — is a **link**: an open `kind`, a
+  the Linear or Jira ticket, the PR — is a **link**: an open `kind`, a
   `ref` in that system, and a `role` (`origin` = where the request came from, `related`).
   Only the adapter that owns a kind reads its refs, so a new trigger adds no column.
 - Statuses: `TODO`, `IN PROGRESS`, `WAITING FOR ME`, `BLOCKED`, `DROPPED` (triage decided not to do it), `MERGED`.
 - Archive: `<data>/archive/<repo>/<id>/`, the files of dropped tasks after `orq clean`.
-- **Dashboard:** `orq serve` serves it at `/` (`src/dashboard.ts`, the page in
-  `src/dashboard/`: React, bundled by Bun itself, so there is no build step and it is
+- **Dashboard:** `orq-server` serves it at `/` (`packages/server/src/dashboard.ts`, the page in
+  `packages/server/src/dashboard/`: React, bundled by Bun itself, so there is no build step and it is
   inside the compiled binary too). The page keeps its logic in plain, tested modules
   (`serverApi.ts`, `tasks.ts`, `board.ts`, `taskFiles.ts`, `hooks.ts`) and draws with small
   components named for what they show (`components/`: `NeedsYou`, `TaskBoard`, `TaskPanel`,
   `TaskFileViewer`, `Timeline`…). Read-only: a board by step, "needs you" on top with the
-  whole message (`orq ask` keeps it as a `message` event), and per task its files, the verify
+  whole message (`orq set-state` keeps a waiting note as a `message` event), and per task its files, the verify
   screenshots and the timeline. The files come from the database: whenever a step reports
-  (`orq new`, `orq state`, `orq ask`) the CLI sends what changed in the task's folder
-  (`src/files.ts`; only `<NAME>.md` task files and images under `evidence/`, at most 60
+  (`orq new`, `orq set-state`) the CLI sends what changed in the task's folder
+  (`packages/cli/src/files.ts`; only `<NAME>.md` task files and images under `evidence/`, at most 60
   images of 10 MB), so the page is the same when the worktrees are on another machine. It polls
-  `/board` every 5 s. `orq serve` listens on a socket and a TCP port at once, so the
+  `/board` every 5 s. `orq-server` listens on a socket and a TCP port at once, so the
   sessions keep the socket and a browser uses the port, on a private address.
 
 ## 5. Verification environment
@@ -662,21 +629,21 @@ agents get actions (orq's commands), never credentials.
 - **Sessions** run inside the sandbox command you configure (`sandbox`), e.g. Fence
   (bubblewrap): its own network allowlist, files and process namespace. orqestrai does not
   depend on which one. A good sandbox for task sessions:
-  - hides the secret files (the Slack tokens, cloud credentials);
-  - allows the network only to GitHub, Anthropic, `orq serve` and what the app under test
+  - hides the secret files (cloud credentials, tokens);
+  - allows the network only to GitHub, Anthropic, `orq-server` and what the app under test
     needs;
   - keeps `orq` and the sandbox's own config read-only, so a session cannot change them.
-- **`orq serve`** holds the state and runs no command, so a session cannot make it run its
+- **`orq-server`** holds the state and runs no command, so a session cannot make it run its
   code.
 - GitHub: the one secret a session can read, so it can do little. A fine-grained token:
   only the project repositories, Contents and Pull requests read/write, nothing else, an
   expiry. Branch protection on `main`; the token cannot bypass it. A leaked token can push
   branches and open PRs in those repositories, nothing more. `gh` instead of a push action
   behind `orq`: simpler, and the risk is small.
-- Guard hook (`orq guard`, PreToolUse, `src/guard/`). `decide()` is plain TS (no Effect,
+- Guard hook (`orq guard`, PreToolUse, `packages/cli/src/guard/`). `decide()` is plain TS (no Effect,
   no `bun:*`) and decides allow / block; a shell parser splits commands, also inside
-  `bash -c`, `eval` and over several lines. `src/main.ts` starts it without the Effect CLI. Tests: `test/guard.test.ts`. Active only when `ORQ_TASK` is set, which
-  `orq new` / `orq open` do for task sessions; other sessions are not affected.
+  `bash -c`, `eval` and over several lines. `packages/cli/src/main.ts` starts it without the Effect CLI. Tests: `test/guard.test.ts`. Active only when `ORQ_TASK` is set, which
+  `orq new` / `orq resume` do for task sessions; other sessions are not affected.
   - G1 protect base: no push, merge or commit on the base branch; no force push; no
     `gh pr merge`.
   - G2 secrets: no reading or writing `.env*`, keys, credential files, token files.

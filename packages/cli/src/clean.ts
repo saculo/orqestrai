@@ -4,13 +4,13 @@
 // folder, and the out-of-scope notes triage wrote, so triage can still find them.
 import { cpSync, existsSync, mkdirSync } from "node:fs"
 import { basename, join } from "node:path"
+import { OrqConfig } from "@orqestrai/core/config.ts"
+import { Db } from "@orqestrai/core/db.ts"
+import { OrqError, type Task } from "@orqestrai/core/domain.ts"
+import { exec, run } from "@orqestrai/core/proc.ts"
 import { Effect } from "effect"
-import { OrqConfig } from "./config.ts"
-import { Db } from "./db.ts"
-import { OrqError, type Task } from "./domain.ts"
 import { baseBranch } from "./git.ts"
 import { prOf, syncMerged } from "./pr.ts"
-import { exec, run } from "./proc.ts"
 
 const refuse = (message: string) => Effect.fail(new OrqError({ message: `${message} Nothing was removed.` }))
 const OUT_OF_SCOPE = ".orqestrai/out-of-scope/"

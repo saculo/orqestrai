@@ -1,10 +1,11 @@
 // Pull requests on GitHub, read with gh. A task's PR is the one of its branch: orq finds it
 // with gh and records it as the task's gh-pr link (the dashboard shows that link).
 // orq never merges. It only reads whether you did.
+
+import { Db } from "@orqestrai/core/db.ts"
+import type { Task } from "@orqestrai/core/domain.ts"
+import { run } from "@orqestrai/core/proc.ts"
 import { Effect, Option, Schema } from "effect"
-import { Db } from "./db.ts"
-import type { Task } from "./domain.ts"
-import { run } from "./proc.ts"
 
 export const PR_LINK = "gh-pr"
 
