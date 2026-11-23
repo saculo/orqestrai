@@ -11,7 +11,7 @@ import { Console, Effect, Layer, Option } from "effect"
 import { Argument, CliError, Command, Flag } from "effect/cli"
 import { clean } from "./clean.ts"
 import { syncFilesOrWarn } from "./files.ts"
-import { baseBranch, topLevel } from "./git.ts"
+import { baseBranch, herdrSession, topLevel } from "./git.ts"
 import { closeSession, openSession } from "./herdr.ts"
 import { install } from "./init.ts"
 import { issues } from "./issues.ts"
@@ -76,7 +76,7 @@ const resume = Command.make("resume", { id }, ({ id }) =>
   Effect.gen(function* () {
     const task = yield* (yield* Db).get(id)
     if (!existsSync(task.worktree)) return yield* new OrqError({ message: `worktree ${task.worktree} is gone` })
-    yield* Console.log(yield* openSession(id, task.worktree, yield* baseBranch(task.repo)))
+    yield* Console.log(yield* openSession(id, task.worktree, yield* baseBranch(task.repo), yield* herdrSession(task.repo)))
   }),
 ).pipe(Command.withDescription("start the task's session again if it is not running; it goes on from the recorded step"), withState)
 

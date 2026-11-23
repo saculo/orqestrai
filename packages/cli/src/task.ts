@@ -6,7 +6,7 @@ import { Db } from "@orqestrai/core/db.ts"
 import { type Source, slugify } from "@orqestrai/core/domain.ts"
 import { Effect } from "effect"
 import { syncFilesOrWarn } from "./files.ts"
-import { addWorktree, baseBranch, requireRef } from "./git.ts"
+import { addWorktree, baseBranch, herdrSession, requireRef } from "./git.ts"
 import { openSession } from "./herdr.ts"
 
 export interface StartOptions {
@@ -47,5 +47,5 @@ export const startTask = (root: string, request: string, { playbook, source, tit
     writeFileSync(join(dir, "REQUEST.md"), `---\nid: ${task.id}\ncreated: ${new Date().toISOString()}\n---\n\n${request}\n`)
     if (origin) yield* db.link(task.id, origin.kind, origin.ref, "origin")
     yield* syncFilesOrWarn(task)
-    return { task, session: yield* openSession(task.id, task.worktree, base) }
+    return { task, session: yield* openSession(task.id, task.worktree, base, yield* herdrSession(root)) }
   })

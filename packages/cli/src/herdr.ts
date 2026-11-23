@@ -57,28 +57,66 @@ const hcError = (what: string, out: { code: number; stderr: string }) => {
 }
 
 const Terminals = Schema.fromJsonString(
-  Schema.Struct({ terminals: Schema.Array(Schema.Struct({ address: Schema.String, name: Schema.optional(Schema.String) })) }),
+  Schema.Struct({
+    terminals: Schema.Array(
+      Schema.Struct({ address: Schema.String, name: Schema.optional(Schema.String), where: Schema.optional(Schema.String) }),
+    ),
+  }),
 )
 const decodeTerminals = Schema.decodeUnknownEffect(Terminals)
 
-/** The address (`t7`) of the task's live terminal, if it has one. Without hc, none. */
-const findTerminal = (id: string) =>
+/** The live terminals. Without hc, none. */
+const liveTerminals = () =>
   Effect.gen(function* () {
     const out = yield* hc(["ls", "--json"])
-    if (out.code !== 0) return undefined
-    const { terminals } = yield* decodeTerminals(out.stdout).pipe(Effect.orElseSucceed(() => ({ terminals: [] })))
-    return terminals.find((t) => t.name === terminalName(id))?.address
+    if (out.code !== 0) return []
+    return (yield* decodeTerminals(out.stdout).pipe(Effect.orElseSucceed(() => ({ terminals: [] })))).terminals
   })
 
-/** Start the task's session in a herdr-core terminal, or return the command to run by hand when hc
+/** The address (`t7`) of the task's live terminal, if it has one. */
+const findTerminal = (id: string) => Effect.map(liveTerminals(), (terminals) => terminals.find((t) => t.name === terminalName(id))?.address)
+
+const Labels = Schema.fromJsonString(Schema.Struct({ labels: Schema.optional(Schema.Record(Schema.String, Schema.String)) }))
+const decodeLabels = Schema.decodeUnknownEffect(Labels)
+
+/** The Herdr desktop app shows a terminal only in one of its sessions, named by its
+ * `herdr.space` label (`hc ls` shows the session's name in `where`: "home / 1"); it opens a tab
+ * there for a terminal that has the label and no tab. Only the app creates sessions. The task's
+ * terminal goes in the project's `herdr_session`, if a terminal is open in it; else in the
+ * session of the terminal orq runs in (HC_TERMINAL_ID); else (orq issues) in any session. */
+const spaceLabel = (session: string | undefined) =>
+  Effect.gen(function* () {
+    const terminals = yield* liveTerminals()
+    const named = session === undefined ? undefined : terminals.find((t) => t.where?.split(" / ")[0] === session)
+    const from = named?.address || process.env.HC_TERMINAL_ID || terminals.find((t) => t.where)?.address
+    if (!from) return []
+    const out = yield* hc(["get", from, "--json"])
+    if (out.code !== 0) return []
+    const { labels } = yield* decodeLabels(out.stdout).pipe(Effect.orElseSucceed(() => ({ labels: undefined })))
+    const space = labels?.["herdr.space"]
+    return space ? ["--label", `herdr.space=${space}`] : []
+  })
+
+/** Start the task's session in a herdr-core terminal (in the Herdr session `session`, see spaceLabel), or return the command to run by hand when hc
  * is not there. A session that is already running is left as it is. */
-export const openSession = (id: string, worktree: string, base: string) =>
+export const openSession = (id: string, worktree: string, base: string, session?: string) =>
   Effect.gen(function* () {
     const { model, sandbox, addDirs, home } = yield* OrqConfig
     const cmd = sessionCommand(id, worktree, base, model, sandbox, addDirs, home)
     if ((yield* findTerminal(id)) !== undefined) return `${terminalName(id)} is already running (hc attach ${terminalName(id)})`
 
-    const out = yield* hc(["run", "--bg", "--outlive-parent", "--name", terminalName(id), "--cwd", worktree, "--", ...cmd])
+    const out = yield* hc([
+      "run",
+      "--bg",
+      "--outlive-parent",
+      "--name",
+      terminalName(id),
+      ...(yield* spaceLabel(session)),
+      "--cwd",
+      worktree,
+      "--",
+      ...cmd,
+    ])
     if (out.code === NOT_FOUND)
       return `no herdr-core (hc); start the task with:\n  cd ${shellQuote(worktree)} && ${cmd.map(shellQuote).join(" ")}`
     if (out.code !== 0) return yield* hcError(`cannot start ${terminalName(id)}`, out)
