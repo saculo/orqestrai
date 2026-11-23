@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test"
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs"
 import { homedir, tmpdir } from "node:os"
 import { join } from "node:path"
-import { settingsEnv } from "../src/settings.ts"
+import { settingsEnv } from "../packages/core/src/settings.ts"
 import { ORQ } from "./orq.ts"
 
 let dir: string, repo: string, config: string

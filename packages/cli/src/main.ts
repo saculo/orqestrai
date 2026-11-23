@@ -4,7 +4,7 @@
 if (process.argv[2] === "guard") void import("./guard/main.ts").then((guard) => guard.main())
 // the settings file fills in the ORQ_* variables first (the guard needs none of it)
 else
-  void import("./settings.ts").then(({ loadSettings }) => {
+  void import("@orqestrai/core/settings.ts").then(({ loadSettings }) => {
     loadSettings()
     return import("./cli.ts")
   })

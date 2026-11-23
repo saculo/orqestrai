@@ -4,8 +4,8 @@
 
 import { existsSync, mkdirSync, writeFileSync } from "node:fs"
 import { join } from "node:path"
+import { OrqError } from "@orqestrai/core/domain.ts"
 import { Effect } from "effect"
-import { OrqError } from "./domain.ts"
 
 const CHECKS = `
 # The quality gate does not read this file: it runs the commands under "## Checks" in the

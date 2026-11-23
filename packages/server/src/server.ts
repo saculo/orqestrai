@@ -1,18 +1,18 @@
-// `orq serve`: the one process that connects to the database. Clients (the CLI) call its
-// HTTP API (src/api.ts) and never hold the password. On the VPS it runs as its own user and
-// listens on a Unix socket, so file permissions decide who may call it (DESIGN.md, Security).
-// The handlers only touch the database; the server never runs a command.
+// orq-server: the one process that opens the state file when the CLI runs on other machines.
+// The CLI calls its HTTP API (core's api.ts) with ORQ_SERVER set. It listens on a Unix socket, a
+// TCP port, or both; it serves the dashboard at / too. The handlers only touch the database;
+// the server never runs a command.
 import { resolve } from "node:path"
 import { BunHttpServer } from "@effect/platform-bun"
+import { OrqApi } from "@orqestrai/core/api.ts"
+import { Db } from "@orqestrai/core/db.ts"
+import { OrqError } from "@orqestrai/core/domain.ts"
+import { Direct } from "@orqestrai/core/state.ts"
 import { Effect, Layer, Option } from "effect"
 import { Command, Flag } from "effect/cli"
 import { HttpRouter } from "effect/http"
 import { HttpApiBuilder } from "effect/http-api"
-import { OrqApi } from "./api.ts"
 import { dashboard, enterPageDir, PAGE } from "./dashboard.ts"
-import { Db } from "./db.ts"
-import { OrqError } from "./domain.ts"
-import { Direct } from "./state.ts"
 
 const tasks = HttpApiBuilder.group(
   OrqApi,
@@ -53,8 +53,8 @@ const serveApi = (listen: Listen) =>
     ),
   )
 
-export const serve = Command.make(
-  "serve",
+export const server = Command.make(
+  "orq-server",
   {
     socket: Flag.String("socket").pipe(Flag.optional, Flag.withDescription("listen on this Unix socket")),
     port: Flag.Int("port").pipe(Flag.optional, Flag.withDescription("listen on this TCP port")),
@@ -66,14 +66,17 @@ export const serve = Command.make(
       ...Option.toArray(Option.map(socket, (unix) => ({ unix: resolve(unix) }))),
       ...Option.toArray(Option.map(port, (port) => ({ host, port }))),
     ]
-    if (listens.length === 0) return Effect.fail(new OrqError({ message: "orq serve needs --socket <path>, --port <n> or both" }))
+    if (listens.length === 0) return Effect.fail(new OrqError({ message: "orq-server needs --socket <path>, --port <n> or both" }))
     return Effect.gen(function* () {
       yield* Db // opens the state file while relative paths still mean what they meant
       enterPageDir()
       yield* Effect.all(
         listens.map((l) => Layer.launch(serveApi(l))),
         { concurrency: "unbounded", discard: true },
-      ).pipe(Effect.mapError((e) => new OrqError({ message: `orq serve: ${e.message}` })))
+      ).pipe(Effect.mapError((e) => new OrqError({ message: `orq-server: ${e.message}` })))
     })
   },
-).pipe(Command.withDescription("serve orq's state over HTTP, and the dashboard at /"), Command.provide(Direct))
+).pipe(
+  Command.withDescription("orqestrai's state over HTTP, for the CLI on other machines, and the dashboard at /"),
+  Command.provide(Direct),
+)

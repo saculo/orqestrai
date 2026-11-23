@@ -4,23 +4,22 @@
 import { existsSync, writeFileSync } from "node:fs"
 import { dirname, join } from "node:path"
 import { BunRuntime, BunServices } from "@effect/platform-bun"
+import { OrqConfig } from "@orqestrai/core/config.ts"
+import { Db } from "@orqestrai/core/db.ts"
+import { headline, OrqError, STATUSES, STEPS, stamp, TaskType, TEMPLATES } from "@orqestrai/core/domain.ts"
 import { Console, Effect, Layer, Option } from "effect"
 import { Argument, CliError, Command, Flag } from "effect/cli"
 import { clean } from "./clean.ts"
-import { OrqConfig } from "./config.ts"
-import { Db } from "./db.ts"
-import { headline, OrqError, STATUSES, STEPS, stamp, TaskType, TEMPLATES } from "./domain.ts"
 import { syncFilesOrWarn } from "./files.ts"
 import { baseBranch, topLevel } from "./git.ts"
 import { closeSession, openSession } from "./herdr.ts"
 import { install } from "./init.ts"
 import { issues } from "./issues.ts"
 import { syncMerged } from "./pr.ts"
-import { serve } from "./server.ts"
-import { withState } from "./state.ts"
 import { startTask } from "./task.ts"
 import { templates } from "./templates.ts"
 import { VERSION } from "./version.ts"
+import { withState } from "./with-state.ts"
 
 /** The plugin's guard hook and skills start `orq` by name. Without it on PATH they do not run. */
 const warnIfNotOnPath = Effect.gen(function* () {
@@ -151,7 +150,7 @@ const createArtifact = Command.make("create-artifact", { id, name: Argument.Lite
 
 const orq = Command.make("orq").pipe(
   Command.withDescription("orqestrai mechanics. The workflow is in the skills."),
-  Command.withSubcommands([init, newTask, resume, ls, show, setState, createArtifact, cleanTask, issues, serve]),
+  Command.withSubcommands([init, newTask, resume, ls, show, setState, createArtifact, cleanTask, issues]),
 )
 
 const AppLayer = OrqConfig.layer.pipe(Layer.provideMerge(BunServices.layer))

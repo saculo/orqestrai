@@ -1,10 +1,11 @@
 name: release
 
-# A tag v<version> (the version in package.json and plugin/.claude-plugin/plugin.json) builds orq
-# as one executable, runs the whole test suite against that file, and attaches it to a release.
-# It also pushes the image ghcr.io/saculo/orqestrai:<version>, which runs `orq serve`, and publishes
-# the npm package orqestrai (`bun add -g orqestrai`) by npm trusted publishing: no token, npm
-# trusts this workflow (npmjs.com, the package's settings, Trusted Publisher: saculo/orqestrai, release.yml).
+# A tag v<version> (the version in packages/cli, packages/server and plugin/.claude-plugin/plugin.json)
+# builds orq and orq-server as executables, runs the whole test suite against those files, and
+# attaches them to a release. It also pushes the image ghcr.io/saculo/orqestrai:<version>, which
+# runs orq-server, and publishes the npm package orqestrai (`bun add -g orqestrai`, the CLI) by npm
+# trusted publishing: no token, npm trusts this workflow (npmjs.com, the package's settings,
+# Trusted Publisher: saculo/orqestrai, release.yml).
 # The plugin needs no build: Claude Code reads it from the repository at the tag.
 on:
   push:
@@ -31,20 +32,23 @@ jobs:
         env:
           TAG: ${{ github.ref_name }}
         run: |
-          test "$TAG" = "v$(jq -r .version package.json)"
+          test "$TAG" = "v$(jq -r .version packages/cli/package.json)"
+          test "$TAG" = "v$(jq -r .version packages/server/package.json)"
           test "$TAG" = "v$(jq -r .version plugin/.claude-plugin/plugin.json)"
       - name: build
         run: bun run build
-      - name: tests, against the built file
-        run: ORQ_BIN=dist/orq bun test
+      - name: tests, against the built files
+        run: ORQ_BIN=packages/cli/dist/orq ORQ_SERVER_BIN=packages/server/dist/orq-server bun test
       - name: release
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ github.ref_name }}
         run: |
-          mv dist/orq dist/orq-linux-x64
-          (cd dist && sha256sum orq-linux-x64 > orq-linux-x64.sha256)
-          gh release create "$TAG" dist/orq-linux-x64 dist/orq-linux-x64.sha256 --title "$TAG" --generate-notes
+          mkdir -p dist
+          cp packages/cli/dist/orq dist/orq-linux-x64
+          cp packages/server/dist/orq-server dist/orq-server-linux-x64
+          (cd dist && sha256sum orq-linux-x64 orq-server-linux-x64 > SHA256SUMS)
+          gh release create "$TAG" dist/orq-linux-x64 dist/orq-server-linux-x64 dist/SHA256SUMS --title "$TAG" --generate-notes
       - name: image
         env:
           GH_TOKEN: ${{ github.token }}
@@ -56,7 +60,10 @@ jobs:
           docker build -t "$image" .
           docker run --rm "$image" --version
           docker push "$image"
+      # the CLI is published as one bundled file (packages/cli, dist/orq.js): the shared
+      # @orqestrai/core is in it, and is not on npm
       - name: the npm package installs and runs
+        working-directory: packages/cli
         run: |
           bun pm pack --destination "$RUNNER_TEMP"
           BUN_INSTALL="$RUNNER_TEMP/bun" bun add -g "$RUNNER_TEMP"/orqestrai-*.tgz
@@ -68,4 +75,4 @@ jobs:
           registry-url: https://registry.npmjs.org
           package-manager-cache: false
       - name: npm
-        run: npm publish --access public
+        run: npm publish --access public "$RUNNER_TEMP"/orqestrai-*.tgz

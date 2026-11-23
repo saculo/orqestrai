@@ -1,10 +1,10 @@
 // The dashboard's logic, without a browser: what needs you, what runs, the columns, the project
 // filter, the task's links and the panel's tabs (src/dashboard/{board,tasks,taskFiles}.ts).
 import { describe, expect, test } from "bun:test"
-import { ALL_PROJECTS, buildBoard, FINISHED_TASKS_SHOWN_FOR_MS } from "../src/dashboard/board.ts"
-import type { BoardTask } from "../src/dashboard/serverApi.ts"
-import { fileTabs, latestFile, taskLinkTarget, writtenFiles } from "../src/dashboard/taskFiles.ts"
-import { projectLabels, pullRequestOf, timeAgo } from "../src/dashboard/tasks.ts"
+import { ALL_PROJECTS, buildBoard, FINISHED_TASKS_SHOWN_FOR_MS } from "../packages/server/src/dashboard/board.ts"
+import type { BoardTask } from "../packages/server/src/dashboard/serverApi.ts"
+import { fileTabs, latestFile, taskLinkTarget, writtenFiles } from "../packages/server/src/dashboard/taskFiles.ts"
+import { projectLabels, pullRequestOf, timeAgo } from "../packages/server/src/dashboard/tasks.ts"
 
 const NOW = Date.parse("2026-11-19T12:00:00Z")
 const minutesAgo = (m: number) => new Date(NOW - m * 60_000).toISOString()
