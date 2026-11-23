@@ -1,6 +1,6 @@
 {
   "name": "@orqestrai/core",
-  "version": "0.9.0",
+  "version": "0.10.0",
   "private": true,
   "description": "orqestrai's state and API, shared by the CLI and the server (not published: both bundle it)",
   "type": "module",
