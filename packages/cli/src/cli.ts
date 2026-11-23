@@ -54,7 +54,8 @@ const Origin = Flag.String("origin").pipe(
 )
 const parseOrigin = (origin: string) => {
   const at = origin.indexOf(":")
-  if (at <= 0 || at === origin.length - 1) return Effect.fail(new OrqError({ message: `--origin ${origin}: expected <kind>:<ref>` }))
+  if (at <= 0 || at === origin.length - 1)
+    return Effect.fail(new OrqError({ message: `--origin ${origin}: expected KIND:REF, e.g. gh-issue:https://github.com/o/r/issues/1` }))
   return Effect.succeed({ kind: origin.slice(0, at), ref: origin.slice(at + 1) })
 }
 

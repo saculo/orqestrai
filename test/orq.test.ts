@@ -199,7 +199,7 @@ describe("orq new --origin", () => {
   })
 
   test("rejects an origin without a kind or a reference, and makes no task", () => {
-    expect(orq(["new", "--origin", "APP-1", "x"]).err).toContain("expected <kind>:<ref>")
+    expect(orq(["new", "--origin", "APP-1", "x"]).err).toContain("expected KIND:REF")
     expect(orq(["new", "--origin", "jira:", "x"]).code).not.toBe(0)
     expect(orq(["ls"]).out).not.toContain("T-0001")
   })
