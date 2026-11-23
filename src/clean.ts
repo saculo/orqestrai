@@ -9,7 +9,7 @@ import { OrqConfig } from "./config.ts"
 import { Db } from "./db.ts"
 import { OrqError, type Task } from "./domain.ts"
 import { baseBranch } from "./git.ts"
-import { prOf, syncMerged, viewPr } from "./pr.ts"
+import { prOf, syncMerged } from "./pr.ts"
 import { exec, run } from "./proc.ts"
 
 const refuse = (message: string) => Effect.fail(new OrqError({ message: `${message} Nothing was removed.` }))
@@ -18,8 +18,7 @@ const OUT_OF_SCOPE = ".orqestrai/out-of-scope/"
 /** A merged task: every commit on the branch must be in the PR, or clean would lose it. */
 const requireInPr = (task: Task, tip: string) =>
   Effect.gen(function* () {
-    const ref = yield* prOf(task.id)
-    const pr = ref ? yield* viewPr(task.repo, ref) : null
+    const pr = yield* prOf(task)
     if (!pr) return yield* refuse(`cannot read the PR of ${task.id} with gh.`)
     if (tip !== pr.headRefOid)
       return yield* refuse(

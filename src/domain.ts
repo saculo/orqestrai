@@ -17,7 +17,8 @@ export const TaskType = Schema.String.pipe(Schema.check(Schema.isPattern(/^[a-z]
 
 export const TEMPLATES = ["BRIEF", "RESEARCH", "SPEC", "VERIFY", "LEARN", "PR"] as const
 
-/** Where a task was started: `orq new` in a terminal, a Slack mention, a GitHub issue (`orq issues`). */
+/** Where a task was started: `orq new` in a terminal, a GitHub issue (`orq issues`); slack: by the
+ * Slack bridge, which orq no longer has (older tasks keep it). */
 export const SOURCES = ["cli", "slack", "github"] as const
 export const Source = Schema.Literals(SOURCES)
 export type Source = typeof Source.Type
@@ -80,7 +81,7 @@ export const slugify = (text: string): string =>
 export const stamp = (d: Date): string => d.toISOString().slice(0, 19).replace("T", " ")
 
 /** A message's headline, as plain text: its first line that is not empty, without Markdown's
- * heading marks and emphasis. It is the task's status note and Slack's notification text. */
+ * heading marks and emphasis. It is the task's status note when a longer message is set. */
 export const headline = (message: string) =>
   (message.split("\n").find((l) => l.trim() !== "") ?? "")
     .replace(/^\s*#+\s*/, "")

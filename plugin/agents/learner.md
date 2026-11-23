@@ -45,7 +45,7 @@ screen, tear down. Never put a task's checks into it.
 ## Do
 
 1. Apply each proposal: edit or create the file. Small edits, in the file's own style.
-2. Write `LEARN.md` in the task folder from `templates/LEARN.md` (run `orq file <id>
+2. Write `LEARN.md` in the task folder from `templates/LEARN.md` (run `orq create-artifact <id>
    LEARN`): what happened, the proposals table, what you considered and dropped. When
    `LEARN.md` exists (learn runs again after changes at the PR), update it: add the new
    proposals to the table and keep the old ones.

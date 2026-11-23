@@ -24,7 +24,7 @@ Read the inputs. Read more code where the plan needs it. For a large area, use
 
 ## 2. Grill the design
 
-Run `orq file <id> SPEC`. Fill only **Open decisions** and **Decisions** for now. Grill
+Run `orq create-artifact <id> SPEC`. Fill only **Open decisions** and **Decisions** for now. Grill
 with `orq:grill`. The decisions to grill, roughly in tree order:
 
 1. **Acceptance criteria.** Turn the brief's desired behavior into observable criteria.

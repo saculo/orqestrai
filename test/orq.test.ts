@@ -114,10 +114,10 @@ describe("orq new", () => {
   })
 })
 
-describe("orq state", () => {
+describe("orq set-state", () => {
   test("records the step, the status and an event", () => {
     orq(["new", "x"])
-    expect(orq(["state", "T-0001", "plan", "WAITING FOR ME", "2 questions"]).code).toBe(0)
+    expect(orq(["set-state", "T-0001", "plan", "WAITING FOR ME", "--note", "2 questions"]).code).toBe(0)
     const shown = orq(["show", "T-0001"]).out
     expect(shown).toMatch(/step = plan[\s\S]*status = WAITING FOR ME/)
     expect(shown).toContain("plan: WAITING FOR ME")
@@ -126,28 +126,28 @@ describe("orq state", () => {
 
   test("records a task dropped in triage", () => {
     orq(["new", "x"])
-    expect(orq(["state", "T-0001", "triage", "DROPPED", "already built"]).code).toBe(0)
+    expect(orq(["set-state", "T-0001", "triage", "DROPPED", "--note", "already built"]).code).toBe(0)
     expect(orq(["show", "T-0001"]).out).toMatch(/status = DROPPED/)
   })
 
   test("rejects an unknown step or status", () => {
     orq(["new", "x"])
-    expect(orq(["state", "T-0001", "nope", "TODO"]).code).not.toBe(0)
-    expect(orq(["state", "T-0001", "plan", "DONE"]).code).not.toBe(0)
+    expect(orq(["set-state", "T-0001", "nope", "TODO"]).code).not.toBe(0)
+    expect(orq(["set-state", "T-0001", "plan", "DONE"]).code).not.toBe(0)
   })
 
   test("rejects an unknown task", () => {
-    const r = orq(["state", "T-0099", "plan", "TODO"])
+    const r = orq(["set-state", "T-0099", "plan", "TODO"])
     expect(r.code).toBe(1)
     expect(r.err).toContain("orq: no task T-0099")
   })
 })
 
-describe("orq playbook", () => {
+describe("the playbook", () => {
   test("a new task has no playbook until one is chosen", () => {
     orq(["new", "x"])
     expect(orq(["show", "T-0001"]).out).toContain("type = null")
-    expect(orq(["playbook", "T-0001", "feature"]).code).toBe(0)
+    expect(orq(["set-state", "T-0001", "triage", "IN PROGRESS", "--playbook", "feature"]).code).toBe(0)
     expect(orq(["show", "T-0001"]).out).toMatch(/type = feature[\s\S]*type\s+feature/)
   })
 
@@ -158,17 +158,17 @@ describe("orq playbook", () => {
 
   test("rejects a name that is not a playbook's, and an unknown task", () => {
     orq(["new", "x"])
-    expect(orq(["playbook", "T-0001", "Not A Name"]).code).not.toBe(0)
+    expect(orq(["set-state", "T-0001", "triage", "IN PROGRESS", "--playbook", "Not A Name"]).code).not.toBe(0)
     expect(orq(["new", "--playbook", "-x", "y"]).code).not.toBe(0)
-    expect(orq(["playbook", "T-0099", "feature"]).err).toContain("no task T-0099")
+    expect(orq(["set-state", "T-0099", "triage", "IN PROGRESS", "--playbook", "feature"]).err).toContain("no task T-0099")
   })
 })
 
-describe("orq file", () => {
+describe("orq create-artifact", () => {
   test("creates a task file from its template, with the id filled in", () => {
     orq(["new", "x"])
     const wt = worktreeOf("T-0001")
-    const r = orq(["file", "T-0001", "BRIEF"], wt)
+    const r = orq(["create-artifact", "T-0001", "BRIEF"], wt)
     expect(r.code).toBe(0)
     const brief = readFileSync(join(wt, ".orqestrai/tasks/T-0001/BRIEF.md"), "utf8")
     expect(brief).toContain("id: T-0001")
@@ -178,49 +178,43 @@ describe("orq file", () => {
   test("does not overwrite an existing file", () => {
     orq(["new", "x"])
     const wt = worktreeOf("T-0001")
-    orq(["file", "T-0001", "SPEC"], wt)
-    const r = orq(["file", "T-0001", "SPEC"], wt)
+    orq(["create-artifact", "T-0001", "SPEC"], wt)
+    const r = orq(["create-artifact", "T-0001", "SPEC"], wt)
     expect(r.code).toBe(1)
     expect(r.err).toContain("exists; edit it instead")
   })
 
   test("refuses outside the task's worktree", () => {
     orq(["new", "x"])
-    const r = orq(["file", "T-0001", "BRIEF"], repo)
+    const r = orq(["create-artifact", "T-0001", "BRIEF"], repo)
     expect(r.code).toBe(1)
     expect(r.err).toContain("are you in its worktree?")
   })
 })
 
-describe("orq link", () => {
-  test("links a task to an outside reference, shown with the task", () => {
-    orq(["new", "x"])
-    expect(orq(["link", "T-0001", "gh-issue", "saculo/app#12", "origin"]).code).toBe(0)
-    expect(orq(["link", "T-0001", "slack-thread", "C01/1730.42"]).code).toBe(0)
-    const shown = orq(["show", "T-0001"]).out
-    expect(shown).toContain("link gh-issue saculo/app#12 (origin)")
-    expect(shown).toContain("link slack-thread C01/1730.42 (related)")
+describe("orq new --origin", () => {
+  test("links the task to what it comes from, shown with the task", () => {
+    expect(orq(["new", "--origin", "gh-issue:https://github.com/saculo/app/issues/12", "x"]).code).toBe(0)
+    expect(orq(["show", "T-0001"]).out).toContain("link gh-issue https://github.com/saculo/app/issues/12 (origin)")
   })
 
-  test("rejects an unknown role and an unknown task", () => {
-    orq(["new", "x"])
-    expect(orq(["link", "T-0001", "jira", "APP-1", "owner"]).code).not.toBe(0)
-    const r = orq(["link", "T-0099", "jira", "APP-1"])
-    expect(r.code).toBe(1)
-    expect(r.err).toContain("orq: no task T-0099")
+  test("rejects an origin without a kind or a reference, and makes no task", () => {
+    expect(orq(["new", "--origin", "APP-1", "x"]).err).toContain("expected <kind>:<ref>")
+    expect(orq(["new", "--origin", "jira:", "x"]).code).not.toBe(0)
+    expect(orq(["ls"]).out).not.toContain("T-0001")
   })
 })
 
-describe("orq open", () => {
+describe("orq resume", () => {
   test("prints the start command again", () => {
     orq(["new", "x"])
-    expect(orq(["open", "T-0001"]).out).toContain("ORQ_TASK=T-0001")
+    expect(orq(["resume", "T-0001"]).out).toContain("ORQ_TASK=T-0001")
   })
 
   test("fails when the worktree is gone", () => {
     orq(["new", "x"])
     rmSync(worktreeOf("T-0001"), { recursive: true, force: true })
-    const r = orq(["open", "T-0001"])
+    const r = orq(["resume", "T-0001"])
     expect(r.code).toBe(1)
     expect(r.err).toContain("is gone")
     expect(existsSync(worktreeOf("T-0001"))).toBe(false)
