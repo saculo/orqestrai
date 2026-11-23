@@ -48,7 +48,7 @@ Start the `orq:researcher` subagent with **only the questions**. Do not pass the
 request. For separate areas, start 2–3 researchers in parallel, each with its own
 questions.
 
-Run `orq file <id> RESEARCH` and fill it: each question, the finding as a header that
+Run `orq create-artifact <id> RESEARCH` and fill it: each question, the finding as a header that
 states what is true, and the evidence (`path:line`). Check one or two key citations
 yourself.
 
@@ -60,7 +60,7 @@ yourself.
 
 ## 5. Recommend, then grill
 
-Run `orq file <id> BRIEF`. Load `orq:grill`. Answers go into the brief's
+Run `orq create-artifact <id> BRIEF`. Load `orq:grill`. Answers go into the brief's
 **Decisions** section.
 
 **Q1 is always your recommendation**, before any deep question:
@@ -118,7 +118,7 @@ stale. Ask for approval, as a gate (`orq:task`, Messages). That is the gate:
 
   If the file exists, add the task to **Requests**.
 - Commit the out-of-scope file on the task branch. A dropped task is never merged:
-  `orq clean` copies the file to the archive, where the next triage reads it. Run `orq state <id> triage DROPPED "<reason>"` and tell the
+  `orq clean` copies the file to the archive, where the next triage reads it. Run `orq set-state <id> triage DROPPED --note "<reason>"` and tell the
   user. The task ends here.
 
 When a match in out-of-scope comes up and the user changes their mind, delete or update

@@ -55,7 +55,7 @@ Read each report.
     (`<W1.2>: <decision>, because <reason>`), and start that task again with the answer;
   - it changes behavior, scope or a seam: ask the user (`orq:task`, Messages). Work that
     does not depend on it continues.
-- **Blocked:** `orq ask --blocked <id>` with what blocks, what you tried, what is done, and
+- **Blocked:** `orq set-state <id> impl BLOCKED --note "<the message>"` with what blocks, what you tried, what is done, and
   a question for the way forward. Stop:
 
   ```
@@ -98,5 +98,5 @@ command that failed, each `NOT VERIFIED` check, each blocking finding.
 
 ## 5. Done
 
-All waves committed and the tests green: run `orq state <id> verify "IN PROGRESS"` and
+All waves committed and the tests green: run `orq set-state <id> verify "IN PROGRESS"` and
 continue with `orq:verify`.

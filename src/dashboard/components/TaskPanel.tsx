@@ -1,5 +1,5 @@
 import type { BoardTask } from "../serverApi.ts"
-import { issueOf, isWaitingForYou, projectName, pullRequestOf, slackThreadUrl, timeAgo } from "../tasks.ts"
+import { issueOf, isWaitingForYou, projectName, pullRequestOf, timeAgo } from "../tasks.ts"
 import { CloseIcon } from "./icons.tsx"
 import { StatusChip } from "./StatusChip.tsx"
 import { TaskFileViewer } from "./TaskFileViewer.tsx"
@@ -38,22 +38,16 @@ const PanelHeader = ({ task, onClose }: { task: BoardTask; onClose: () => void }
   </div>
 )
 
-/** The task's issue, Slack thread and pull request, when it has them. */
+/** The task's issue and pull request, when it has them. */
 const TaskLinks = ({ task }: { task: BoardTask }) => {
   const issue = issueOf(task)
-  const slack = slackThreadUrl(task)
   const pullRequest = pullRequestOf(task)
-  if (!issue && !slack && !pullRequest?.url) return null
+  if (!issue && !pullRequest?.url) return null
   return (
     <div className="meta links">
       {issue && (
         <a href={issue.url} target="_blank" rel="noopener noreferrer">
           Issue {issue.label} on GitHub ↗
-        </a>
-      )}
-      {slack && (
-        <a href={slack} target="_blank" rel="noopener noreferrer">
-          Slack thread ↗
         </a>
       )}
       {pullRequest?.url && (
@@ -76,7 +70,7 @@ const WaitingMessage = ({ task, now }: { task: BoardTask; now: number }) => {
       </p>
       <TaskMarkdown text={task.message ?? task.note} taskId={task.id} />
       <p className="small answer">
-        Answer {slackThreadUrl(task) ? "in the Slack thread, or " : ""}in the session: <span className="mono">orq open {task.id}</span>
+        Answer in its session: the Herdr app, or <span className="mono">hc attach orq-{task.id.toLowerCase()}</span>
       </p>
     </section>
   )

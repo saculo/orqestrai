@@ -1,4 +1,4 @@
-// Starting a task: the one way, for `orq new`, the Slack bridge and `orq issues`.
+// Starting a task: the one way, for `orq new` and `orq issues`.
 import { mkdirSync, writeFileSync } from "node:fs"
 import { join } from "node:path"
 import { Effect } from "effect"

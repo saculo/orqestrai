@@ -26,14 +26,13 @@ const branchExists = () =>
   Bun.spawnSync(["git", "rev-parse", "--verify", "--quiet", "refs/heads/orq/T-0001-add-search"], { cwd: repo }).exitCode === 0
 const head = () => sh(["git", "rev-parse", "HEAD"], worktree())
 
-/** A task with a committed task file and a PR link, as ship leaves it. */
+/** A task with a committed task file and an open PR for its branch, as ship leaves it. */
 const shipped = () => {
   orq(["new", "Add search"])
   writeFileSync(join(worktree(), ".orqestrai/tasks/T-0001/BRIEF.md"), "brief\n")
   git(["add", "."], worktree())
   git(["commit", "-q", "-m", "docs(T-0001): brief"], worktree())
-  orq(["link", "T-0001", "gh-pr", "https://github.com/o/r/pull/7"])
-  orq(["state", "T-0001", "ship", "WAITING FOR ME", "PR open"])
+  orq(["set-state", "T-0001", "ship", "WAITING FOR ME", "--note", "PR open"])
 }
 const merged = () => ({ FAKE_GH_STATE: "MERGED", FAKE_GH_HEAD: head() })
 
@@ -46,7 +45,8 @@ beforeEach(() => {
   mkdirSync(fakeBin)
   writeFileSync(
     join(fakeBin, "gh"),
-    `#!/bin/sh\n[ "$*" = "pr view https://github.com/o/r/pull/7 --json state,headRefOid" ] || { echo "unexpected: gh $*" >&2; exit 2; }\n[ -n "$FAKE_GH_FAIL" ] && exit 1\nprintf '{"state":"%s","headRefOid":"%s"}' "$FAKE_GH_STATE" "$FAKE_GH_HEAD"\n`,
+    // the PR of the task's branch, then (once orq recorded it) the same PR by its URL
+    `#!/bin/sh\ncase "$*" in "pr view orq/T-0001-add-search --json url,state,headRefOid"|"pr view https://github.com/o/r/pull/7 --json url,state,headRefOid") ;; *) echo "unexpected: gh $*" >&2; exit 2 ;; esac\n[ -n "$FAKE_GH_FAIL" ] && exit 1\nprintf '{"url":"https://github.com/o/r/pull/7","state":"%s","headRefOid":"%s"}' "$FAKE_GH_STATE" "$FAKE_GH_HEAD"\n`,
   )
   chmodSync(join(fakeBin, "gh"), 0o755)
   git(["init", "-q", "-b", "main"], repo)
@@ -127,7 +127,7 @@ describe("orq clean", () => {
     writeFileSync(join(worktree(), ".orqestrai/tasks/T-0001/BRIEF.md"), "we will not do this\n")
     git(["add", "."], worktree())
     git(["commit", "-q", "-m", "docs(T-0001): drop"], worktree())
-    orq(["state", "T-0001", "triage", "DROPPED"])
+    orq(["set-state", "T-0001", "triage", "DROPPED"])
     const r = orq(["clean", "T-0001"])
     expect(r.code).toBe(0)
     expect(readFileSync(join(home, "archive/proj/T-0001/BRIEF.md"), "utf8")).toBe("we will not do this\n")
@@ -141,7 +141,7 @@ describe("orq clean", () => {
     writeFileSync(join(worktree(), ".orqestrai/out-of-scope/search.md"), "# Search\n")
     git(["add", "."], worktree())
     git(["commit", "-q", "-m", "docs(T-0001): search is out of scope"], worktree())
-    orq(["state", "T-0001", "triage", "DROPPED"])
+    orq(["set-state", "T-0001", "triage", "DROPPED"])
     expect(orq(["clean", "T-0001"]).code).toBe(0)
     expect(readFileSync(join(home, "archive/proj/T-0001/out-of-scope/search.md"), "utf8")).toBe("# Search\n")
     expect(branchExists()).toBe(false)
@@ -152,7 +152,7 @@ describe("orq clean", () => {
     writeFileSync(join(worktree(), "search.ts"), "export {}\n")
     git(["add", "."], worktree())
     git(["commit", "-q", "-m", "wip"], worktree())
-    orq(["state", "T-0001", "triage", "DROPPED"])
+    orq(["set-state", "T-0001", "triage", "DROPPED"])
     const r = orq(["clean", "T-0001"])
     expect(r.code).toBe(1)
     expect(r.err).toContain("outside its task folder and .orqestrai/out-of-scope/: search.ts")
