@@ -16,7 +16,7 @@ the user. The step skills do the work. You keep the task moving and the records 
 2. Check that `git rev-parse --show-toplevel` is that worktree. If it is not, stop and tell
    the user. Do not work in another checkout.
    Check that `echo $ORQ_TASK` prints this id. If it does not, the guard hooks are off:
-   tell the user to start the session with `orq open <id>`.
+   tell the user to start the session with `orq resume <id>`.
 3. Read the files in `.orqestrai/tasks/<id>/`. The `status:` line in each file's
    frontmatter and the database row together tell you where the task is.
 4. The playbook: if `orq show` names one in `type`, load its skill (`playbook-<name>`, in this
@@ -29,26 +29,26 @@ the user. The step skills do the work. You keep the task moving and the records 
 The playbooks are this plugin's skills named `playbook-*`. Each description says when it fits.
 
 1. Read `REQUEST.md`. Compare it with each playbook's description.
-2. One fits clearly: run `orq playbook <id> <name>` (the name without `playbook-`), load it,
-   and start its first step.
+2. One fits clearly: record it with `orq set-state <id> triage "IN PROGRESS" --playbook <name>`
+   (the name without `playbook-`), load it, and start its first step.
 3. None fits, or two do: ask (Messages) one question: which playbook, with the options
    and the one you recommend and why. End your turn. Record the user's choice as above.
 
 You choose once. When a later step shows the task is of another kind (a bug fix that turns
-out to be a new feature), stop: `orq ask <id>` with what you found and the playbook you
-recommend. When the user agrees, record it with `orq playbook`, and continue the new
+out to be a new feature), stop and ask (Records) with what you found and the playbook you
+recommend. When the user agrees, record it with `--playbook` as above, and continue the new
 playbook at the step that matches the files the task has.
 
 ## Records
 
-- When a step starts: `orq state <id> <step> "IN PROGRESS"`.
-- When you wait for the user: `orq ask <id> "<the message>"`, then end your turn. It sets
-  `WAITING FOR ME` (the headline is the note) and posts the message in the task's Slack
-  thread, where the user may answer. Pass the whole message (Messages), exactly as you
-  show it here.
+- When a step starts: `orq set-state <id> <step> "IN PROGRESS"`.
+- When you wait for the user: `orq set-state <id> <step> "WAITING FOR ME" --note "<the message>"`,
+  then end your turn. The headline is the task's note; the whole message is on the
+  dashboard. Pass the whole message (Messages), exactly as you show it here.
 - When a step cannot continue (a tool fails, an input is missing):
-  `orq ask --blocked <id> "<the message>"`: the same, with status `BLOCKED`. Stop.
-- When the user answers: `orq state <id> <step> "IN PROGRESS"`.
+  `orq set-state <id> <step> BLOCKED --note "<the message>"`: the same, with status
+  `BLOCKED`. Stop.
+- When the user answers: `orq set-state <id> <step> "IN PROGRESS"`.
 - At the end of each step, commit its files, following `orq:git`.
 
 ## Gates
@@ -67,16 +67,17 @@ You never set `status: approved` by your own decision.
 - Ask only about decisions that are the user's: scope, product behavior, accepting a risk,
   the gates. Decide reversible things yourself, write the decision in the step's file, and
   continue.
-- Ask in plain text, not with a question tool, so the same message works in a terminal
-  and in a Slack thread. Triage and plan ask in rounds, as `orq:grill` says.
-- Ask with `orq ask` (Records), and end your turn. The user's answer comes in this
-  conversation, typed in by the Slack bridge or by them.
+- Ask in plain text, not with a question tool, so the same message works in the terminal
+  and on the dashboard. Triage and plan ask in rounds, as `orq:grill` says.
+- Ask as Records says (`WAITING FOR ME` with the message), and end your turn. The user's
+  answer comes in this conversation: they type it in the session (the Herdr app, or
+  `hc attach`).
 - Report outcomes and decisions. Do not report progress or internal mechanics.
 
 ## Messages
 
-Every message you send with `orq ask`, in every step, has one shape, in Markdown (the
-terminal and Slack both render it):
+Every message you wait on, in every step, has one shape, in Markdown (the terminal and the
+dashboard both render it):
 
 ```
 **<headline: what happened, or what you need>**

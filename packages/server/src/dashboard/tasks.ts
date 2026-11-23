@@ -1,5 +1,5 @@
 // Facts about one task, as the page shows them: whether it waits for you, which project it is
-// in, its pull request and Slack thread, and how long ago something happened.
+// in, its pull request and issue, and how long ago something happened.
 import type { BoardTask, Status } from "./serverApi.ts"
 
 const FINISHED: ReadonlyArray<Status> = ["MERGED", "DROPPED"]
@@ -46,12 +46,4 @@ export const issueOf = (task: BoardTask) => {
   const url = linkedRef(task, "gh-issue")
   if (!url) return null
   return { url, label: `#${/\/issues\/(\d+)/.exec(url)?.[1] ?? "?"}` }
-}
-
-/** The task's Slack thread (`C123/1700000000.000100`), as a link Slack opens in your workspace. */
-export const slackThreadUrl = (task: BoardTask) => {
-  const ref = linkedRef(task, "slack-thread")
-  if (!ref) return null
-  const [channel, timestamp = ""] = ref.split("/")
-  return `https://slack.com/archives/${channel}/p${timestamp.replace(".", "")}`
 }

@@ -1,4 +1,4 @@
 #!/usr/bin/env bash
-# orq from a checkout: runs src/main.ts with Bun. Releases ship a compiled binary instead.
+# orq from a checkout: runs packages/cli/src/main.ts with Bun.
 ROOT="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/.." && pwd)"
-exec bun "$ROOT/src/main.ts" "$@"
+exec bun "$ROOT/packages/cli/src/main.ts" "$@"

@@ -2,5 +2,8 @@
 !package.json
 !bun.lock
 !tsconfig.json
-!src
-!templates
+!packages/core/package.json
+!packages/core/src
+!packages/cli/package.json
+!packages/server/package.json
+!packages/server/src

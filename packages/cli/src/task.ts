@@ -1,10 +1,10 @@
-// Starting a task: the one way, for `orq new`, the Slack bridge and `orq issues`.
+// Starting a task: the one way, for `orq new` and `orq issues`.
 import { mkdirSync, writeFileSync } from "node:fs"
 import { join } from "node:path"
+import { OrqConfig } from "@orqestrai/core/config.ts"
+import { Db } from "@orqestrai/core/db.ts"
+import { type Source, slugify } from "@orqestrai/core/domain.ts"
 import { Effect } from "effect"
-import { OrqConfig } from "./config.ts"
-import { Db } from "./db.ts"
-import { type Source, slugify } from "./domain.ts"
 import { syncFilesOrWarn } from "./files.ts"
 import { addWorktree, baseBranch, requireRef } from "./git.ts"
 import { openSession } from "./herdr.ts"

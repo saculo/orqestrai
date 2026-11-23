@@ -24,7 +24,7 @@ describe("the orq plugin", () => {
 
   test("every orq:<name> a skill, an agent or orq mentions is a skill or an agent of the plugin", () => {
     const names = new Set([...skills.map((f) => basename(dirname(f))), ...agents.map((f) => basename(f, ".md"))])
-    const files = [...glob("**/*.md", PLUGIN), join(ROOT, "src", "herdr.ts")]
+    const files = [...glob("**/*.md", PLUGIN), join(ROOT, "packages", "cli", "src", "herdr.ts")]
     const mentioned = files.flatMap((f) => [...readFileSync(f, "utf8").matchAll(/\borq:([a-z][a-z-]*)/g)].map((m) => m[1]))
     expect(mentioned.length).toBeGreaterThan(50)
     expect(mentioned.filter((n) => !names.has(n as string))).toEqual([])
@@ -40,6 +40,6 @@ describe("the orq plugin", () => {
 
   test("the marketplace lists the plugin, at orq's version", () => {
     expect(json(".claude-plugin/marketplace.json").plugins).toMatchObject([{ name: manifest.name, source: "./plugin" }])
-    expect(manifest.version).toBe(json("package.json").version)
+    expect(manifest.version).toBe(json("packages/cli/package.json").version)
   })
 })

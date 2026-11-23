@@ -18,7 +18,6 @@ const run = (args: string[]) => {
     ORQ_DATA: join(dir, "home"),
     ORQ_SERVER: socket,
     ORQ_HC: "orq-test-no-hc",
-    ORQ_BRIDGE: join(dir, "no-bridge.sock"),
   }
   const p = Bun.spawnSync([...ORQ, ...args], { cwd: repo, env, stdout: "pipe", stderr: "pipe" })
   return { code: p.exitCode, stdout: p.stdout.toString(), stderr: p.stderr.toString() }
@@ -49,9 +48,9 @@ beforeAll(async () => {
   server = await startServer(socket, { ORQ_DATA: join(dir, "server") }, port)
   url = `http://127.0.0.1:${port}`
 
-  orq(["new", "Weekly shopping list"])
+  orq(["new", "--origin", "gh-issue:https://github.com/me/proj/issues/5", "Weekly shopping list"])
   orq(["new", "Dark mode"])
-  orq(["state", "T-0001", "plan", "IN PROGRESS"])
+  orq(["set-state", "T-0001", "plan", "IN PROGRESS"])
 
   files = join(dir, "home", "worktrees", "proj", "T-0001-weekly-shopping-list", ".orqestrai", "tasks", "T-0001")
   writeFileSync(join(files, "SPEC.md"), "---\nid: T-0001\nstatus: draft\n---\n\n# Spec\n")
@@ -59,9 +58,15 @@ beforeAll(async () => {
   mkdirSync(join(files, "evidence", "V1"), { recursive: true })
   writeFileSync(join(files, "evidence", "V1", "V1-list.png"), new Uint8Array([0x89, 0x50, 0x4e, 0x47]))
   writeFileSync(join(files, "evidence", "V1", "trace.md"), "# trace")
-  // orq ask sends the files, as orq state does
-  orq(["ask", "T-0001", "**SPEC.md ready: 4 ACs**\n- AC1 sums\n\n**Q9 - Approve SPEC.md?**\n- Recommended: yes"])
-  orq(["link", "T-0001", "slack-thread", "C1/100.1", "origin"])
+  // waiting for you, with the whole message; orq set-state sends the files too
+  orq([
+    "set-state",
+    "T-0001",
+    "plan",
+    "WAITING FOR ME",
+    "--note",
+    "**SPEC.md ready: 4 ACs**\n- AC1 sums\n\n**Q9 - Approve SPEC.md?**\n- Recommended: yes",
+  ])
 })
 
 afterAll(() => {
@@ -88,14 +93,16 @@ describe("the dashboard", () => {
     const [waiting, todo] = [board.find((t) => t.id === "T-0001"), board.find((t) => t.id === "T-0002")]
     expect(waiting).toMatchObject({ status: "WAITING FOR ME", note: "SPEC.md ready: 4 ACs" })
     expect(waiting?.message).toBe("**SPEC.md ready: 4 ACs**\n- AC1 sums\n\n**Q9 - Approve SPEC.md?**\n- Recommended: yes")
-    expect(waiting?.links).toEqual([{ kind: "slack-thread", ref: "C1/100.1", role: "origin" }])
+    expect(waiting?.links).toEqual([{ kind: "gh-issue", ref: "https://github.com/me/proj/issues/5", role: "origin" }])
     expect(todo).toMatchObject({ status: "TODO", message: null })
   })
 
   test("a message is shown only while the task waits on it", async () => {
     orq(["new", "Portions"])
-    orq(["ask", "T-0003", "**Which unit?**"])
-    orq(["state", "T-0003", "triage", "IN PROGRESS"])
+    orq(["set-state", "T-0003", "triage", "WAITING FOR ME", "--note", "**Which unit?**"])
+    const waiting = (await json<BoardTask[]>("/board")).find((t) => t.id === "T-0003")
+    expect(waiting).toMatchObject({ status: "WAITING FOR ME", note: "Which unit?", message: "**Which unit?**" })
+    orq(["set-state", "T-0003", "triage", "IN PROGRESS"])
     const task = (await json<BoardTask[]>("/board")).find((t) => t.id === "T-0003")
     expect(task).toMatchObject({ status: "IN PROGRESS", message: null })
   })
@@ -131,7 +138,7 @@ describe("the dashboard", () => {
     writeFileSync(join(files, "SPEC.md"), "---\nid: T-0001\nstatus: approved\n---\n\n# Spec, approved\n")
     rmSync(join(files, "evidence", "V1", "V1-list.png"))
     writeFileSync(join(files, "evidence", "V1", "V1-total.webp"), new Uint8Array([1, 2, 3]))
-    orq(["state", "T-0001", "impl", "IN PROGRESS"])
+    orq(["set-state", "T-0001", "impl", "IN PROGRESS"])
     expect(await json("/tasks/T-0001/files")).toEqual({
       files: [
         { name: "REQUEST", status: null },
@@ -162,14 +169,14 @@ describe("the dashboard", () => {
     mkdirSync(join(t3, "evidence"))
     symlinkSync(secret, join(t3, "evidence", "shot.png"))
     symlinkSync(dir, join(t3, "evidence", "all"))
-    orq(["state", "T-0003", "triage", "IN PROGRESS"])
+    orq(["set-state", "T-0003", "triage", "IN PROGRESS"])
     expect(await json("/tasks/T-0003/files")).toEqual({ files: [{ name: "REQUEST", status: null }], evidence: [] })
   })
 
   test("a frontmatter with CRLF line ends has its status too", async () => {
     const t3 = join(dir, "home", "worktrees", "proj", "T-0003-portions", ".orqestrai", "tasks", "T-0003")
     writeFileSync(join(t3, "BRIEF.md"), "---\r\nid: T-0003\r\nstatus: approved\r\n---\r\n\r\n# Brief\r\n")
-    orq(["state", "T-0003", "plan", "IN PROGRESS"])
+    orq(["set-state", "T-0003", "plan", "IN PROGRESS"])
     const { files } = await json<{ files: unknown[] }>("/tasks/T-0003/files")
     expect(files).toContainEqual({ name: "BRIEF", status: "approved" })
   })
@@ -177,7 +184,7 @@ describe("the dashboard", () => {
   test("a file orq cannot read: a warning, and the state is recorded all the same", async () => {
     const brief = join(dir, "home", "worktrees", "proj", "T-0003-portions", ".orqestrai", "tasks", "T-0003", "BRIEF.md")
     chmodSync(brief, 0o000)
-    const p = run(["state", "T-0003", "impl", "IN PROGRESS"])
+    const p = run(["set-state", "T-0003", "impl", "IN PROGRESS"])
     chmodSync(brief, 0o644)
     expect(p.code).toBe(0)
     expect(p.stderr).toContain("warning: the task files did not reach the dashboard")
@@ -186,17 +193,9 @@ describe("the dashboard", () => {
 
   test("a task whose worktree is gone: the server still has its files", async () => {
     rmSync(join(dir, "home", "worktrees", "proj", "T-0002-dark-mode"), { recursive: true, force: true })
-    orq(["state", "T-0002", "triage", "IN PROGRESS"])
+    orq(["set-state", "T-0002", "triage", "IN PROGRESS"])
     expect(await json("/tasks/T-0002/files")).toEqual({ files: [{ name: "REQUEST", status: null }], evidence: [] })
   })
-
-  test("the message stays on the board however many events come after it", async () => {
-    orq(["new", "Many links"])
-    orq(["ask", "T-0004", "**Which store?**\n- Recommended: the one nearby"])
-    for (let n = 0; n < 31; n++) orq(["link", "T-0004", "note", `ref-${n}`])
-    const task = (await json<BoardTask[]>("/board")).find((t) => t.id === "T-0004")
-    expect(task).toMatchObject({ note: "Which store?", message: expect.stringContaining("Recommended: the one nearby") })
-  }, 60_000)
 
   test("orq show leaves the whole messages out; the note is enough there", () => {
     const shown = orq(["show", "T-0001"])

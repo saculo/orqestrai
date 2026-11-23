@@ -1,10 +1,10 @@
 // The dashboard's logic, without a browser: what needs you, what runs, the columns, the project
 // filter, the task's links and the panel's tabs (src/dashboard/{board,tasks,taskFiles}.ts).
 import { describe, expect, test } from "bun:test"
-import { ALL_PROJECTS, buildBoard, FINISHED_TASKS_SHOWN_FOR_MS } from "../src/dashboard/board.ts"
-import type { BoardTask } from "../src/dashboard/serverApi.ts"
-import { fileTabs, latestFile, taskLinkTarget, writtenFiles } from "../src/dashboard/taskFiles.ts"
-import { projectLabels, pullRequestOf, slackThreadUrl, timeAgo } from "../src/dashboard/tasks.ts"
+import { ALL_PROJECTS, buildBoard, FINISHED_TASKS_SHOWN_FOR_MS } from "../packages/server/src/dashboard/board.ts"
+import type { BoardTask } from "../packages/server/src/dashboard/serverApi.ts"
+import { fileTabs, latestFile, taskLinkTarget, writtenFiles } from "../packages/server/src/dashboard/taskFiles.ts"
+import { projectLabels, pullRequestOf, timeAgo } from "../packages/server/src/dashboard/tasks.ts"
 
 const NOW = Date.parse("2026-11-19T12:00:00Z")
 const minutesAgo = (m: number) => new Date(NOW - m * 60_000).toISOString()
@@ -83,17 +83,10 @@ describe("a task's facts", () => {
     expect([0.5, 5, 180, 3 * 1440].map((m) => timeAgo(minutesAgo(m), NOW))).toEqual(["30s", "5m", "3h", "3d"])
   })
 
-  test("the pull request and the Slack thread, from the task's links", () => {
-    const linked = task({
-      id: "T-1",
-      links: [
-        { kind: "gh-pr", ref: "https://github.com/me/app/pull/42", role: "related" },
-        { kind: "slack-thread", ref: "C123/1700000000.000100", role: "origin" },
-      ],
-    })
+  test("the pull request, from the task's links", () => {
+    const linked = task({ id: "T-1", links: [{ kind: "gh-pr", ref: "https://github.com/me/app/pull/42", role: "related" }] })
     expect(pullRequestOf(linked)).toEqual({ url: "https://github.com/me/app/pull/42", label: "#42" })
-    expect(slackThreadUrl(linked)).toBe("https://slack.com/archives/C123/p1700000000000100")
-    expect([pullRequestOf(task({ id: "T-2" })), slackThreadUrl(task({ id: "T-2" }))]).toEqual([null, null])
+    expect(pullRequestOf(task({ id: "T-2" }))).toBeNull()
   })
 })
 
