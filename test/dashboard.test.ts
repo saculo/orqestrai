@@ -100,6 +100,8 @@ describe("the dashboard", () => {
   test("a message is shown only while the task waits on it", async () => {
     orq(["new", "Portions"])
     orq(["set-state", "T-0003", "triage", "WAITING FOR ME", "--note", "**Which unit?**"])
+    const waiting = (await json<BoardTask[]>("/board")).find((t) => t.id === "T-0003")
+    expect(waiting).toMatchObject({ status: "WAITING FOR ME", note: "Which unit?", message: "**Which unit?**" })
     orq(["set-state", "T-0003", "triage", "IN PROGRESS"])
     const task = (await json<BoardTask[]>("/board")).find((t) => t.id === "T-0003")
     expect(task).toMatchObject({ status: "IN PROGRESS", message: null })

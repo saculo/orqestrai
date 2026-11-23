@@ -21,14 +21,19 @@ export const viewPr = (repo: string, ref: string) =>
     Effect.orElseSucceed(() => null),
   )
 
-/** The task's PR: the one its gh-pr link names, or else the one of its branch, which is then
- * recorded as its gh-pr link. Null when it has none yet. */
+/** The task's PR: the one its last gh-pr link names, or else the one of its branch, which is
+ * then recorded as its gh-pr link. When the linked PR was closed without a merge, the branch
+ * may have a new one: that one is recorded and used. Null when it has none yet. */
 export const prOf = (task: Task) =>
   Effect.gen(function* () {
     const db = yield* Db
     const linked = (yield* db.links(task.id)).filter((l) => l.kind === PR_LINK).at(-1)?.ref
-    const pr = yield* viewPr(task.repo, linked ?? task.branch)
-    if (pr && !linked) yield* db.link(task.id, PR_LINK, pr.url, "related")
+    let pr = yield* viewPr(task.repo, linked ?? task.branch)
+    if (linked && pr?.state === "CLOSED") {
+      const current = yield* viewPr(task.repo, task.branch)
+      if (current && current.url !== pr.url) pr = current
+    }
+    if (pr && pr.url !== linked) yield* db.link(task.id, PR_LINK, pr.url, "related")
     return pr
   })
 

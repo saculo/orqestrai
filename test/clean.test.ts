@@ -46,7 +46,20 @@ beforeEach(() => {
   writeFileSync(
     join(fakeBin, "gh"),
     // the PR of the task's branch, then (once orq recorded it) the same PR by its URL
-    `#!/bin/sh\ncase "$*" in "pr view orq/T-0001-add-search --json url,state,headRefOid"|"pr view https://github.com/o/r/pull/7 --json url,state,headRefOid") ;; *) echo "unexpected: gh $*" >&2; exit 2 ;; esac\n[ -n "$FAKE_GH_FAIL" ] && exit 1\nprintf '{"url":"https://github.com/o/r/pull/7","state":"%s","headRefOid":"%s"}' "$FAKE_GH_STATE" "$FAKE_GH_HEAD"\n`,
+    // FAKE_GH_REPLACED: PR 7 was closed, and the branch has PR 8 now
+    `#!/bin/sh
+[ -n "$FAKE_GH_FAIL" ] && exit 1
+case "$*" in
+  "pr view https://github.com/o/r/pull/7 --json url,state,headRefOid")
+    if [ -n "$FAKE_GH_REPLACED" ]; then printf '{"url":"https://github.com/o/r/pull/7","state":"CLOSED","headRefOid":"old"}'; exit; fi
+    url=https://github.com/o/r/pull/7 ;;
+  "pr view https://github.com/o/r/pull/8 --json url,state,headRefOid") url=https://github.com/o/r/pull/8 ;;
+  "pr view orq/T-0001-add-search --json url,state,headRefOid")
+    url=https://github.com/o/r/pull/7; [ -n "$FAKE_GH_REPLACED" ] && url=https://github.com/o/r/pull/8 ;;
+  *) echo "unexpected: gh $*" >&2; exit 2 ;;
+esac
+printf '{"url":"%s","state":"%s","headRefOid":"%s"}' "$url" "$FAKE_GH_STATE" "$FAKE_GH_HEAD"
+`,
   )
   chmodSync(join(fakeBin, "gh"), 0o755)
   git(["init", "-q", "-b", "main"], repo)
@@ -64,6 +77,13 @@ describe("the merged state, read from GitHub", () => {
   test("an open PR leaves the task waiting", () => {
     shipped()
     expect(orq(["show", "T-0001"], { FAKE_GH_STATE: "OPEN", FAKE_GH_HEAD: "x" }).out).toContain("status = WAITING FOR ME")
+  })
+
+  test("a PR closed and replaced by a new one on the branch: the new one counts", () => {
+    shipped()
+    const shown = orq(["show", "T-0001"], { ...merged(), FAKE_GH_REPLACED: "1" }).out
+    expect(shown).toMatch(/status = MERGED[\s\S]*PR https:\/\/github.com\/o\/r\/pull\/8 merged/)
+    expect(shown).toContain("link gh-pr https://github.com/o/r/pull/8 (related)")
   })
 
   test("when gh fails, the task stays as it is and orq ls still works", () => {
