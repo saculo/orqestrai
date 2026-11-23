@@ -80,7 +80,7 @@ jobs:
             --config rules/typescript --config rules/javascript --config rules/bash --config rules/yaml/github-actions \
             --exclude-rule "rules.javascript.lang.correctness.no-replaceall" \
             --exclude-rule "rules.typescript.react.portability.i18next.jsx-not-internationalized" \
-            "$W/src" "$W/test" "$W/bin" "$W/.github"
+            "$W/packages" "$W/test" "$W/bin" "$W/.github"
       - name: shell (shellcheck)
         run: shellcheck bin/orq
       - name: workflows (actionlint)
