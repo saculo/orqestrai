@@ -22,10 +22,10 @@ Load `orq:git`, `orq:principle-prove-it-works`.
 
 ## 2. Quality gate, again
 
-Run `[commands]` from `.orqestrai/config.toml`, as `orq:verify` step 1 says. The base
+Run the quality gate, as `orq:verify` step 1 says. The base
 branch may have changed under the task.
 
-If a command fails: do not open the PR. Ask (`orq:task`, Messages): headline
+If a component fails: do not open the PR. Ask (`orq:task`, Messages): headline
 `**<command> fails after rebase**`, the last lines of its output, and a question with one
 recommended way forward (another impl round, or a fix you name). Stop.
 

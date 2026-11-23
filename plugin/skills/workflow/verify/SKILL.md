@@ -1,6 +1,6 @@
 ---
 name: verify
-description: orqestrai verify step. Runs the quality gate from config.toml, then runs the verifier (e2e tests and driven checks against one running app, through the verify-<surface> skills, e2e-inc/e2e for the surfaces it drives) and the reviewer in fresh contexts, writes VERIFY.md, and sends failures back to impl at most 3 rounds. Loaded by orq:task; do not run it alone.
+description: orqestrai verify step. Runs the quality gate (the ## Checks of AGENTS.md), then runs the verifier (e2e tests and driven checks against one running app, through the verify-<surface> skills, e2e-inc/e2e for the surfaces it drives) and the reviewer in fresh contexts, writes VERIFY.md, and sends failures back to impl at most 3 rounds. Loaded by orq:task; do not run it alone.
 ---
 
 # orqestrai: verify
@@ -21,13 +21,19 @@ under the old ones and set `round: <n>` in the frontmatter. Old rounds stay.
 
 ## 1. Quality gate
 
-Read `[commands]` in `.orqestrai/config.toml`. Run each command that is set, in the
-worktree, in this order: `types`, `lint`, `test`, then any other keys. No app runs here:
-the e2e suite is the verifier's, against the app.
+The checks are in `AGENTS.md` files, under `## Checks`: the repository's, and one per
+service or app that has its own (`recipes/AGENTS.md`). No app runs here: the e2e suite is
+the verifier's, against the app.
 
-- Record each one: `pass` or `fail`, and the command with the last lines of its output.
-- A command that is **not set** is `not configured`. Do not guess one, and do not fail
-  the gate for it. Report the list once at the end.
+1. The changed files: `git diff --name-only $(git merge-base <base> HEAD)` and
+   `git ls-files --others --exclude-standard`.
+2. For each file, its **component**: the nearest folder above it, up to the root, whose
+   `AGENTS.md` has a `## Checks` section. Each component once.
+3. In each component's folder, run its checks as written, in their order.
+
+- Record each component and command: `pass` or `fail`, with the last lines of its output.
+- A changed file with **no** `## Checks` above it is `not configured` (its folder). Do not
+  guess checks, and do not fail the gate for it. Report the list once at the end.
 - A `fail` is a failing item. Still run the review: one round should find as much as it
   can.
 

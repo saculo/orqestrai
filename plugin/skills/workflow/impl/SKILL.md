@@ -37,8 +37,9 @@ Behaviors to test:
 Seams: <the seams these behaviors use>
 Design that applies: <the Design lines that shape this task, or "none">
 
-Worktree: <path>. Test command: <test command from .orqestrai/config.toml, or "none
-configured: find the project's test command">.
+Worktree: <path>. Test command: the test command under `## Checks` in the AGENTS.md nearest
+to the files the task changes, run in that folder; or "none configured: find the test
+command".
 ```
 
 Do not add the brief, the research, other tasks or this conversation. If the task needs
@@ -71,7 +72,7 @@ Read each report.
 Check it yourself; a report is a claim:
 
 1. `git status --short`: the changed files match the reports.
-2. Run the test command once for the whole worktree. A red test stops the wave: send
+2. Run the quality gate once for the whole worktree (`orq:verify` step 1). A red test stops the wave: send
    the failing task back to its implementer with the output.
 3. Commit **each task separately**, following `orq:git`: stage that task's files by
    name, `feat(<id>): <subject>` (or `fix`, `test`, `refactor`), `<W1.2>` in the body.

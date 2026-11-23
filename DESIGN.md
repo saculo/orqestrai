@@ -244,7 +244,7 @@ test is driven by hand. Only what no agent can judge goes to you. Nothing is pro
 One round:
 
 ```
-1. Quality gate     [commands] types, lint, test (unit / integration / contract); no app
+1. Quality gate     ## Checks of the AGENTS.md of each changed component; no app
 2. In parallel:
    Verifier (never reads source)            Reviewer (never runs the app)
      starts the app once, free ports          reads diff + SPEC
@@ -284,17 +284,21 @@ same failure repeats. After the third failed round, or a repeated root cause, th
 goes to `WAITING FOR ME` with a short summary from `VERIFY.md`. Non-critical findings go
 into the PR body, with no notification.
 
-The quality gate runs the commands in `.orqestrai/config.toml`, with no app:
+The quality gate runs with no app. Its checks are written in Markdown, in `AGENTS.md`,
+under `## Checks`: the repository's, and one per service or app that has its own. A
+changed file belongs to the nearest folder above it whose `AGENTS.md` has that section;
+verify runs each such folder's checks there, as written. orq keeps no commands, and CI is
+the project's own.
 
-```toml
-[commands]
-types = "bun run check"
-lint  = "bunx biome ci ."
-test  = "bun test"
+```markdown
+## Checks
+
+    go vet ./...
+    go test ./...
 ```
 
-Any command not set is skipped and reported as "not configured". It is never guessed,
-and a missing command never fails the gate. orq knows nothing about the e2e suite: the
+A changed file with no `## Checks` above it is reported as "not configured": checks are
+never guessed, and it never fails the gate. orq knows nothing about the e2e suite: the
 surface's verify skill names it and how to run it (§5). A surface whose skill names no
 suite has its e2e checks driven by hand, and the round says so.
 
@@ -453,8 +457,8 @@ example a home directory whose `CLAUDE.md` lists your projects).
   `ORQ_SLACK_TOKENS` and `ORQ_SLACK_CHANNELS=C0123=/path,…`).
   `src/settings.ts` reads the file into these variables at start, and the rest of orq
   reads only variables. A key orq does not know is an error, so a typo is not ignored.
-- What belongs to a project is in the project: `.orqestrai/config.toml` (base branch, the
-  quality gate's `[commands]`), written by `orq init`.
+- What belongs to a project is in the project: `.orqestrai/config.toml` (base branch),
+  written by `orq init`, and the `## Checks` of its `AGENTS.md` files.
 
 ### The `orq` CLI
 
@@ -549,7 +553,7 @@ The skills, agents and hook come from the plugin, not from files in the project.
 
 ```
 .orqestrai/
-  config.toml            base branch, [commands] for the quality gate
+  config.toml            base branch
   out-of-scope/<concept>.md
   tasks/<id>/
     RESEARCH.md

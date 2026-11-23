@@ -22,7 +22,11 @@ claude plugin install orq@orqestrai     # skills, agents and the guard hook
 Update with `bun update -g orqestrai` and `claude plugin update orq@orqestrai`.
 
 Then, in each project's git repository, `orq init` writes `.orqestrai/config.toml`: the
-base branch and the commands of the quality gate.
+base branch.
+
+**The quality gate** (in verify and ship) runs the commands under `## Checks` in the
+`AGENTS.md` nearest to each file the task's branch changed: the repository's own, or a
+service's (`recipes/AGENTS.md`) in a repository of services. orq keeps no commands.
 
 ## Configure
 

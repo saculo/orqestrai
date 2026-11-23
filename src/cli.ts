@@ -33,7 +33,9 @@ const init = Command.make("init", {}, () =>
   Effect.gen(function* () {
     const project = yield* topLevel()
     const wrote = yield* install(project, yield* baseBranch(project))
-    yield* Console.log(wrote ? ".orqestrai/config.toml: written; set the quality gate's commands in it" : ".orqestrai/config.toml: kept")
+    yield* Console.log(
+      wrote ? ".orqestrai/config.toml: written; the quality gate's checks go in AGENTS.md (## Checks)" : ".orqestrai/config.toml: kept",
+    )
     yield* Console.log("skills, agents and the guard hook: claude plugin install orq@orqestrai (once per machine)")
     yield* warnIfNotOnPath
   }),
