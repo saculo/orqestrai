@@ -77,6 +77,24 @@ describe("task sessions in herdr-core", () => {
     expect(hcCalls()).toContainEqual(expect.stringMatching(/^\|run .* --label herdr\.space=sp3 --cwd /))
   })
 
+  test("orq new puts the session in the project's herdr_session, by the session's name", () => {
+    mkdirSync(join(repo, ".orqestrai"))
+    writeFileSync(join(repo, ".orqestrai", "config.toml"), 'herdr_session = "meal-prep"\n')
+    writeFileSync(
+      join(dir, "terminals.json"),
+      JSON.stringify({
+        terminals: [
+          { address: "t3", where: "home / 1" },
+          { address: "t5", where: "meal-prep / 2" },
+        ],
+      }),
+    )
+    writeFileSync(join(dir, "get-t9.json"), JSON.stringify({ labels: { "herdr.space": "sp1" } }))
+    writeFileSync(join(dir, "get-t5.json"), JSON.stringify({ labels: { "herdr.space": "sp5" } }))
+    orq(["new", "Add search"])
+    expect(hcCalls()).toContainEqual(expect.stringMatching(/^\|run .* --label herdr\.space=sp5 --cwd /))
+  })
+
   test("orq resume leaves a running session as it is", () => {
     orq(["new", "Add search"])
     running()

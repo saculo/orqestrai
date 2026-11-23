@@ -79,24 +79,27 @@ const findTerminal = (id: string) => Effect.map(liveTerminals(), (terminals) => 
 const Labels = Schema.fromJsonString(Schema.Struct({ labels: Schema.optional(Schema.Record(Schema.String, Schema.String)) }))
 const decodeLabels = Schema.decodeUnknownEffect(Labels)
 
-/** The Herdr desktop app shows a terminal only in a space of its layout, named by its
- * `herdr.space` label; it opens a tab there for a terminal that has the label and no tab.
- * The task's terminal goes in the space of the terminal orq runs in (HC_TERMINAL_ID); run from
- * no terminal (orq issues), in the space of a terminal the app shows (one with a `where`). */
-const spaceLabel = () =>
+/** The Herdr desktop app shows a terminal only in one of its sessions, named by its
+ * `herdr.space` label (`hc ls` shows the session's name in `where`: "home / 1"); it opens a tab
+ * there for a terminal that has the label and no tab. Only the app creates sessions. The task's
+ * terminal goes in the project's `herdr_session`, if a terminal is open in it; else in the
+ * session of the terminal orq runs in (HC_TERMINAL_ID); else (orq issues) in any session. */
+const spaceLabel = (session: string | undefined) =>
   Effect.gen(function* () {
-    const parent = process.env.HC_TERMINAL_ID || (yield* liveTerminals()).find((t) => t.where)?.address
-    if (!parent) return []
-    const out = yield* hc(["get", parent, "--json"])
+    const terminals = yield* liveTerminals()
+    const named = session === undefined ? undefined : terminals.find((t) => t.where?.split(" / ")[0] === session)
+    const from = named?.address || process.env.HC_TERMINAL_ID || terminals.find((t) => t.where)?.address
+    if (!from) return []
+    const out = yield* hc(["get", from, "--json"])
     if (out.code !== 0) return []
     const { labels } = yield* decodeLabels(out.stdout).pipe(Effect.orElseSucceed(() => ({ labels: undefined })))
     const space = labels?.["herdr.space"]
     return space ? ["--label", `herdr.space=${space}`] : []
   })
 
-/** Start the task's session in a herdr-core terminal, or return the command to run by hand when hc
+/** Start the task's session in a herdr-core terminal (in the Herdr session `session`, see spaceLabel), or return the command to run by hand when hc
  * is not there. A session that is already running is left as it is. */
-export const openSession = (id: string, worktree: string, base: string) =>
+export const openSession = (id: string, worktree: string, base: string, session?: string) =>
   Effect.gen(function* () {
     const { model, sandbox, addDirs, home } = yield* OrqConfig
     const cmd = sessionCommand(id, worktree, base, model, sandbox, addDirs, home)
@@ -108,7 +111,7 @@ export const openSession = (id: string, worktree: string, base: string) =>
       "--outlive-parent",
       "--name",
       terminalName(id),
-      ...(yield* spaceLabel()),
+      ...(yield* spaceLabel(session)),
       "--cwd",
       worktree,
       "--",
