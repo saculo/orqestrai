@@ -10,6 +10,7 @@ const FAKE_HC = `#!/usr/bin/env bash
 printf '%s|%s\\n' "\${HC_TERMINAL_ID:-}" "$*" >> "$FAKE_HC_DIR/log"
 case "$1" in
   ls) cat "$FAKE_HC_DIR/terminals.json" 2>/dev/null || echo '{"terminals":[]}' ;;
+  get) cat "$FAKE_HC_DIR/get-$2.json" 2>/dev/null || exit 1 ;;
 esac
 `
 
@@ -56,6 +57,14 @@ describe("task sessions in herdr-core", () => {
       expect.stringMatching(
         /^\|run --bg --outlive-parent --name orq-t-0001 --cwd \S+\/T-0001-add-search -- env ORQ_TASK=T-0001 .* claude --model opus \/orq:task T-0001$/,
       ),
+    )
+  })
+
+  test("orq new puts the session in the Herdr space of the terminal orq runs in", () => {
+    writeFileSync(join(dir, "get-t9.json"), JSON.stringify({ labels: { "herdr.space": "sp1", "herdr.tab": "tb1" } }))
+    orq(["new", "Add search"])
+    expect(hcCalls()).toContainEqual(
+      expect.stringMatching(/^\|run --bg --outlive-parent --name orq-t-0001 --label herdr\.space=sp1 --cwd /),
     )
   })
 

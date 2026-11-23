@@ -70,6 +70,23 @@ const findTerminal = (id: string) =>
     return terminals.find((t) => t.name === terminalName(id))?.address
   })
 
+const Labels = Schema.fromJsonString(Schema.Struct({ labels: Schema.optional(Schema.Record(Schema.String, Schema.String)) }))
+const decodeLabels = Schema.decodeUnknownEffect(Labels)
+
+/** The Herdr desktop app shows a terminal only in a space of its layout, named by its
+ * `herdr.space` label; it opens a tab there for a terminal that has the label and no tab.
+ * The task's terminal goes in the space of the terminal orq runs in (HC_TERMINAL_ID), if any. */
+const spaceLabel = () =>
+  Effect.gen(function* () {
+    const parent = process.env.HC_TERMINAL_ID
+    if (!parent) return []
+    const out = yield* hc(["get", parent, "--json"])
+    if (out.code !== 0) return []
+    const { labels } = yield* decodeLabels(out.stdout).pipe(Effect.orElseSucceed(() => ({ labels: undefined })))
+    const space = labels?.["herdr.space"]
+    return space ? ["--label", `herdr.space=${space}`] : []
+  })
+
 /** Start the task's session in a herdr-core terminal, or return the command to run by hand when hc
  * is not there. A session that is already running is left as it is. */
 export const openSession = (id: string, worktree: string, base: string) =>
@@ -78,7 +95,18 @@ export const openSession = (id: string, worktree: string, base: string) =>
     const cmd = sessionCommand(id, worktree, base, model, sandbox, addDirs, home)
     if ((yield* findTerminal(id)) !== undefined) return `${terminalName(id)} is already running (hc attach ${terminalName(id)})`
 
-    const out = yield* hc(["run", "--bg", "--outlive-parent", "--name", terminalName(id), "--cwd", worktree, "--", ...cmd])
+    const out = yield* hc([
+      "run",
+      "--bg",
+      "--outlive-parent",
+      "--name",
+      terminalName(id),
+      ...(yield* spaceLabel()),
+      "--cwd",
+      worktree,
+      "--",
+      ...cmd,
+    ])
     if (out.code === NOT_FOUND)
       return `no herdr-core (hc); start the task with:\n  cd ${shellQuote(worktree)} && ${cmd.map(shellQuote).join(" ")}`
     if (out.code !== 0) return yield* hcError(`cannot start ${terminalName(id)}`, out)
