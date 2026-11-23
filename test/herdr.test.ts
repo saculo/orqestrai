@@ -21,15 +21,17 @@ const sh = (cmd: string[], cwd: string) => {
   if (p.exitCode !== 0) throw new Error(`${cmd.join(" ")}: ${p.stderr.toString()}`)
 }
 
-const orq = (args: string[]) => {
+const orq = (args: string[], extra: Record<string, string | undefined> = {}) => {
   const env = {
     ...process.env,
     ORQ_DATA: join(dir, "home"),
     ORQ_HC: join(dir, "hc"),
     FAKE_HC_DIR: dir,
     HC_TERMINAL_ID: "t9", // orq runs inside a herdr-core terminal, as in a session started by hand
+    ...extra,
   } as Record<string, string | undefined>
   delete env.ORQ_SANDBOX
+  for (const [k, v] of Object.entries(env)) if (v === undefined) delete env[k]
   const p = Bun.spawnSync([...ORQ, ...args], { cwd: repo, env, stdout: "pipe", stderr: "pipe" })
   return { code: p.exitCode, out: p.stdout.toString(), err: p.stderr.toString() }
 }
@@ -66,6 +68,13 @@ describe("task sessions in herdr-core", () => {
     expect(hcCalls()).toContainEqual(
       expect.stringMatching(/^\|run --bg --outlive-parent --name orq-t-0001 --label herdr\.space=sp1 --cwd /),
     )
+  })
+
+  test("orq new run from no terminal (orq issues) puts the session in the space of a terminal the app shows", () => {
+    writeFileSync(join(dir, "terminals.json"), JSON.stringify({ terminals: [{ address: "t2" }, { address: "t3", where: "home / 1" }] }))
+    writeFileSync(join(dir, "get-t3.json"), JSON.stringify({ labels: { "herdr.space": "sp3" } }))
+    orq(["new", "Add search"], { HC_TERMINAL_ID: undefined })
+    expect(hcCalls()).toContainEqual(expect.stringMatching(/^\|run .* --label herdr\.space=sp3 --cwd /))
   })
 
   test("orq resume leaves a running session as it is", () => {

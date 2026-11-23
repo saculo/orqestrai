@@ -57,28 +57,35 @@ const hcError = (what: string, out: { code: number; stderr: string }) => {
 }
 
 const Terminals = Schema.fromJsonString(
-  Schema.Struct({ terminals: Schema.Array(Schema.Struct({ address: Schema.String, name: Schema.optional(Schema.String) })) }),
+  Schema.Struct({
+    terminals: Schema.Array(
+      Schema.Struct({ address: Schema.String, name: Schema.optional(Schema.String), where: Schema.optional(Schema.String) }),
+    ),
+  }),
 )
 const decodeTerminals = Schema.decodeUnknownEffect(Terminals)
 
-/** The address (`t7`) of the task's live terminal, if it has one. Without hc, none. */
-const findTerminal = (id: string) =>
+/** The live terminals. Without hc, none. */
+const liveTerminals = () =>
   Effect.gen(function* () {
     const out = yield* hc(["ls", "--json"])
-    if (out.code !== 0) return undefined
-    const { terminals } = yield* decodeTerminals(out.stdout).pipe(Effect.orElseSucceed(() => ({ terminals: [] })))
-    return terminals.find((t) => t.name === terminalName(id))?.address
+    if (out.code !== 0) return []
+    return (yield* decodeTerminals(out.stdout).pipe(Effect.orElseSucceed(() => ({ terminals: [] })))).terminals
   })
+
+/** The address (`t7`) of the task's live terminal, if it has one. */
+const findTerminal = (id: string) => Effect.map(liveTerminals(), (terminals) => terminals.find((t) => t.name === terminalName(id))?.address)
 
 const Labels = Schema.fromJsonString(Schema.Struct({ labels: Schema.optional(Schema.Record(Schema.String, Schema.String)) }))
 const decodeLabels = Schema.decodeUnknownEffect(Labels)
 
 /** The Herdr desktop app shows a terminal only in a space of its layout, named by its
  * `herdr.space` label; it opens a tab there for a terminal that has the label and no tab.
- * The task's terminal goes in the space of the terminal orq runs in (HC_TERMINAL_ID), if any. */
+ * The task's terminal goes in the space of the terminal orq runs in (HC_TERMINAL_ID); run from
+ * no terminal (orq issues), in the space of a terminal the app shows (one with a `where`). */
 const spaceLabel = () =>
   Effect.gen(function* () {
-    const parent = process.env.HC_TERMINAL_ID
+    const parent = process.env.HC_TERMINAL_ID || (yield* liveTerminals()).find((t) => t.where)?.address
     if (!parent) return []
     const out = yield* hc(["get", parent, "--json"])
     if (out.code !== 0) return []
