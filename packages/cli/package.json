@@ -1,0 +1,32 @@
+{
+  "name": "orqestrai",
+  "version": "0.9.0",
+  "description": "An orchestrated software factory with human gates: the orq CLI",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/saculo/orqestrai.git",
+    "directory": "packages/cli"
+  },
+  "bin": {
+    "orq": "dist/orq.js"
+  },
+  "files": [
+    "dist/orq.js"
+  ],
+  "engines": {
+    "bun": ">=1.4.4"
+  },
+  "license": "MIT",
+  "type": "module",
+  "scripts": {
+    "build": "bun build --compile --production src/main.ts --outfile dist/orq",
+    "bundle": "bun build --target bun --production src/main.ts --outfile dist/orq.js",
+    "prepack": "bun run bundle"
+  },
+  "devDependencies": {
+    "@orqestrai/core": "workspace:*",
+    "@effect/platform-bun": "4.1.2",
+    "effect": "4.1.2",
+    "shell-quote": "1.8.1"
+  }
+}

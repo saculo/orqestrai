@@ -4,8 +4,8 @@ import { afterAll, beforeAll, describe, expect, test } from "bun:test"
 import { mkdtempSync, rmSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
-import { decide, type GuardEnv, type HookInput } from "../src/guard/decide.ts"
-import { gitBranch } from "../src/guard/main.ts"
+import { decide, type GuardEnv, type HookInput } from "../packages/cli/src/guard/decide.ts"
+import { gitBranch } from "../packages/cli/src/guard/main.ts"
 import { ORQ } from "./orq.ts"
 
 let T: string, WT: string, MAIN: string, env: GuardEnv

@@ -16,7 +16,7 @@ and reviewer, fresh contexts), **acceptance** (the user, later at the PR).
 
 ## 0. The round
 
-First round: run `orq file <id> VERIFY`. Later rounds: add a new `## Round <n>` section
+First round: run `orq create-artifact <id> VERIFY`. Later rounds: add a new `## Round <n>` section
 under the old ones and set `round: <n>` in the frontmatter. Old rounds stay.
 
 ## 1. Quality gate
@@ -111,7 +111,7 @@ round before.
 - **No failing items:** `status: passed`. Continue with the next step of the task's playbook.
 - **Failing items, round < 3, and no root cause repeated from the round before:**
   `status: failed`, outcome "back to impl: <items>". Run
-  `orq state <id> impl "IN PROGRESS" "verify round <n>: <count> items"` and continue
+  `orq set-state <id> impl "IN PROGRESS" --note "verify round <n>: <count> items"` and continue
   with `orq:impl` round 2+.
 - **Round 3 failed, or a root cause repeated:** `status: escalated`. Run
   ask (`orq:task`, Messages): the round's verdicts as the list, the repeated cause, and a

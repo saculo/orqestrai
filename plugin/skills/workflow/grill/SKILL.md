@@ -45,7 +45,8 @@ Round 2 asks the new frontier.
    Number the questions across rounds and steps (never restart at Q1). Word each question
    so that "yes" accepts your recommendation. A question whose answer depends on another
    question in the same round waits for the next round.
-3. Send the round with `orq ask` (see `orq:task`, Records) and end your turn.
+3. Send the round as `orq:task`, Records says (`WAITING FOR ME` with the message), and end
+   your turn.
 4. **When the user answers**, write each answer into the step's file at once, one line:
    `Q<n> <decision>: <answer>`. Then recompute the tree: an answer can settle, add or
    remove decisions.

@@ -40,16 +40,15 @@ afterEach(() => {
 })
 
 describe("orq with ORQ_SERVER", () => {
-  test("new, state, link, show and ls go through the server", () => {
-    const created = orq(["new", "Add search"])
+  test("new, set-state, show and ls go through the server", () => {
+    const created = orq(["new", "--origin", "gh-issue:o/r#3", "Add search"])
     expect(created.code).toBe(0)
     expect(created.out).toContain("T-0001  orq/T-0001-add-search")
     expect(existsSync(join(dir, "home", "worktrees", "proj", "T-0001-add-search", ".orqestrai", "tasks", "T-0001", "REQUEST.md"))).toBe(
       true,
     )
 
-    expect(orq(["state", "T-0001", "impl", "IN PROGRESS", "wave 1"]).code).toBe(0)
-    expect(orq(["link", "T-0001", "gh-issue", "o/r#3", "origin"]).code).toBe(0)
+    expect(orq(["set-state", "T-0001", "impl", "IN PROGRESS", "--note", "wave 1"]).code).toBe(0)
     const shown = orq(["show", "T-0001"]).out
     expect(shown).toContain("step = impl")
     expect(shown).toContain("link gh-issue o/r#3 (origin)")
@@ -62,17 +61,16 @@ describe("orq with ORQ_SERVER", () => {
   test("the playbook, set at new or later, goes through the server", () => {
     expect(orq(["new", "--playbook", "feature", "Add search"]).code).toBe(0)
     expect(orq(["show", "T-0001"]).out).toContain("type = feature")
-    expect(orq(["playbook", "T-0001", "bugfix"]).code).toBe(0)
+    expect(orq(["set-state", "T-0001", "triage", "IN PROGRESS", "--playbook", "bugfix"]).code).toBe(0)
     expect(orq(["show", "T-0001"]).out).toMatch(/type = bugfix[\s\S]*type\s+bugfix/)
   })
 
-  test("the server finds the task linked to an outside reference (the bridge's Slack threads)", async () => {
-    expect(orq(["new", "Add search"]).code).toBe(0)
-    expect(orq(["link", "T-0001", "slack-thread", "C1/100.1", "origin"]).code).toBe(0)
+  test("the server finds the task an outside reference started (orq issues' issues)", async () => {
+    expect(orq(["new", "--origin", "gh-issue:https://github.com/o/r/issues/3", "Add search"]).code).toBe(0)
     const find = (ref: string) =>
-      fetch(`http://orq/links?kind=slack-thread&ref=${encodeURIComponent(ref)}`, { unix: socket } as RequestInit).then((r) => r.json())
-    expect(await find("C1/100.1")).toBe("T-0001")
-    expect(await find("C1/999.9")).toBeNull()
+      fetch(`http://orq/links?kind=gh-issue&ref=${encodeURIComponent(ref)}`, { unix: socket } as RequestInit).then((r) => r.json())
+    expect(await find("https://github.com/o/r/issues/3")).toBe("T-0001")
+    expect(await find("https://github.com/o/r/issues/9")).toBeNull()
   })
 
   test("orq's own errors come back as they are", () => {

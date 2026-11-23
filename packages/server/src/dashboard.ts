@@ -4,11 +4,11 @@
 // same whether the worktrees are on this machine or another.
 import { existsSync } from "node:fs"
 import { join } from "node:path"
+import { Db } from "@orqestrai/core/db.ts"
+import { imageType, isTaskFilePath, OrqError, TASK_FILES } from "@orqestrai/core/domain.ts"
 import { Effect, Layer } from "effect"
 import { HttpRouter, HttpServerResponse } from "effect/http"
 import page from "./dashboard/index.html"
-import { Db } from "./db.ts"
-import { imageType, isTaskFilePath, OrqError, TASK_FILES } from "./domain.ts"
 
 /** The page: Bun bundles its TSX and CSS and serves it (Bun.serve `routes`, src/server.ts). */
 export const PAGE = { "/": page }

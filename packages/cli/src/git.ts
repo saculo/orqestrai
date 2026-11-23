@@ -2,9 +2,9 @@
 
 import { existsSync, readFileSync } from "node:fs"
 import { join } from "node:path"
+import { OrqError } from "@orqestrai/core/domain.ts"
+import { exec, run } from "@orqestrai/core/proc.ts"
 import { Effect, Option, Schema } from "effect"
-import { OrqError } from "./domain.ts"
-import { exec, run } from "./proc.ts"
 
 export const topLevel = (cwd?: string) =>
   exec("git", ["rev-parse", "--show-toplevel"], cwd).pipe(Effect.mapError(() => new OrqError({ message: "not in a git repository" })))

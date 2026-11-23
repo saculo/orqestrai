@@ -4,24 +4,22 @@
 import { existsSync, writeFileSync } from "node:fs"
 import { dirname, join } from "node:path"
 import { BunRuntime, BunServices } from "@effect/platform-bun"
+import { OrqConfig } from "@orqestrai/core/config.ts"
+import { Db } from "@orqestrai/core/db.ts"
+import { headline, OrqError, STATUSES, STEPS, stamp, TaskType, TEMPLATES } from "@orqestrai/core/domain.ts"
 import { Console, Effect, Layer, Option } from "effect"
 import { Argument, CliError, Command, Flag } from "effect/cli"
-import { bridge } from "./bridge.ts"
 import { clean } from "./clean.ts"
-import { OrqConfig } from "./config.ts"
-import { Db } from "./db.ts"
-import { headline, LINK_ROLES, OrqError, STATUSES, STEPS, stamp, TaskType, TEMPLATES } from "./domain.ts"
 import { syncFilesOrWarn } from "./files.ts"
 import { baseBranch, topLevel } from "./git.ts"
-import { closeSession, openSession, sendToTask } from "./herdr.ts"
+import { closeSession, openSession } from "./herdr.ts"
 import { install } from "./init.ts"
 import { issues } from "./issues.ts"
 import { syncMerged } from "./pr.ts"
-import { serve } from "./server.ts"
-import { withState } from "./state.ts"
 import { startTask } from "./task.ts"
 import { templates } from "./templates.ts"
 import { VERSION } from "./version.ts"
+import { withState } from "./with-state.ts"
 
 /** The plugin's guard hook and skills start `orq` by name. Without it on PATH they do not run. */
 const warnIfNotOnPath = Effect.gen(function* () {
@@ -43,57 +41,69 @@ const init = Command.make("init", {}, () =>
 
 const id = Argument.String("id").pipe(Argument.withDescription("task id, e.g. T-0001"))
 
-const playbookName = (what: string) =>
-  Argument.String(what).pipe(Argument.withSchema(TaskType), Argument.withDescription("a playbook, e.g. feature (skill playbook-feature)"))
+const playbook = Flag.String("playbook").pipe(
+  Flag.withSchema(TaskType),
+  Flag.optional,
+  Flag.withDescription("the playbook the task runs, e.g. feature (skill playbook-feature)"),
+)
 
-const newTask = Command.make(
-  "new",
-  {
-    request: Argument.String("request"),
-    playbook: Flag.String("playbook").pipe(
-      Flag.withSchema(TaskType),
-      Flag.optional,
-      Flag.withDescription("the playbook to run, e.g. feature; without it, the task session chooses"),
-    ),
-  },
-  ({ request, playbook }) =>
-    Effect.gen(function* () {
-      const { task, session } = yield* startTask(yield* topLevel(), request, { playbook: Option.getOrUndefined(playbook) })
-      yield* Console.log(`${task.id}  ${task.branch}  ${task.worktree}`)
-      yield* Console.log(session)
-      yield* warnIfNotOnPath
-    }),
-).pipe(Command.withDescription("new task: id, branch, worktree, session"), withState)
+/** `--origin gh-issue:https://github.com/o/r/issues/1`: the kind, then the reference. */
+const Origin = Flag.String("origin").pipe(
+  Flag.optional,
+  Flag.withDescription("what the task comes from, <kind>:<ref>, e.g. gh-issue:<url> or jira:ABC-12"),
+)
+const parseOrigin = (origin: string) => {
+  const at = origin.indexOf(":")
+  if (at <= 0 || at === origin.length - 1)
+    return Effect.fail(new OrqError({ message: `--origin ${origin}: expected KIND:REF, e.g. gh-issue:https://github.com/o/r/issues/1` }))
+  return Effect.succeed({ kind: origin.slice(0, at), ref: origin.slice(at + 1) })
+}
 
-const open = Command.make("open", { id }, ({ id }) =>
+const newTask = Command.make("new", { request: Argument.String("request"), playbook, origin: Origin }, ({ request, playbook, origin }) =>
+  Effect.gen(function* () {
+    const from = Option.isSome(origin) ? yield* parseOrigin(origin.value) : undefined
+    const { task, session } = yield* startTask(yield* topLevel(), request, {
+      playbook: Option.getOrUndefined(playbook),
+      ...(from ? { origin: from } : {}),
+    })
+    yield* Console.log(`${task.id}  ${task.branch}  ${task.worktree}`)
+    yield* Console.log(session)
+    yield* warnIfNotOnPath
+  }),
+).pipe(Command.withDescription("new task: id, branch, worktree, session (--playbook, --origin)"), withState)
+
+const resume = Command.make("resume", { id }, ({ id }) =>
   Effect.gen(function* () {
     const task = yield* (yield* Db).get(id)
     if (!existsSync(task.worktree)) return yield* new OrqError({ message: `worktree ${task.worktree} is gone` })
     yield* Console.log(yield* openSession(id, task.worktree, yield* baseBranch(task.repo)))
   }),
-).pipe(Command.withDescription("start the task's session again (after a restart)"), withState)
+).pipe(Command.withDescription("start the task's session again if it is not running; it goes on from the recorded step"), withState)
 
-const state = Command.make(
-  "state",
+const setState = Command.make(
+  "set-state",
   {
     id,
     step: Argument.Literals("step", STEPS).pipe(Argument.withDescription(STEPS.join(" | "))),
     status: Argument.Literals("status", STATUSES).pipe(Argument.withDescription(STATUSES.join(" | "))),
-    note: Argument.String("note").pipe(Argument.withDefault("")),
+    note: Flag.String("note").pipe(
+      Flag.withDefault(""),
+      Flag.withDescription("what happened, or the question you wait on (Markdown; its first line is the headline)"),
+    ),
+    playbook,
   },
-  ({ id, step, status, note }) =>
+  ({ id, step, status, note, playbook }) =>
     Effect.gen(function* () {
       const db = yield* Db
-      yield* db.setState(id, step, status, note)
-      yield* syncFilesOrWarn(yield* db.get(id))
+      if (Option.isSome(playbook)) yield* db.setType(id, playbook.value)
+      // a longer note is a message: the headline is the state note, the whole text is kept for the dashboard
+      const message = note.includes("\n") || status === "WAITING FOR ME" || status === "BLOCKED" ? note : undefined
+      yield* db.setState(id, step, status, headline(note), message || undefined)
+      const task = yield* db.get(id)
+      if (step === "ship") yield* syncMerged([task])
+      yield* syncFilesOrWarn(task)
     }),
-).pipe(Command.withDescription("record step and status; the task's files go to the server too (the dashboard)"), withState)
-
-const playbook = Command.make("playbook", { id, name: playbookName("name") }, ({ id, name }) =>
-  Effect.gen(function* () {
-    yield* (yield* Db).setType(id, name)
-  }),
-).pipe(Command.withDescription("record the playbook the task runs"), withState)
+).pipe(Command.withDescription("record the task's step and status (--note, --playbook); its files go to the server too"), withState)
 
 const show = Command.make("show", { id }, ({ id }) =>
   Effect.gen(function* () {
@@ -109,59 +119,6 @@ const show = Command.make("show", { id }, ({ id }) =>
       yield* Console.log(`${stamp(e.at)}  ${e.kind.padEnd(22)}  ${e.detail ?? ""}`)
   }),
 ).pipe(Command.withDescription("one task and its last events"), withState)
-
-const link = Command.make(
-  "link",
-  {
-    id,
-    kind: Argument.String("kind").pipe(Argument.withDescription("e.g. gh-issue, jira, slack-thread, gh-pr")),
-    ref: Argument.String("ref").pipe(Argument.withDescription("the reference in that system")),
-    role: Argument.Literals("role", LINK_ROLES).pipe(Argument.withDefault("related" as const)),
-  },
-  ({ id, kind, ref, role }) =>
-    Effect.gen(function* () {
-      yield* (yield* Db).link(id, kind, ref, role)
-    }),
-).pipe(Command.withDescription("link the task to an outside reference (origin | related)"), withState)
-
-const ask = Command.make(
-  "ask",
-  {
-    blocked: Flag.Boolean("blocked").pipe(
-      Flag.withDefault(false),
-      Flag.withDescription("the step cannot continue: status BLOCKED, not WAITING FOR ME"),
-    ),
-    id,
-    text: Argument.String("text"),
-  },
-  ({ blocked, id, text }) =>
-    Effect.gen(function* () {
-      const db = yield* Db
-      const task = yield* db.get(id)
-      const status = blocked ? "BLOCKED" : "WAITING FOR ME"
-      yield* db.setState(id, task.step, status, headline(text), text)
-      yield* syncFilesOrWarn(task)
-      const { bridge } = yield* OrqConfig
-      const sent = yield* Effect.tryPromise(() =>
-        // a local Unix socket (mode 0600), not the network; the host name is a placeholder
-        // nosemgrep: rules.typescript.react.security.react-insecure-request
-        fetch("http://bridge/ask", { method: "POST", body: JSON.stringify({ id, text }), unix: bridge } as RequestInit),
-      ).pipe(
-        Effect.flatMap((r) =>
-          Effect.promise(() => r.text()).pipe(Effect.map((body) => (r.ok ? "posted in the task's Slack thread" : body))),
-        ),
-        Effect.orElseSucceed(() => "no Slack bridge; the question is only here"),
-      )
-      yield* Console.log(`${id}: ${status}; ${sent}`)
-    }),
-).pipe(Command.withDescription("wait for the user: status WAITING FOR ME (or BLOCKED), the message in the task's Slack thread"), withState)
-
-const send = Command.make("send", { id, text: Argument.String("text") }, ({ id, text }) =>
-  Effect.gen(function* () {
-    const task = yield* (yield* Db).get(id)
-    yield* Console.log(yield* sendToTask(id, task.worktree, yield* baseBranch(task.repo), text))
-  }),
-).pipe(Command.withDescription("type a message into the task's session (opens it again if it is closed)"), withState)
 
 const ls = Command.make("ls", {}, () =>
   Effect.gen(function* () {
@@ -182,7 +139,7 @@ const cleanTask = Command.make("clean", { id }, ({ id }) =>
   withState,
 )
 
-const file = Command.make("file", { id, name: Argument.Literals("name", TEMPLATES) }, ({ id, name }) =>
+const createArtifact = Command.make("create-artifact", { id, name: Argument.Literals("name", TEMPLATES) }, ({ id, name }) =>
   Effect.gen(function* () {
     const out = join(yield* topLevel(), ".orqestrai", "tasks", id, `${name}.md`)
     if (!existsSync(dirname(out))) return yield* new OrqError({ message: `no task folder for ${id} here; are you in its worktree?` })
@@ -190,11 +147,11 @@ const file = Command.make("file", { id, name: Argument.Literals("name", TEMPLATE
     writeFileSync(out, templates[name].replaceAll("{{id}}", id))
     yield* Console.log(out)
   }),
-).pipe(Command.withDescription("new task file from templates/<name>.md"))
+).pipe(Command.withDescription("a task file (BRIEF, SPEC, VERIFY, …) from its template"))
 
 const orq = Command.make("orq").pipe(
   Command.withDescription("orqestrai mechanics. The workflow is in the skills."),
-  Command.withSubcommands([init, newTask, open, state, playbook, show, link, ask, send, ls, file, cleanTask, serve, bridge, issues]),
+  Command.withSubcommands([init, newTask, resume, ls, show, setState, createArtifact, cleanTask, issues]),
 )
 
 const AppLayer = OrqConfig.layer.pipe(Layer.provideMerge(BunServices.layer))

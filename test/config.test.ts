@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test"
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs"
 import { homedir, tmpdir } from "node:os"
 import { join } from "node:path"
-import { settingsEnv } from "../src/settings.ts"
+import { settingsEnv } from "../packages/core/src/settings.ts"
 import { ORQ } from "./orq.ts"
 
 let dir: string, repo: string, config: string
@@ -73,9 +73,8 @@ describe("the settings file", () => {
 })
 
 describe("settingsEnv", () => {
-  test("maps [slack] to the bridge's variables, a channel to the checkout where its tasks start", () => {
-    const env = settingsEnv({ slack: { user: "U1", tokens: "/t/slack.env", channels: { C1: "/p/app", C2: "/p/lib" } } })
-    expect(env).toEqual({ ORQ_SLACK_USER: "U1", ORQ_SLACK_TOKENS: "/t/slack.env", ORQ_SLACK_CHANNELS: "C1=/p/app,C2=/p/lib" })
+  test("[slack] is not a setting any more", () => {
+    expect(() => settingsEnv({ slack: { user: "U1" } })).toThrow("unknown key slack")
   })
 
   test("maps [github] to orq issues' variables, a repo to the checkout where its tasks start", () => {

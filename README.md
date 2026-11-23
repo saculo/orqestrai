@@ -7,14 +7,14 @@ learn → ship. The design is in [DESIGN.md](DESIGN.md).
 ## What you need
 
 Claude Code, Bun, git, `gh` (logged in to GitHub) and [herdr-core](https://github.com/herdrdev/herdr-core)
-(`hc`), which keeps the task sessions. Optional: Slack, a sandbox
+(`hc`), which keeps the task sessions. Optional: a sandbox
 for the task sessions (e.g. [Fence](https://github.com/fencesandbox/fence)), a second
 machine.
 
 ## Install
 
 ```bash
-bun add -g orqestrai                    # the orq CLI and server (Bun runs it)
+bun add -g orqestrai                    # the orq CLI (Bun runs it)
 claude plugin marketplace add saculo/orqestrai
 claude plugin install orq@orqestrai     # skills, agents and the guard hook
 ```
@@ -33,14 +33,9 @@ service's (`recipes/AGENTS.md`) in a repository of services. orq keeps no comman
 Everything is optional and in one file, `~/.config/orqestrai/config.toml`:
 
 ```toml
-server   = "http://orq.example:7400"    # several machines: where orq serve runs
+server   = "http://orq.example:7400"    # several machines: where orq-server runs
 sandbox  = "fence --"                   # task sessions start inside this command
 add_dirs = ["~/shared-skills"]          # more directories for every task session
-
-[slack]
-user     = "U0123"
-tokens   = "~/.config/orq-bridge/slack.env"
-channels = { C0123 = "~/Projects/my-app" }   # channel → the checkout where its tasks start
 
 [github]
 user  = "me"                                 # orq issues reads issues you opened, nobody else's
@@ -49,7 +44,7 @@ repos = { "me/my-app" = "~/Projects/my-app" } # repo → the checkout where its 
 
 Other keys: `model` (the task session's, default `opus`), `data` (worktrees, archive and
 state, default `~/.orqestrai`), `hc` (the herdr-core command, default `hc`). `ORQ_CONFIG` names
-another file. Secrets never go in this file; it only names the file that holds them. An
+another file. Secrets never go in this file. An
 environment variable `ORQ_<KEY>` (e.g. `ORQ_SERVER`) overrides a key. A key orq does not
 know is an error.
 
@@ -57,15 +52,15 @@ know is an error.
 
 - **One machine:** set nothing. orq keeps its state in a SQLite file, `~/.orqestrai/state.db`.
 - **One machine, task sessions in a sandbox:** keep the state outside it. Run
-  `orq serve --socket ~/.orqestrai/orq.sock` outside the sandbox (e.g. as a user service) and
-  set `server = "~/.orqestrai/orq.sock"`. The sessions then only talk to the socket; the
+  `orq-server --socket ~/.orqestrai/orq.sock` outside the sandbox and set
+  `server = "~/.orqestrai/orq.sock"`. The sessions then only talk to the socket; the
   sandbox must allow Unix sockets, not writes to `~/.orqestrai`.
-- **Several machines:** run `orq serve` on one of them, as a process or a container
-  (`ghcr.io/saculo/orqestrai:<version>`):
+- **Several machines:** run **orq-server** on one of them, as a container
+  (`ghcr.io/saculo/orqestrai:<version>`) or the binary from the release (`orq-server-linux-x64`):
 
   ```bash
-  orq serve --socket /run/orq/orq.sock      # same machine: server = "/run/orq/orq.sock"
-  orq serve --host 10.0.0.2 --port 7400     # another: server = "http://10.0.0.2:7400"
+  orq-server --socket /run/orq/orq.sock      # same machine: server = "/run/orq/orq.sock"
+  orq-server --host 10.0.0.2 --port 7400     # another: server = "http://10.0.0.2:7400"
   ```
 
   and set `server` on the others. In the container the state is in
@@ -75,32 +70,37 @@ know is an error.
 
 ### Dashboard
 
-`orq serve` also serves a read-only dashboard at `/` of its TCP address: the board of tasks
+orq-server also serves a read-only dashboard at `/` of its TCP address: the board of tasks
 by step, what waits for you on top (with the whole message), and each task's files, verify
 screenshots and timeline. It works on a phone too. Give the server a TCP port (next to its
 socket, if it has one) and reach it only over a private network, such as Tailscale:
 
 ```bash
-orq serve --socket ~/.orqestrai/orq.sock --port 7400     # 127.0.0.1:7400
+orq-server --socket ~/.orqestrai/orq.sock --port 7400     # 127.0.0.1:7400
 ```
 
 The task files and screenshots come from copies the CLI sends to the server whenever a step
-reports (`orq new`, `orq state`, `orq ask`), so they show wherever `orq serve` runs.
+reports (`orq new`, `orq set-state`), so they show wherever orq-server runs.
 
 ## Use
 
 In a project's git repository:
 
 ```bash
-orq new "what you want"         # id, branch, worktree, session running /orq:task <id>
-orq new --playbook feature "…"  # the same, with the playbook chosen by you
-orq ls                          # all tasks
-orq show T-0001                 # one task, its links and its last events
-orq open T-0001                 # start the task's session again, for example after a restart
-orq send T-0001 "go on"         # type a message into the task's session
+orq new "what you want"                 # id, branch, worktree, session running /orq:task <id>
+orq new --playbook feature "…"          # the same, with the playbook chosen by you
+orq new --origin jira:APP-12 "…"        # linked to what it comes from, <kind>:<ref>
+orq ls                                  # all tasks
+orq show T-0001                         # one task, its links and its last events
+orq resume T-0001                       # start its session again if it is not running (after a restart)
+orq clean T-0001                        # a merged or dropped task: end its session, remove its worktree and branch
 ```
 
-Always start a task session with `orq new` or `orq open`. They set `ORQ_TASK`, and the
+The sessions run the rest themselves: `orq set-state` (step, status, the question they wait
+on, the playbook) and `orq create-artifact` (a task file from its template). You answer a
+waiting session by typing in it. A task's PR is found by its branch.
+
+Always start a task session with `orq new` or `orq resume`. They set `ORQ_TASK`, and the
 guard hooks are active only when it is set. Each session runs in a herdr-core terminal
 named after the task (`orq-t-0001`), which stays alive when nobody watches: `hc attach
 orq-t-0001` in a terminal, or the Herdr app (desktop or phone, over SSH), shows it and lets
@@ -131,28 +131,6 @@ else are never read, so a public repo is fine. Every open issue of yours counts,
 the ones you do not want as tasks before you add a repo. `gh` needs read and write on the
 repo's issues.
 
-### Slack (optional)
-
-`orq bridge`, on the machine of the sessions, connects a Slack app (Socket Mode) to them:
-`@orq <request>` in a project's channel starts a task with its own thread, a session's
-questions (`orq ask`) are posted there, and your replies are typed into the session. The
-tokens file has `SLACK_APP_TOKEN=xapp-…` and `SLACK_BOT_TOKEN=xoxb-…` lines; hide it from
-the sandbox. The app, from a manifest (api.slack.com/apps, Create New App, From a
-manifest):
-
-```yaml
-display_information: { name: orq }
-features: { bot_user: { display_name: orq, always_online: true } }
-oauth_config:
-  scopes: { bot: [app_mentions:read, channels:history, groups:history, chat:write] }
-settings:
-  event_subscriptions: { bot_events: [app_mention, message.channels, message.groups] }
-  socket_mode_enabled: true
-```
-
-Then install it to the workspace (the bot token), make an app-level token with
-`connections:write` (Basic Information), and `/invite @orq` in each project's channel.
-
 ### Secret files (second lock)
 
 The guard hook blocks secret files only in task sessions. Deny rules in
@@ -173,14 +151,18 @@ The guard hook blocks secret files only in task sessions. Deny rules in
 
 From a checkout: `bun install`, `ln -s "$PWD/bin/orq" ~/.local/bin/orq`, and
 `claude --plugin-dir ./plugin`. `bun test` runs everything. A tag `v<version>` (as in
-`package.json` and `plugin/.claude-plugin/plugin.json`) releases it: the npm package, a
-compiled binary and the image.
+`packages/cli/package.json`, `packages/server/package.json` and
+`plugin/.claude-plugin/plugin.json`) releases it: the npm package `orqestrai` (the CLI),
+both compiled binaries and orq-server's image.
 
 ```
-src/                     orq: TypeScript, Effect 4, Bun. Mechanics only. src/main.ts starts it
-bin/orq                  runs src/main.ts from a checkout
+packages/core/           the state and its API, shared by the CLI and the server (not published:
+                         both bundle it). TypeScript, Effect 4, Bun
+packages/cli/            orq, the CLI (npm `orqestrai`). Mechanics only. src/main.ts starts it;
+                         templates/: task files, `orq create-artifact <id> <NAME>` writes one
+packages/server/         orq-server: the state over HTTP, and the dashboard (src/dashboard/)
+bin/orq                  runs the CLI from a checkout
 test/                    CLI, server, guard and plugin tests (bun test)
-templates/               task files; `orq file <id> <NAME>` writes one (built into orq)
 plugin/                  the Claude Code plugin `orq`:
   skills/workflow/       task (the base: playbook, records, gates), playbook-feature,
                          triage, plan, impl, verify, learn, ship (steps), grill
@@ -191,7 +173,7 @@ plugin/                  the Claude Code plugin `orq`:
   agents/                researcher (neutral code research), implementer (one task, test
                          first), verifier (drives the app, never reads code), reviewer
   hooks/                 the guard hook (`orq guard`)
-src/guard/               `orq guard`: guards G1–G4 for task sessions (PreToolUse hook)
+packages/cli/src/guard/  `orq guard`: guards G1–G4 for task sessions (PreToolUse hook)
 ```
 
 ## Credits

@@ -3,13 +3,14 @@
 // gh), starts a task for each one no task came from yet (`orq new` in that repo's checkout,
 // source github, the issue linked as its origin), and comments on the issue with the task's id.
 // The issue's text is the request. Only issues you opened count: the repo may be public.
+
+import { Db } from "@orqestrai/core/db.ts"
+import { OrqError } from "@orqestrai/core/domain.ts"
+import { run } from "@orqestrai/core/proc.ts"
 import { Config, Console, Duration, Effect, Schema } from "effect"
 import { Command } from "effect/cli"
-import { Db } from "./db.ts"
-import { OrqError } from "./domain.ts"
-import { run } from "./proc.ts"
-import { withState } from "./state.ts"
 import { startTask } from "./task.ts"
+import { withState } from "./with-state.ts"
 
 /** The link kind of a task's GitHub issue; its ref is the issue's URL. */
 export const ISSUE_LINK = "gh-issue"

@@ -36,11 +36,11 @@ jobs:
         run: bunx biome ci .
       - name: tests
         run: bun test
-      - name: the release binary builds and starts (the release job tests it fully)
-        run: bun run build && dist/orq --version
+      - name: the release binaries build and start (the release job tests them fully)
+        run: bun run build && packages/cli/dist/orq --version && packages/server/dist/orq-server --version
       - name: module size (warns above ~150 lines)
         run: |
-          for f in src/*.ts src/**/*.ts; do
+          for f in packages/*/src/*.ts packages/*/src/**/*.ts; do
             n=$(wc -l < "$f")
             if [ "$n" -gt 150 ]; then echo "::warning file=$f::$n lines, above the ~150 line budget"; fi
           done
@@ -80,7 +80,7 @@ jobs:
             --config rules/typescript --config rules/javascript --config rules/bash --config rules/yaml/github-actions \
             --exclude-rule "rules.javascript.lang.correctness.no-replaceall" \
             --exclude-rule "rules.typescript.react.portability.i18next.jsx-not-internationalized" \
-            "$W/src" "$W/test" "$W/bin" "$W/.github"
+            "$W/packages" "$W/test" "$W/bin" "$W/.github"
       - name: shell (shellcheck)
         run: shellcheck bin/orq
       - name: workflows (actionlint)
