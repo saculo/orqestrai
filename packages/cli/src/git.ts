@@ -1,7 +1,7 @@
 // Git mechanics: find the repository, the base branch, create worktrees.
 
 import { existsSync, readFileSync } from "node:fs"
-import { join } from "node:path"
+import { basename, join } from "node:path"
 import { OrqError } from "@orqestrai/core/domain.ts"
 import { exec, run } from "@orqestrai/core/proc.ts"
 import { Effect, Option, Schema } from "effect"
@@ -12,7 +12,7 @@ export const topLevel = (cwd?: string) =>
 /** The part of .orqestrai/config.toml that orq reads; the rest is for the skills. */
 const ProjectConfig = Schema.Struct({
   base_branch: Schema.optional(Schema.NonEmptyString),
-  herdr_session: Schema.optional(Schema.NonEmptyString), // the Herdr session its task terminals open in
+  herdr_session: Schema.optional(Schema.NonEmptyString), // the Herdr space its task terminals open in
 })
 const readProjectConfig = Schema.decodeUnknownOption(ProjectConfig)
 
@@ -28,8 +28,8 @@ const projectKey = (root: string, key: keyof typeof ProjectConfig.Type) =>
     return readProjectConfig(toml).pipe(Option.flatMapNullishOr((c) => c[key]))
   })
 
-/** herdr_session from .orqestrai/config.toml, if set. */
-export const herdrSession = (root: string) => projectKey(root, "herdr_session").pipe(Effect.map(Option.getOrUndefined))
+/** The project's Herdr space: herdr_session from .orqestrai/config.toml, else the repo's directory name. */
+export const projectSpace = (root: string) => projectKey(root, "herdr_session").pipe(Effect.map(Option.getOrElse(() => basename(root))))
 
 /** base_branch from .orqestrai/config.toml, else origin's HEAD, else "main". */
 export const baseBranch = (root: string) =>

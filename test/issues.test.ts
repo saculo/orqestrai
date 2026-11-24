@@ -137,6 +137,26 @@ describe("orq issues", () => {
     expect(ghLog()).not.toContain("issue comment 3")
   })
 
+  test("with the project's space not open, every issue still gets a task and a comment, and orq says what to do", async () => {
+    // a hc with no terminal at all: the space `app` is not open
+    writeFileSync(
+      join(dir, "bin", "hc"),
+      `#!/usr/bin/env bash\nprintf '%s\\n' "$*" >> "$FAKE_GH_DIR/hc-log"\n[ "$1" = ls ] && echo '{"terminals":[]}'\nexit 0\n`,
+    )
+    chmodSync(join(dir, "bin", "hc"), 0o755)
+    issuesAre(issue(1, "First"), issue(2, "Second"))
+    watcher = Bun.spawn([...ORQ, "issues"], { cwd: repo, env: { ...env(), ORQ_HC: "hc" }, stdout: "pipe", stderr: "pipe" })
+    await until("both comments", () => ghLog().includes("issue comment 1") && ghLog().includes("issue comment 2"))
+    watcher.kill()
+    await watcher.exited
+    const output =
+      (await new Response(watcher.stdout as ReadableStream).text()) + (await new Response(watcher.stderr as ReadableStream).text())
+    expect(output).toContain("Herdr space app is not open")
+    expect(output).toContain("orq resume T-0001")
+    expect(output).toContain("orq resume T-0002")
+    expect(readFileSync(join(dir, "hc-log"), "utf8")).not.toContain("run ")
+  })
+
   test("keeps looking when gh fails", async () => {
     writeFileSync(join(dir, "issues.json"), "not json")
     startWatching()

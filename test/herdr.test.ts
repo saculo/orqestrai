@@ -1,16 +1,21 @@
 // orq's task sessions in herdr-core, against a fake `hc` that logs its calls, lists the terminals
 // in terminals.json.
 import { afterEach, beforeEach, describe, expect, test } from "bun:test"
-import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs"
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { ORQ } from "./orq.ts"
 
 const FAKE_HC = `#!/usr/bin/env bash
 printf '%s|%s\\n' "\${HC_TERMINAL_ID:-}" "$*" >> "$FAKE_HC_DIR/log"
+printf '%s\\n' "\${HC_SOCKET:-}" >> "$FAKE_HC_DIR/sockets"
 case "$1" in
-  ls) cat "$FAKE_HC_DIR/terminals.json" 2>/dev/null || echo '{"terminals":[]}' ;;
-  get) cat "$FAKE_HC_DIR/get-$2.json" 2>/dev/null || exit 1 ;;
+  ls)
+    if [ -f "$FAKE_HC_DIR/ls-fail" ]; then cat "$FAKE_HC_DIR/ls-fail" >&2; exit 1; fi
+    cat "$FAKE_HC_DIR/terminals.json" 2>/dev/null || echo '{"terminals":[]}' ;;
+  get)
+    if [ -f "$FAKE_HC_DIR/get-fail" ]; then cat "$FAKE_HC_DIR/get-fail" >&2; exit 1; fi
+    cat "$FAKE_HC_DIR/get-$2.json" 2>/dev/null || exit 1 ;;
 esac
 `
 
@@ -37,9 +42,24 @@ const orq = (args: string[], extra: Record<string, string | undefined> = {}) => 
 }
 
 const hcCalls = () => readFileSync(join(dir, "log"), "utf8").trim().split("\n")
-const running = () => writeFileSync(join(dir, "terminals.json"), JSON.stringify({ terminals: [{ address: "t4", name: "orq-t-0001" }] }))
+const hcRuns = () => hcCalls().filter((c) => c.startsWith("|run "))
+const sockets = () => readFileSync(join(dir, "sockets"), "utf8").trim().split("\n")
+
+type Terminal = { address: string; name?: string; where?: string }
+const terminals: Terminal[] = []
+/** A live terminal; `labels` is what `hc get` shows for it. */
+const aTerminal = (t: Terminal, labels: Record<string, string> = {}) => {
+  terminals.push(t)
+  writeFileSync(join(dir, "terminals.json"), JSON.stringify({ terminals }))
+  writeFileSync(join(dir, `get-${t.address}.json`), JSON.stringify({ labels }))
+}
+/** A live terminal in the Herdr space `space`, whose label is `label`. */
+const spaceOpen = (space: string, label: string, address = `t-${space}`) =>
+  aTerminal({ address, where: `${space} / 1` }, { "herdr.space": label })
+const running = (labels: Record<string, string> = {}) => aTerminal({ address: "t4", name: "orq-t-0001" }, labels)
 
 beforeEach(() => {
+  terminals.length = 0
   dir = mkdtempSync(join(tmpdir(), "orq-herdr-"))
   repo = join(dir, "proj")
   mkdirSync(repo)
@@ -50,59 +70,135 @@ beforeEach(() => {
 })
 afterEach(() => rmSync(dir, { recursive: true, force: true }))
 
+const NOT_OPEN = /proj/
+
 describe("task sessions in herdr-core", () => {
   test("orq new starts the session in a terminal named after the task, in its worktree, with no parent", () => {
+    spaceOpen("proj", "sp-proj")
     const r = orq(["new", "Add search"])
     expect(r.out).toContain("started orq-t-0001 in herdr-core (hc attach orq-t-0001)")
     // no HC_TERMINAL_ID: the session would end with the terminal orq ran in
     expect(hcCalls()).toContainEqual(
       expect.stringMatching(
-        /^\|run --bg --outlive-parent --name orq-t-0001 --cwd \S+\/T-0001-add-search -- env ORQ_TASK=T-0001 .* claude --model opus \/orq:task T-0001$/,
+        /^\|run --bg --outlive-parent --name orq-t-0001 --label herdr\.space=sp-proj --cwd \S+\/T-0001-add-search -- env ORQ_TASK=T-0001 .* claude --model opus \/orq:task T-0001$/,
       ),
     )
   })
 
-  test("orq new puts the session in the Herdr space of the terminal orq runs in", () => {
-    writeFileSync(join(dir, "get-t9.json"), JSON.stringify({ labels: { "herdr.space": "sp1", "herdr.tab": "tb1" } }))
-    orq(["new", "Add search"])
-    expect(hcCalls()).toContainEqual(
-      expect.stringMatching(/^\|run --bg --outlive-parent --name orq-t-0001 --label herdr\.space=sp1 --cwd /),
-    )
-  })
-
-  test("orq new run from no terminal (orq issues) puts the session in the space of a terminal the app shows", () => {
-    writeFileSync(join(dir, "terminals.json"), JSON.stringify({ terminals: [{ address: "t2" }, { address: "t3", where: "home / 1" }] }))
-    writeFileSync(join(dir, "get-t3.json"), JSON.stringify({ labels: { "herdr.space": "sp3" } }))
-    orq(["new", "Add search"], { HC_TERMINAL_ID: undefined })
-    expect(hcCalls()).toContainEqual(expect.stringMatching(/^\|run .* --label herdr\.space=sp3 --cwd /))
-  })
-
-  test("orq new puts the session in the project's herdr_session, by the session's name", () => {
+  test("the session opens in the space named by herdr_session, not the one orq runs in", () => {
     mkdirSync(join(repo, ".orqestrai"))
     writeFileSync(join(repo, ".orqestrai", "config.toml"), 'herdr_session = "meal-prep"\n')
-    writeFileSync(
-      join(dir, "terminals.json"),
-      JSON.stringify({
-        terminals: [
-          { address: "t3", where: "home / 1" },
-          { address: "t5", where: "meal-prep / 2" },
-        ],
-      }),
-    )
-    writeFileSync(join(dir, "get-t9.json"), JSON.stringify({ labels: { "herdr.space": "sp1" } }))
-    writeFileSync(join(dir, "get-t5.json"), JSON.stringify({ labels: { "herdr.space": "sp5" } }))
-    orq(["new", "Add search"])
-    expect(hcCalls()).toContainEqual(expect.stringMatching(/^\|run .* --label herdr\.space=sp5 --cwd /))
+    spaceOpen("home", "sp-home", "t9")
+    spaceOpen("meal-prep", "sp-meal")
+    orq(["new", "x"])
+    expect(hcRuns()).toEqual([expect.stringContaining("--label herdr.space=sp-meal ")])
   })
 
-  test("orq resume leaves a running session as it is", () => {
-    orq(["new", "Add search"])
+  test("without herdr_session the space is the repo's directory name", () => {
+    spaceOpen("home", "sp-home", "t9")
+    spaceOpen("proj", "sp-proj")
+    orq(["new", "x"])
+    expect(hcRuns()).toEqual([expect.stringContaining("--label herdr.space=sp-proj ")])
+  })
+
+  test("orq new with the space not open keeps the task and says what to do", () => {
+    spaceOpen("home", "sp-home", "t9")
+    const r = orq(["new", "x"])
+    expect(r.code).not.toBe(0)
+    expect(r.out + r.err).toMatch(NOT_OPEN)
+    expect(r.out + r.err).toContain("Herdr app")
+    expect(r.out + r.err).toContain("orq resume T-0001")
+    expect(hcRuns()).toEqual([])
+    const shown = orq(["show", "T-0001"]).out
+    expect(shown).toContain("T-0001")
+    expect(existsSync(/worktree = (.+)/.exec(shown)?.[1]?.trim() ?? "")).toBe(true)
+  })
+
+  test("orq resume with the space not open says the same and starts nothing", () => {
+    spaceOpen("home", "sp-home", "t9")
+    orq(["new", "x"])
+    const r = orq(["resume", "T-0001"])
+    expect(r.code).not.toBe(0)
+    expect(r.err).toMatch(NOT_OPEN)
+    expect(r.err).toContain("orq resume T-0001")
+    expect(hcRuns()).toEqual([])
+  })
+
+  test("orq resume starts the session once the space is open", () => {
+    orq(["new", "x"])
+    spaceOpen("proj", "sp-proj")
+    const r = orq(["resume", "T-0001"])
+    expect(r.code).toBe(0)
+    expect(hcRuns()).toEqual([expect.stringContaining("--label herdr.space=sp-proj ")])
+  })
+
+  test.each([
+    ["hc ls fails", () => writeFileSync(join(dir, "ls-fail"), '{"message":"core unavailable"}'), "core unavailable"],
+    [
+      "hc get fails",
+      () => {
+        spaceOpen("proj", "sp-proj")
+        writeFileSync(join(dir, "get-fail"), '{"message":"core unavailable"}')
+      },
+      "core unavailable",
+    ],
+    ["hc ls prints what orq cannot read", () => writeFileSync(join(dir, "terminals.json"), "not json"), "cannot be read"],
+    [
+      "a terminal in the space has no label",
+      () => aTerminal({ address: "t5", where: "proj / 1" }),
+      "terminal t5 in space proj has no herdr.space label",
+    ],
+  ])("when %s, orq stops with the reason and starts no session", (_name, given, message) => {
+    given()
+    const r = orq(["new", "x"])
+    expect(r.code).not.toBe(0)
+    expect(r.out + r.err).toContain(message)
+    expect(hcRuns()).toEqual([])
+  })
+
+  test("orq inside a Fence task session passes its terminal's socket to hc", () => {
+    spaceOpen("proj", "sp-proj")
+    orq(["new", "x"], { HC_TERMINAL_SOCKET: "/run/x.sock", HC_SOCKET: undefined })
+    expect(new Set(sockets())).toEqual(new Set(["/run/x.sock"]))
+  })
+
+  test("an HC_SOCKET that is set wins over the terminal's socket", () => {
+    spaceOpen("proj", "sp-proj")
+    orq(["new", "x"], { HC_TERMINAL_SOCKET: "/run/x.sock", HC_SOCKET: "/run/y.sock" })
+    expect(new Set(sockets())).toEqual(new Set(["/run/y.sock"]))
+  })
+
+  test("orq resume labels a running terminal that has no space label, and starts nothing", () => {
+    orq(["new", "x"]) // space not open: only the task
+    spaceOpen("proj", "sp-proj")
     running()
+    const r = orq(["resume", "T-0001"])
+    expect(r.code).toBe(0)
+    expect(hcCalls()).toContain("|label t4 herdr.space=sp-proj")
+    expect(hcRuns()).toEqual([])
+    expect(r.out).toContain("running")
+    expect(r.out).toContain("proj")
+  })
+
+  test("orq resume leaves a running session that has its space label as it is", () => {
+    orq(["new", "x"])
+    spaceOpen("proj", "sp-proj")
+    running({ "herdr.space": "sp-proj" })
     expect(orq(["resume", "T-0001"]).out).toContain("orq-t-0001 is already running")
-    expect(hcCalls().filter((c) => c.startsWith("|run "))).toHaveLength(1)
+    expect(hcCalls().filter((c) => c.startsWith("|label "))).toEqual([])
+    expect(hcRuns()).toEqual([])
+  })
+
+  test("orq resume leaves a running session labelled with another space as it is", () => {
+    orq(["new", "x"])
+    spaceOpen("proj", "sp-proj")
+    running({ "herdr.space": "sp-other" })
+    expect(orq(["resume", "T-0001"]).out).toContain("orq-t-0001 is already running")
+    expect(hcCalls().filter((c) => c.startsWith("|label "))).toEqual([])
   })
 
   test("orq clean ends the session and removes its terminal", () => {
+    spaceOpen("proj", "sp-proj")
     orq(["new", "Add search"])
     orq(["set-state", "T-0001", "triage", "DROPPED"])
     const worktree = /worktree = (.+)/.exec(orq(["show", "T-0001"]).out)?.[1]?.trim() ?? ""
