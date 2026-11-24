@@ -1,6 +1,6 @@
 ---
 id: T-0002
-status: draft
+status: approved
 risk: medium
 ---
 
