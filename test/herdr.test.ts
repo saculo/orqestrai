@@ -32,6 +32,7 @@ const orq = (args: string[], extra: Record<string, string | undefined> = {}) => 
     ORQ_DATA: join(dir, "home"),
     ORQ_HC: join(dir, "hc"),
     FAKE_HC_DIR: dir,
+    CLAUDE_CONFIG_DIR: join(dir, "claude"),
     HC_TERMINAL_ID: "t9", // orq runs inside a herdr-core terminal, as in a session started by hand
     ...extra,
   } as Record<string, string | undefined>
@@ -71,6 +72,10 @@ beforeEach(() => {
 afterEach(() => rmSync(dir, { recursive: true, force: true }))
 
 const NOT_OPEN = /proj/
+
+const claudeFile = () => join(dir, "claude", ".claude.json")
+const claudeConfig = () => JSON.parse(readFileSync(claudeFile(), "utf8"))
+const worktreeOf = (id: string) => /worktree = (.+)/.exec(orq(["show", id]).out)?.[1]?.trim() ?? ""
 
 describe("task sessions in herdr-core", () => {
   test("orq new starts the session in a terminal named after the task, in its worktree, with no parent", () => {
@@ -208,5 +213,42 @@ describe("task sessions in herdr-core", () => {
     const r = orq(["clean", "T-0001"])
     expect(r.out).toContain("orq-t-0001: session ended")
     expect(hcCalls()).toEqual(expect.arrayContaining(["|kill t4", "|rm t4"]))
+  })
+
+  test("orq new trusts the worktree and keeps the rest of Claude's config", () => {
+    mkdirSync(join(dir, "claude"))
+    writeFileSync(claudeFile(), '{"numStartups":3,"projects":{"/a":{"hasTrustDialogAccepted":true,"x":1}}}')
+    spaceOpen("proj", "sp-proj")
+    orq(["new", "x"])
+    const config = claudeConfig()
+    expect(config.projects[worktreeOf("T-0001")].hasTrustDialogAccepted).toBe(true)
+    expect(config.numStartups).toBe(3)
+    expect(config.projects["/a"]).toEqual({ hasTrustDialogAccepted: true, x: 1 })
+  })
+
+  test("orq new creates Claude's config when there is none", () => {
+    spaceOpen("proj", "sp-proj")
+    orq(["new", "x"])
+    expect(claudeConfig().projects[worktreeOf("T-0001")].hasTrustDialogAccepted).toBe(true)
+  })
+
+  test("orq new leaves a Claude config that is not JSON as it is, warns, and starts the session", () => {
+    mkdirSync(join(dir, "claude"))
+    writeFileSync(claudeFile(), "{not json")
+    spaceOpen("proj", "sp-proj")
+    const r = orq(["new", "x"])
+    expect(r.code).toBe(0)
+    expect(r.err).toContain("not valid JSON")
+    expect(readFileSync(claudeFile(), "utf8")).toBe("{not json")
+    expect(hcRuns()).toHaveLength(1)
+  })
+
+  test("orq resume trusts the worktree again, also when the space is not open", () => {
+    spaceOpen("home", "sp-home", "t9")
+    orq(["new", "x"])
+    const wt = worktreeOf("T-0001")
+    writeFileSync(claudeFile(), '{"projects":{}}')
+    orq(["resume", "T-0001"])
+    expect(claudeConfig().projects[wt].hasTrustDialogAccepted).toBe(true)
   })
 })

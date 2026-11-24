@@ -1,9 +1,14 @@
 // How the tests start orq and orq-server: from the source, or the compiled binaries when
 // ORQ_BIN and ORQ_SERVER_BIN name them (the release job runs the whole suite against the files it ships).
-import { resolve } from "node:path"
+import { mkdtempSync } from "node:fs"
+import { tmpdir } from "node:os"
+import { join, resolve } from "node:path"
 
 // Never the settings file of whoever runs the tests: orq would read their sandbox, server, …
 process.env.ORQ_CONFIG ??= resolve(import.meta.dir, "no-config.toml")
+
+// Never the Claude config of whoever runs the tests: orq marks each task worktree as trusted in it.
+process.env.CLAUDE_CONFIG_DIR = mkdtempSync(join(tmpdir(), "orq-claude-"))
 
 const source = (pkg: string) => [process.execPath, resolve(import.meta.dir, "..", "packages", pkg, "src", "main.ts")]
 

@@ -16,7 +16,14 @@ const sh = (cmd: string[], cwd: string) => {
 const git = (args: string[], cwd: string) => sh(["git", "-c", "user.name=t", "-c", "user.email=t@t", ...args], cwd)
 
 const orq = (args: string[], gh: Record<string, string> = {}) => {
-  const env = { ...process.env, ORQ_DATA: home, ORQ_HC: "orq-test-no-hc", PATH: `${fakeBin}:${process.env.PATH}`, ...gh }
+  const env = {
+    ...process.env,
+    ORQ_DATA: home,
+    ORQ_HC: "orq-test-no-hc",
+    CLAUDE_CONFIG_DIR: join(dir, "claude"),
+    PATH: `${fakeBin}:${process.env.PATH}`,
+    ...gh,
+  }
   const p = Bun.spawnSync([...ORQ, ...args], { cwd: repo, env, stdout: "pipe", stderr: "pipe" })
   return { code: p.exitCode, out: p.stdout.toString(), err: p.stderr.toString() }
 }
@@ -110,6 +117,20 @@ describe("orq clean", () => {
     expect(existsSync(worktree())).toBe(false)
     expect(branchExists()).toBe(false)
     expect(orq(["show", "T-0001"]).out).toMatch(/status = MERGED[\s\S]*link gh-pr[\s\S]*cleaned: removed worktree/)
+  })
+
+  test("removes the worktree's entry from Claude's config and keeps the rest", () => {
+    mkdirSync(join(dir, "claude"))
+    writeFileSync(join(dir, "claude", ".claude.json"), '{"numStartups":3,"projects":{"/a":{"hasTrustDialogAccepted":true}}}')
+    orq(["new", "Add search"])
+    const file = () => JSON.parse(readFileSync(join(dir, "claude", ".claude.json"), "utf8"))
+    expect(Object.keys(file().projects)).toHaveLength(2)
+    writeFileSync(join(worktree(), ".orqestrai/tasks/T-0001/BRIEF.md"), "no\n")
+    git(["add", "."], worktree())
+    git(["commit", "-q", "-m", "docs(T-0001): drop"], worktree())
+    orq(["set-state", "T-0001", "triage", "DROPPED"])
+    expect(orq(["clean", "T-0001"]).code).toBe(0)
+    expect(file()).toEqual({ numStartups: 3, projects: { "/a": { hasTrustDialogAccepted: true } } })
   })
 
   test("refuses when the branch has commits that are not in the PR", () => {

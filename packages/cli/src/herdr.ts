@@ -6,6 +6,7 @@ import { OrqConfig } from "@orqestrai/core/config.ts"
 import { OrqError } from "@orqestrai/core/domain.ts"
 import { run } from "@orqestrai/core/proc.ts"
 import { Effect, Schema } from "effect"
+import { trust } from "./trust/index.ts"
 
 /** The command that starts a task session, inside the sandbox command if one is set (ORQ_SANDBOX).
  * ORQ_* switch on the guard hook (orq guard); ORQ_DATA is for the skills (the archive). Each of `addDirs` (ORQ_ADD_DIRS) is added with --add-dir. */
@@ -128,6 +129,7 @@ export const openSession = (id: string, worktree: string, base: string, space: s
     const { model, sandbox, addDirs, home } = yield* OrqConfig
     const cmd = sessionCommand(id, worktree, base, model, sandbox, addDirs, home)
     const handCommand = `no herdr-core (hc); start the task with:\n  cd ${shellQuote(worktree)} && ${cmd.map(shellQuote).join(" ")}`
+    yield* trust(worktree) // before the space lookup: also for the hand command and a space that is not open
     const terminals = yield* liveTerminals()
     if (terminals === undefined) return handCommand
 
