@@ -1,6 +1,6 @@
 ---
 id: T-0002
-status: draft
+status: approved
 ---
 
 # Task sessions always land in the project's Herdr space, or orq says why not; worktrees are pre-trusted
