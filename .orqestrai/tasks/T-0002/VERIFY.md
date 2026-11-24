@@ -1,7 +1,7 @@
 ---
 id: T-0002
-status: failed
-round: 1
+status: passed
+round: 2
 ---
 
 # Verify: task sessions only in the project's Herdr space; worktrees pre-trusted
@@ -43,5 +43,32 @@ back to impl: R1.
 Root causes:
 - review:R1:packages/cli/src/trust/index.ts:32
 
+## Round 2
+
+### Quality gate
+| Command | Result | Evidence |
+|---------|--------|----------|
+| `bun run check` | pass | `tsc --noEmit`, no errors |
+| `bunx biome ci .` | pass | "Checked 73 files … No fixes applied." |
+| `bun test` | fail (pre-existing, timing) | 145 pass, 8 fail, all in test/orq.test.ts and test/dashboard.test.ts, each at the 5000 ms timeout (`orq new …`, `the playbook …`, `orq create-artifact …`, `orq resume > fails when the worktree is gone`, `parallel runs never share an id`, `(unnamed)`). The set changes from run to run with the machine's load (1 CPU, load ~6); round 1 showed the same timeouts on the base code. `bun test --timeout 60000` right after the fix: 165 pass, 0 fail. Not a failing item of this task. |
+
+### Checks (verifier)
+No `e2e` or `driven` checks: the verifier was not started. V1, V2 as in round 1 (V1 now also covers the three tests added for R1); V3-V5 manual, the user at the PR.
+
+### Review (reviewer)
+**Hypotheses:** (1) the mode is lost for a temp file left by a crashed run; (2) the temp file sits next to the link, not the target; (3) the new tests pass without the fix. None confirmed.
+
+**Prior findings:** R1 fixed (`packages/cli/src/trust/index.ts:21` edits a symlink's target; `:38-40` keeps the mode, 0600 for a new file; tests in `test/herdr.test.ts:266-300`, run with umask 002).
+
+| # | Axis | Finding | Confidence | Blocking | Where |
+|---|------|---------|------------|----------|-------|
+| (none) | | | | | |
+
+### Outcome
+passed.
+
+Root causes: none (round 1's review:R1 fixed).
+
 ## For the PR body
-- `bun test` with the default 5 s timeout fails two older tests on a loaded 1-CPU machine, on main too; not changed here.
+- `bun test` with the default 5 s timeout fails a varying set of older CLI tests on this loaded 1-CPU machine, on main too; with `--timeout 60000` all 165 pass. Not changed here.
+- Below the review's bar: a dangling symlink at `~/.claude.json` is replaced by a plain file (`existsSync` is false for it).
