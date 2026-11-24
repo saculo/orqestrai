@@ -1,7 +1,18 @@
 // orq's task sessions in herdr-core, against a fake `hc` that logs its calls, lists the terminals
 // in terminals.json.
 import { afterEach, beforeEach, describe, expect, test } from "bun:test"
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs"
+import {
+  chmodSync,
+  existsSync,
+  lstatSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  statSync,
+  symlinkSync,
+  writeFileSync,
+} from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { ORQ } from "./orq.ts"
@@ -250,5 +261,41 @@ describe("task sessions in herdr-core", () => {
     writeFileSync(claudeFile(), '{"projects":{}}')
     orq(["resume", "T-0001"])
     expect(claudeConfig().projects[wt].hasTrustDialogAccepted).toBe(true)
+  })
+
+  test("orq new keeps the mode of an existing Claude config", () => {
+    mkdirSync(join(dir, "claude"))
+    writeFileSync(claudeFile(), "{}", { mode: 0o600 })
+    chmodSync(claudeFile(), 0o600)
+    spaceOpen("proj", "sp-proj")
+    const old = process.umask(0o002)
+    try {
+      orq(["new", "x"])
+    } finally {
+      process.umask(old)
+    }
+    expect(statSync(claudeFile()).mode & 0o777).toBe(0o600)
+  })
+
+  test("orq new creates Claude's config readable by its owner only", () => {
+    spaceOpen("proj", "sp-proj")
+    const old = process.umask(0o002)
+    try {
+      orq(["new", "x"])
+    } finally {
+      process.umask(old)
+    }
+    expect(statSync(claudeFile()).mode & 0o777).toBe(0o600)
+  })
+
+  test("orq new writes a symlinked Claude config at its target and keeps the link", () => {
+    mkdirSync(join(dir, "claude"))
+    const target = join(dir, "dotfiles.json")
+    writeFileSync(target, "{}", { mode: 0o600 })
+    symlinkSync(target, claudeFile())
+    spaceOpen("proj", "sp-proj")
+    orq(["new", "x"])
+    expect(lstatSync(claudeFile()).isSymbolicLink()).toBe(true)
+    expect(JSON.parse(readFileSync(target, "utf8")).projects[worktreeOf("T-0001")].hasTrustDialogAccepted).toBe(true)
   })
 })

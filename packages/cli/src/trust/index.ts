@@ -2,7 +2,7 @@
 // started by orq would wait on that dialog. The answer is kept in Claude's config file,
 // `projects[<folder>].hasTrustDialogAccepted`: orq sets it for a task's worktree, and removes the
 // entry when the worktree is cleaned. Nothing else in the file is touched.
-import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs"
+import { chmodSync, existsSync, mkdirSync, readFileSync, realpathSync, renameSync, statSync, writeFileSync } from "node:fs"
 import { homedir } from "node:os"
 import { dirname, join } from "node:path"
 import { Effect } from "effect"
@@ -16,7 +16,9 @@ const isObject = (v: unknown): v is Json => typeof v === "object" && v !== null 
  * that is not a JSON object is left alone with a warning: overwriting it would destroy the user's Claude config. */
 const edit = (change: (config: Json) => boolean, create: boolean) =>
   Effect.sync(() => {
-    const file = configFile()
+    const link = configFile()
+    // a symlinked config is edited at its real target, so the link stays
+    const file = existsSync(link) ? realpathSync(link) : link
     let config: Json = {}
     if (existsSync(file)) {
       try {
@@ -32,7 +34,10 @@ const edit = (change: (config: Json) => boolean, create: boolean) =>
     const tmp = join(dirname(file), `.claude.json.orq-${process.pid}`)
     try {
       mkdirSync(dirname(file), { recursive: true })
-      writeFileSync(tmp, `${JSON.stringify(config, null, 2)}\n`)
+      // the file keeps its mode; a new one is private, it holds account data
+      const mode = existsSync(file) ? statSync(file).mode & 0o777 : 0o600
+      writeFileSync(tmp, `${JSON.stringify(config, null, 2)}\n`, { mode })
+      chmodSync(tmp, mode)
       renameSync(tmp, file)
     } catch (e) {
       console.error(`orq: cannot write ${file}: ${e instanceof Error ? e.message : e}`)
