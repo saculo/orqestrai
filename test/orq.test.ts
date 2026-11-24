@@ -36,6 +36,12 @@ beforeEach(() => {
 })
 afterEach(() => rmSync(dir, { recursive: true, force: true }))
 
+describe("orq --version", () => {
+  test("prints the version of this release", () => {
+    expect(orq(["--version"]).out.trim()).toBe("orq v0.10.0")
+  })
+})
+
 describe("orq new", () => {
   test("creates the branch, the worktree, REQUEST.md and the task row", () => {
     const r = orq(["new", "Add retries to the webhook sender"])

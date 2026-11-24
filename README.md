@@ -23,9 +23,11 @@ Update with `bun update -g orqestrai` and `claude plugin update orq@orqestrai`.
 
 Then, in each project's git repository, `orq init` writes `.orqestrai/config.toml`: the
 base branch (`base_branch`). Optional there: `herdr_session = "meal-prep"`, the Herdr
-session the project's task terminals open in, as new tabs. Only the Herdr app creates
-sessions, so the session must be open with a terminal in it. Without it, or when it is not
-open, a task opens in the session of the terminal `orq new` runs in, else in any session.
+space the project's task terminals open in, as new tabs. Without it, the space is named like
+the repository's directory. A task session starts only in that space, never in another one.
+Only the Herdr app creates spaces, so the space must be open with a terminal in it. If it is
+not, `orq new` and `orq issues` keep the task and its worktree, start no session, and name the
+space; open it in the Herdr app, then run `orq resume <id>`.
 
 **The quality gate** (in verify and ship) runs the commands under `## Checks` in the
 `AGENTS.md` nearest to each file the task's branch changed: the repository's own, or a
