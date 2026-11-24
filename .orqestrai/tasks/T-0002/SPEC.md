@@ -13,6 +13,7 @@ none.
 - Brief decisions Q1-Q11 are in BRIEF.md.
 - Q12 Acceptance criteria: AC1-AC7 below, as proposed.
 - Q13 Seams: every test runs the real `orq` command with the fake `hc` and a throwaway Claude config dir; no test touches the real `~/.claude.json`.
+- Q16 (at ship) Version: main released 0.10.0 (#36) before this PR; no bump here, the user releases later. AC7's version part is met by main's 0.10.0.
 - Q14 Verification: integration tests for AC1-AC6; the tab in the Herdr app and a Fence session without the trust dialog are manual checks by the user at the PR.
 
 ## Acceptance criteria
