@@ -499,7 +499,20 @@ in keeps the commands, the guard and the tests the same for every caller.
   (the Herdr app, or `hc attach orq-t-0001`).
 - **Git and GitHub:** the session itself pushes its branch and opens the PR with `gh`
   (see Security).
-- orq pre-trusts each worktree, so the folder trust dialog never blocks.
+- **Project space:** a task session starts only in the project's Herdr space: `herdr_session`
+  in `.orqestrai/config.toml`, else the repository's directory name. The terminal carries the
+  label `herdr.space`; `orq resume` adds it to a running task terminal that has none.
+- **Space not open:** when no terminal is open in the project's space, `orq new` and
+  `orq issues` keep the task and its worktree but start no session. orq names the space and
+  says to open it in the Herdr app, then run `orq resume <id>`. `orq new` and `orq resume`
+  exit non-zero. An hc failure stops orq with hc's message. Without `hc`, orq prints the
+  command to start the session by hand.
+- orq inside a task session passes its terminal's socket (`HC_TERMINAL_SOCKET`) to hc as
+  `HC_SOCKET`.
+- **Pre-trust:** `orq new` and `orq resume` set `hasTrustDialogAccepted` for the worktree in
+  `projects[<worktree>]` of Claude's config (`$CLAUDE_CONFIG_DIR/.claude.json`, else
+  `~/.claude.json`), so the folder trust dialog never blocks. `orq clean` removes the entry.
+  A config file that is not valid JSON is left as it is, with a warning.
 
 ### GitHub issues
 

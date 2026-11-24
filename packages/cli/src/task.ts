@@ -6,7 +6,7 @@ import { Db } from "@orqestrai/core/db.ts"
 import { type Source, slugify } from "@orqestrai/core/domain.ts"
 import { Effect } from "effect"
 import { syncFilesOrWarn } from "./files.ts"
-import { addWorktree, baseBranch, herdrSession, requireRef } from "./git.ts"
+import { addWorktree, baseBranch, projectSpace, requireRef } from "./git.ts"
 import { openSession } from "./herdr.ts"
 
 export interface StartOptions {
@@ -21,7 +21,7 @@ export interface StartOptions {
 }
 
 /** Task id, row, worktree, branch, REQUEST.md (and its copy on the server) and its session, for the project at `root`.
- * Gives back the task and what happened to the session. */
+ * Gives back the task and what happened to the session: its message, and whether the project's space was not open. */
 export const startTask = (root: string, request: string, { playbook, source, title = request, origin }: StartOptions = {}) =>
   Effect.gen(function* () {
     const { home } = yield* OrqConfig
@@ -47,5 +47,10 @@ export const startTask = (root: string, request: string, { playbook, source, tit
     writeFileSync(join(dir, "REQUEST.md"), `---\nid: ${task.id}\ncreated: ${new Date().toISOString()}\n---\n\n${request}\n`)
     if (origin) yield* db.link(task.id, origin.kind, origin.ref, "origin")
     yield* syncFilesOrWarn(task)
-    return { task, session: yield* openSession(task.id, task.worktree, base, yield* herdrSession(root)) }
+    // A space that is not open is an outcome, not a failure: the task and its worktree stay.
+    const session = yield* openSession(task.id, task.worktree, base, yield* projectSpace(root)).pipe(
+      Effect.map((message) => ({ message, spaceNotOpen: false })),
+      Effect.catchTag("SpaceNotOpen", (e) => Effect.succeed({ message: e.message, spaceNotOpen: true })),
+    )
+    return { task, session }
   })

@@ -6,6 +6,7 @@ import { OrqConfig } from "@orqestrai/core/config.ts"
 import { OrqError } from "@orqestrai/core/domain.ts"
 import { run } from "@orqestrai/core/proc.ts"
 import { Effect, Schema } from "effect"
+import { trust } from "./trust/index.ts"
 
 /** The command that starts a task session, inside the sandbox command if one is set (ORQ_SANDBOX).
  * ORQ_* switch on the guard hook (orq guard); ORQ_DATA is for the skills (the archive). Each of `addDirs` (ORQ_ADD_DIRS) is added with --add-dir. */
@@ -43,11 +44,14 @@ export const terminalName = (id: string) => `orq-${id.toLowerCase()}`
 const NOT_FOUND = 127
 
 /** `hc …` with no parent terminal: run from inside one (HC_TERMINAL_ID), hc would make the task
- * session its child, ending it with that terminal and typing notes into it. */
+ * session its child, ending it with that terminal and typing notes into it. Fence replaces
+ * XDG_RUNTIME_DIR, where hc looks for its socket; hc also reads HC_SOCKET, so a session in Fence
+ * gets the socket of its terminal (HC_TERMINAL_SOCKET) unless HC_SOCKET is set. */
 const hc = (args: ReadonlyArray<string>) =>
   Effect.gen(function* () {
     const { hc } = yield* OrqConfig
-    return yield* run("env", ["-u", "HC_TERMINAL_ID", hc, ...args])
+    const socket = process.env.HC_SOCKET ? [] : process.env.HC_TERMINAL_SOCKET ? [`HC_SOCKET=${process.env.HC_TERMINAL_SOCKET}`] : []
+    return yield* run("env", ["-u", "HC_TERMINAL_ID", ...socket, hc, ...args])
   })
 
 /** The `hc` failure as an OrqError, with hc's own message (its errors are JSON on stderr). */
@@ -55,6 +59,19 @@ const hcError = (what: string, out: { code: number; stderr: string }) => {
   const message = /"message":"((?:[^"\\]|\\.)*)"/.exec(out.stderr)?.[1]?.replaceAll('\\"', '"')
   return new OrqError({ message: `${what}: ${message ?? (out.stderr.trim() || `hc exit ${out.code}`)}` })
 }
+
+/** The project's Herdr space has no live terminal: the app has to open it. The task is kept. */
+export class SpaceNotOpen extends Schema.TaggedError<SpaceNotOpen>()("SpaceNotOpen", {
+  space: Schema.String,
+  id: Schema.String,
+  message: Schema.String,
+}) {}
+const spaceNotOpen = (space: string, id: string) =>
+  new SpaceNotOpen({
+    space,
+    id,
+    message: `${id}: no session started, Herdr space ${space} is not open; open it in the Herdr app, then run: orq resume ${id}`,
+  })
 
 const Terminals = Schema.fromJsonString(
   Schema.Struct({
@@ -65,60 +82,82 @@ const Terminals = Schema.fromJsonString(
 )
 const decodeTerminals = Schema.decodeUnknownEffect(Terminals)
 
-/** The live terminals. Without hc, none. */
+/** The live terminals, or "no hc" (exit 127). Any other failure of `hc ls` is an OrqError. */
 const liveTerminals = () =>
   Effect.gen(function* () {
     const out = yield* hc(["ls", "--json"])
-    if (out.code !== 0) return []
-    return (yield* decodeTerminals(out.stdout).pipe(Effect.orElseSucceed(() => ({ terminals: [] })))).terminals
+    if (out.code === NOT_FOUND) return undefined
+    if (out.code !== 0) return yield* hcError("hc ls", out)
+    const decoded = yield* decodeTerminals(out.stdout).pipe(
+      Effect.mapError(() => new OrqError({ message: "hc ls: its output cannot be read" })),
+    )
+    return decoded.terminals
   })
-
-/** The address (`t7`) of the task's live terminal, if it has one. */
-const findTerminal = (id: string) => Effect.map(liveTerminals(), (terminals) => terminals.find((t) => t.name === terminalName(id))?.address)
 
 const Labels = Schema.fromJsonString(Schema.Struct({ labels: Schema.optional(Schema.Record(Schema.String, Schema.String)) }))
 const decodeLabels = Schema.decodeUnknownEffect(Labels)
 
-/** The Herdr desktop app shows a terminal only in one of its sessions, named by its
- * `herdr.space` label (`hc ls` shows the session's name in `where`: "home / 1"); it opens a tab
- * there for a terminal that has the label and no tab. Only the app creates sessions. The task's
- * terminal goes in the project's `herdr_session`, if a terminal is open in it; else in the
- * session of the terminal orq runs in (HC_TERMINAL_ID); else (orq issues) in any session. */
-const spaceLabel = (session: string | undefined) =>
+/** The labels of a terminal (`hc get`). */
+const labelsOf = (address: string) =>
   Effect.gen(function* () {
-    const terminals = yield* liveTerminals()
-    const named = session === undefined ? undefined : terminals.find((t) => t.where?.split(" / ")[0] === session)
-    const from = named?.address || process.env.HC_TERMINAL_ID || terminals.find((t) => t.where)?.address
-    if (!from) return []
-    const out = yield* hc(["get", from, "--json"])
-    if (out.code !== 0) return []
-    const { labels } = yield* decodeLabels(out.stdout).pipe(Effect.orElseSucceed(() => ({ labels: undefined })))
-    const space = labels?.["herdr.space"]
-    return space ? ["--label", `herdr.space=${space}`] : []
+    const out = yield* hc(["get", address, "--json"])
+    if (out.code !== 0) return yield* hcError(`hc get ${address}`, out)
+    const { labels } = yield* decodeLabels(out.stdout).pipe(
+      Effect.mapError(() => new OrqError({ message: `hc get ${address}: its output cannot be read` })),
+    )
+    return labels ?? {}
   })
 
-/** Start the task's session in a herdr-core terminal (in the Herdr session `session`, see spaceLabel), or return the command to run by hand when hc
- * is not there. A session that is already running is left as it is. */
-export const openSession = (id: string, worktree: string, base: string, session?: string) =>
+/** The Herdr desktop app shows a terminal only in one of its spaces, named by its
+ * `herdr.space` label (`hc ls` shows the space's name in `where`: "home / 1"); it opens a tab
+ * there for a terminal that has the label and no tab. Only the app creates spaces. The label of
+ * the project's space is read from a live terminal in it. No terminal in the space: SpaceNotOpen.
+ * Never the label of another space. */
+const spaceLabel = (terminals: ReadonlyArray<{ address: string; where?: string | undefined }>, space: string, id: string) =>
+  Effect.gen(function* () {
+    const inSpace = terminals.find((t) => t.where?.split(" / ")[0] === space)
+    if (!inSpace) return yield* spaceNotOpen(space, id)
+    const label = (yield* labelsOf(inSpace.address))["herdr.space"]
+    if (!label) return yield* new OrqError({ message: `terminal ${inSpace.address} in space ${space} has no herdr.space label` })
+    return label
+  })
+
+/** Start the task's session in a herdr-core terminal in the project's Herdr `space` (see spaceLabel), or return the command to run by hand when hc
+ * is not there. A session that is already running is left as it is, but gets the space's label if it has none. */
+export const openSession = (id: string, worktree: string, base: string, space: string) =>
   Effect.gen(function* () {
     const { model, sandbox, addDirs, home } = yield* OrqConfig
     const cmd = sessionCommand(id, worktree, base, model, sandbox, addDirs, home)
-    if ((yield* findTerminal(id)) !== undefined) return `${terminalName(id)} is already running (hc attach ${terminalName(id)})`
+    const handCommand = `no herdr-core (hc); start the task with:\n  cd ${shellQuote(worktree)} && ${cmd.map(shellQuote).join(" ")}`
+    yield* trust(worktree) // before the space lookup: also for the hand command and a space that is not open
+    const terminals = yield* liveTerminals()
+    if (terminals === undefined) return handCommand
 
+    const existing = terminals.find((t) => t.name === terminalName(id))
+    if (existing !== undefined) {
+      const running = `${terminalName(id)} is already running (hc attach ${terminalName(id)})`
+      if ((yield* labelsOf(existing.address))["herdr.space"] !== undefined) return running
+      const label = yield* spaceLabel(terminals, space, id)
+      const labelled = yield* hc(["label", existing.address, `herdr.space=${label}`])
+      if (labelled.code !== 0) return yield* hcError(`cannot label ${terminalName(id)}`, labelled)
+      return `${terminalName(id)} is running (hc attach ${terminalName(id)}) and now in space ${space}`
+    }
+
+    const label = yield* spaceLabel(terminals, space, id)
     const out = yield* hc([
       "run",
       "--bg",
       "--outlive-parent",
       "--name",
       terminalName(id),
-      ...(yield* spaceLabel(session)),
+      "--label",
+      `herdr.space=${label}`,
       "--cwd",
       worktree,
       "--",
       ...cmd,
     ])
-    if (out.code === NOT_FOUND)
-      return `no herdr-core (hc); start the task with:\n  cd ${shellQuote(worktree)} && ${cmd.map(shellQuote).join(" ")}`
+    if (out.code === NOT_FOUND) return handCommand
     if (out.code !== 0) return yield* hcError(`cannot start ${terminalName(id)}`, out)
     return `started ${terminalName(id)} in herdr-core (hc attach ${terminalName(id)})`
   })
@@ -126,7 +165,7 @@ export const openSession = (id: string, worktree: string, base: string, session?
 /** Ends the task's session and removes its terminal, if it has one. */
 export const closeSession = (id: string) =>
   Effect.gen(function* () {
-    const terminal = yield* findTerminal(id)
+    const terminal = (yield* liveTerminals())?.find((t) => t.name === terminalName(id))?.address
     if (terminal === undefined) return `${terminalName(id)}: no session running`
     const killed = yield* hc(["kill", terminal])
     if (killed.code !== 0) return yield* hcError(`cannot end ${terminalName(id)}`, killed)

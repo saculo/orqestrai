@@ -11,6 +11,7 @@ import { exec, run } from "@orqestrai/core/proc.ts"
 import { Effect } from "effect"
 import { baseBranch } from "./git.ts"
 import { prOf, syncMerged } from "./pr.ts"
+import { untrust } from "./trust/index.ts"
 
 const refuse = (message: string) => Effect.fail(new OrqError({ message: `${message} Nothing was removed.` }))
 const OUT_OF_SCOPE = ".orqestrai/out-of-scope/"
@@ -69,6 +70,7 @@ export const clean = (id: string) =>
       yield* exec("git", ["worktree", "remove", task.worktree], task.repo)
       done.push(`removed worktree ${task.worktree}`)
     }
+    yield* untrust(task.worktree)
     if (tip.code === 0) {
       yield* exec("git", ["branch", "-D", task.branch], task.repo)
       done.push(`removed branch ${task.branch}`)

@@ -77,7 +77,7 @@ const requestOf = (issue: Issue) => `${issue.title}\n\n${issue.body.trim()}\n\nF
 /** A task for the issue, and a comment on the issue that says so. */
 const startFromIssue = (repo: string, checkout: string, issue: Issue) =>
   Effect.gen(function* () {
-    const { task } = yield* startTask(checkout, requestOf(issue), {
+    const { task, session } = yield* startTask(checkout, requestOf(issue), {
       title: issue.title,
       source: "github",
       origin: { kind: ISSUE_LINK, ref: issue.url },
@@ -92,6 +92,7 @@ const startFromIssue = (repo: string, checkout: string, issue: Issue) =>
       `orq: **${task.id}** created (${task.status}), branch \`${task.branch}\`.`,
     ])
     yield* Console.log(`orq issues: ${repo}#${issue.number} → ${task.id}`)
+    if (session.spaceNotOpen) yield* Console.error(`orq issues: ${repo}#${issue.number}: ${session.message}`)
   })
 
 /** One look at every repo: a task for each of your open issues that has none. A failure is
