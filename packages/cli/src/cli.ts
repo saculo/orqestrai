@@ -18,6 +18,7 @@ import { issues } from "./issues.ts"
 import { syncMerged } from "./pr.ts"
 import { addTask, startTask } from "./task.ts"
 import { templates } from "./templates.ts"
+import { trigger } from "./trigger.ts"
 import { VERSION } from "./version.ts"
 import { withState } from "./with-state.ts"
 
@@ -161,7 +162,7 @@ const createArtifact = Command.make("create-artifact", { id, name: Argument.Lite
 
 const orq = Command.make("orq").pipe(
   Command.withDescription("orqestrai mechanics. The workflow is in the skills."),
-  Command.withSubcommands([init, newTask, start, resume, ls, show, setState, createArtifact, cleanTask, issues]),
+  Command.withSubcommands([init, newTask, start, resume, ls, show, setState, createArtifact, cleanTask, issues, trigger]),
 )
 
 const AppLayer = OrqConfig.layer.pipe(Layer.provideMerge(BunServices.layer))
