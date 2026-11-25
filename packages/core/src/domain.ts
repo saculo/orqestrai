@@ -28,7 +28,8 @@ export const Task = Schema.Struct({
   repo: Schema.String,
   title: Schema.String,
   branch: Schema.String,
-  worktree: Schema.String,
+  /** null until the task is started (Db.start) */
+  worktree: Schema.NullOr(Schema.String),
   step: Step,
   status: Status,
   type: Schema.NullOr(Schema.String),
@@ -38,13 +39,11 @@ export const Task = Schema.Struct({
 })
 export type Task = typeof Task.Type
 
-/** What a new task needs; the database gives the id, and the id names the branch and the worktree. */
+/** What a new task needs; the database gives the id, and the id names the branch. The worktree is given at start. */
 export const NewTask = Schema.Struct({
   repo: Schema.String,
   title: Schema.String,
   slug: Schema.String,
-  /** the folder the task's worktree goes in */
-  worktrees: Schema.String,
   base: Schema.String,
   /** set when the user chose it; else the task session chooses */
   type: Schema.optional(TaskType),

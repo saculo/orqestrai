@@ -11,7 +11,7 @@ import { Cause, Effect } from "effect"
 /** One request carries at most this much (before base64); more goes in the next one. */
 const BATCH_BYTES = 16 * 1024 * 1024
 
-export const taskDir = (task: Task) => join(task.worktree, ".orqestrai", "tasks", task.id)
+export const taskDir = (task: Task & { readonly worktree: string }) => join(task.worktree, ".orqestrai", "tasks", task.id)
 
 /** A regular file, not a symbolic link: a link could point anywhere on the machine. */
 const isPlainFile = (path: string) => {
@@ -54,7 +54,8 @@ const readPlain = (path: string) => {
 const readTaskFolder = (task: Task) =>
   Effect.try({
     try: () => {
-      const dir = taskDir(task)
+      if (task.worktree === null) return null
+      const dir = taskDir({ ...task, worktree: task.worktree })
       if (!existsSync(dir)) return null
       if (!realpathSync(dir).startsWith(realpathSync(task.worktree) + sep)) throw new Error(`${dir} is a link out of the worktree`)
       return taskFiles(dir).map((path) => ({ path, content: readPlain(join(dir, path)) }))

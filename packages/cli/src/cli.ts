@@ -62,11 +62,11 @@ const parseOrigin = (origin: string) => {
 const newTask = Command.make("new", { request: Argument.String("request"), playbook, origin: Origin }, ({ request, playbook, origin }) =>
   Effect.gen(function* () {
     const from = Option.isSome(origin) ? yield* parseOrigin(origin.value) : undefined
-    const { task, session } = yield* startTask(yield* topLevel(), request, {
+    const { task, worktree, session } = yield* startTask(yield* topLevel(), request, {
       playbook: Option.getOrUndefined(playbook),
       ...(from ? { origin: from } : {}),
     })
-    yield* Console.log(`${task.id}  ${task.branch}  ${task.worktree}`)
+    yield* Console.log(`${task.id}  ${task.branch}  ${worktree}`)
     yield* warnIfNotOnPath
     if (session.spaceNotOpen) return yield* new OrqError({ message: session.message })
     yield* Console.log(session.message)
@@ -76,6 +76,7 @@ const newTask = Command.make("new", { request: Argument.String("request"), playb
 const resume = Command.make("resume", { id }, ({ id }) =>
   Effect.gen(function* () {
     const task = yield* (yield* Db).get(id)
+    if (task.worktree === null) return yield* new OrqError({ message: `${id} is not started; run orq start ${id}` })
     if (!existsSync(task.worktree)) return yield* new OrqError({ message: `worktree ${task.worktree} is gone` })
     yield* Console.log(yield* openSession(id, task.worktree, yield* baseBranch(task.repo), yield* projectSpace(task.repo)))
   }),

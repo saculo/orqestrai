@@ -1,7 +1,6 @@
 // The index of tasks in SQLite (src/sqlite.ts). Content lives in Markdown and git; the database
 // keeps the index, and a copy of each task's files for the dashboard (putFiles).
 import { createHash } from "node:crypto"
-import { join } from "node:path"
 import { Context, Effect, Layer } from "effect"
 import { SqlClient } from "effect/sql/SqlClient"
 import {
@@ -14,6 +13,7 @@ import {
   OrqError,
   type Status,
   type Step,
+  slugify,
   Task,
   TaskEvent,
   TaskLink,
@@ -28,8 +28,18 @@ export class Db extends Context.Service<
   Db,
   {
     /** Gives the next id and inserts the task in one transaction, so two runs never share an id.
-     * The branch is `orq/<id>-<slug>`, the worktree `<worktrees>/<id>-<slug>`. */
+     * The branch is `orq/<id>-<slug>`; the task has no worktree until `start`. */
     readonly create: (task: NewTask) => Effect.Effect<Task, OrqError>
+    /** Records where the task's checkout is (`repo`, `worktree`), once: fails when it is started already. */
+    readonly start: (id: string, repo: string, worktree: string) => Effect.Effect<void, OrqError>
+    /** Adds a backlog task for a GitHub issue, once per url: the same url gives the same id, added false.
+     * The request is the task's REQUEST.md. */
+    readonly addFromIssue: (issue: {
+      readonly repo: string
+      readonly url: string
+      readonly title: string
+      readonly request: string
+    }) => Effect.Effect<{ readonly id: string; readonly added: boolean }, OrqError>
     /** Removes a task that could not be set up. */
     readonly remove: (id: string) => Effect.Effect<void, OrqError>
     readonly get: (id: string) => Effect.Effect<Task, OrqError>
@@ -79,16 +89,39 @@ export class Db extends Context.Service<
           asOrqError("get"),
         )
 
-      const create = ({ repo, title, slug, worktrees, base, type, source }: NewTask) =>
+      const insertTask = ({ repo, title, slug, base, type, source }: NewTask) =>
         Effect.gen(function* () {
           const [next] = yield* sql<{ n: number }>`SELECT coalesce(max(CAST(substr(id, 3) AS INTEGER)), 0) + 1 AS n FROM tasks`
           const id = taskId(next?.n ?? 1)
           const branch = `orq/${id}-${slug}`
-          const row = { id, repo, title, branch, worktree: join(worktrees, `${id}-${slug}`), type: type ?? null, source: source ?? "cli" }
+          const row = { id, repo, title, branch, worktree: null, type: type ?? null, source: source ?? "cli" }
           yield* sql`INSERT INTO tasks ${sql.insert(row)}`
           yield* addEvent(id, "created", `${branch} from ${base}`)
           return yield* get(id)
-        }).pipe(sql.withTransaction, asOrqError("create"))
+        })
+      const create = (task: NewTask) => insertTask(task).pipe(sql.withTransaction, asOrqError("create"))
+
+      const start = (id: string, repo: string, worktree: string) =>
+        Effect.gen(function* () {
+          yield* lockTask(id)
+          const changed = yield* sql`UPDATE tasks SET repo = ${repo}, worktree = ${worktree}, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ')
+            WHERE id = ${id} AND worktree IS NULL RETURNING id`
+          if (changed.length === 0) return yield* new OrqError({ message: `${id} is already started; orq resume ${id}` })
+          yield* addEvent(id, "started", worktree)
+        }).pipe(sql.withTransaction, asOrqError("start"))
+
+      const addFromIssue = ({ repo, url, title, request }: { repo: string; url: string; title: string; request: string }) =>
+        Effect.gen(function* () {
+          const [found] = yield* sql<{ task_id: string }>`SELECT task_id FROM task_links WHERE kind = 'gh-issue' AND ref = ${url} LIMIT 1`
+          if (found) return { id: found.task_id, added: false }
+          const { id } = yield* insertTask({ repo, title, slug: slugify(title), base: "the default branch", source: "github" })
+          yield* sql`INSERT INTO task_links ${sql.insert({ task_id: id, kind: "gh-issue", ref: url, role: "origin" })}`
+          yield* addEvent(id, "linked", `gh-issue ${url} (origin)`)
+          const content = new TextEncoder().encode(`---\nid: ${id}\ncreated: ${new Date().toISOString()}\n---\n\n${request}\n`)
+          const sha256 = createHash("sha256").update(content).digest("hex")
+          yield* sql`INSERT INTO task_files ${sql.insert({ task_id: id, path: "REQUEST.md", sha256, content })}`
+          return { id, added: true }
+        }).pipe(sql.withTransaction, asOrqError("add from issue"))
 
       const setState = (id: string, step: Step, status: Status, note: string, message?: string) =>
         Effect.gen(function* () {
@@ -139,6 +172,8 @@ export class Db extends Context.Service<
 
       return {
         create,
+        start,
+        addFromIssue,
         remove: (id) => sql`DELETE FROM tasks WHERE id = ${id}`.pipe(Effect.asVoid, asOrqError("remove")),
         get,
         setState,

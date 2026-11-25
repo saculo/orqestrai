@@ -9,6 +9,16 @@ const id = { id: Schema.String }
 
 export class TasksApi extends HttpApiGroup.make("tasks").add(
   HttpApiEndpoint.post("create", "/tasks", { payload: NewTask, success: Task, error: OrqError }),
+  HttpApiEndpoint.post("start", "/tasks/:id/start", {
+    params: id,
+    payload: Schema.Struct({ repo: Schema.String, worktree: Schema.String }),
+    error: OrqError,
+  }),
+  HttpApiEndpoint.post("addFromIssue", "/issues", {
+    payload: Schema.Struct({ repo: Schema.String, url: Schema.String, title: Schema.String, request: Schema.String }),
+    success: Schema.Struct({ id: Schema.String, added: Schema.Boolean }),
+    error: OrqError,
+  }),
   HttpApiEndpoint.delete("remove", "/tasks/:id", { params: id, error: OrqError }),
   HttpApiEndpoint.get("get", "/tasks/:id", { params: id, success: Task, error: OrqError }),
   HttpApiEndpoint.get("list", "/tasks", { success: Schema.Array(Task), error: OrqError }),

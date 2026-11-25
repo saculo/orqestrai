@@ -21,6 +21,8 @@ const tasks = HttpApiBuilder.group(
     const db = yield* Db
     return handlers.handleAll({
       create: ({ payload }) => db.create(payload),
+      start: ({ params, payload }) => db.start(params.id, payload.repo, payload.worktree),
+      addFromIssue: ({ payload }) => db.addFromIssue(payload),
       remove: ({ params }) => db.remove(params.id),
       get: ({ params }) => db.get(params.id),
       list: () => db.list,

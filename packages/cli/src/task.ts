@@ -30,27 +30,29 @@ export const startTask = (root: string, request: string, { playbook, source, tit
     yield* requireRef(root, base)
 
     const worktrees = join(home, "worktrees", root.split("/").at(-1) ?? "repo")
-    const task = yield* db.create({
+    const created = yield* db.create({
       repo: root,
       title,
       slug: slugify(title),
-      worktrees,
       base,
       ...(playbook ? { type: playbook } : {}),
       ...(source ? { source } : {}),
     })
 
     // The id is held; set up the worktree, and give the id back if that fails.
-    yield* addWorktree(root, task.branch, task.worktree, base).pipe(Effect.tapError(() => db.remove(task.id)))
-    const dir = join(task.worktree, ".orqestrai", "tasks", task.id)
+    const worktree = join(worktrees, created.branch.slice("orq/".length))
+    yield* addWorktree(root, created.branch, worktree, base).pipe(Effect.tapError(() => db.remove(created.id)))
+    yield* db.start(created.id, root, worktree)
+    const task = { ...created, repo: root, worktree }
+    const dir = join(worktree, ".orqestrai", "tasks", task.id)
     mkdirSync(dir, { recursive: true })
     writeFileSync(join(dir, "REQUEST.md"), `---\nid: ${task.id}\ncreated: ${new Date().toISOString()}\n---\n\n${request}\n`)
     if (origin) yield* db.link(task.id, origin.kind, origin.ref, "origin")
     yield* syncFilesOrWarn(task)
     // A space that is not open is an outcome, not a failure: the task and its worktree stay.
-    const session = yield* openSession(task.id, task.worktree, base, yield* projectSpace(root)).pipe(
+    const session = yield* openSession(task.id, worktree, base, yield* projectSpace(root)).pipe(
       Effect.map((message) => ({ message, spaceNotOpen: false })),
       Effect.catchTag("SpaceNotOpen", (e) => Effect.succeed({ message: e.message, spaceNotOpen: true })),
     )
-    return { task, session }
+    return { task, worktree, session }
   })
