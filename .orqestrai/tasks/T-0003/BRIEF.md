@@ -1,6 +1,6 @@
 ---
 id: T-0003
-status: draft
+status: approved
 ---
 
 # A backlog (add a task now, start it later) and a GitHub label trigger that adds and starts a task
@@ -68,6 +68,7 @@ set, the Tailscale ACL docs.
 - Q7 Later issue changes: an edit, a close or a removed label does nothing to the task.
 - Q8 Removal: `orq issues` and `[github] user` are removed. No special handling for old configs: a leftover `user` key fails as any unknown key does today (decided by the agent after the user asked why keep anything; `[github] repos` stays for `orq start`).
 - Q9 Add only: no `start` field; every label trigger adds and starts its task.
+- Q10 Approve BRIEF.md: yes.
 
 **Assumptions:**
 - A backlog task keeps its request in orq's state (no worktree to hold `REQUEST.md`);
