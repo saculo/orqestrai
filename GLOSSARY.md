@@ -19,3 +19,7 @@
   `orq watch` runs `orq start` for it.
 - **Watch**: `orq watch`, on the sessions' machine: keeps orq-server's `/starts` stream open and
   starts the tasks the triggers added.
+- **Task repo**: a task's `repo` field. For a GitHub task that has not started it is the GitHub
+  name (`owner/name`, the only form the trigger accepts); `orq start` replaces it with the
+  checkout's path from `[github] repos`. Code that runs git or reads files there must first
+  check that it is a path (`orq clean` of a never-started task).
