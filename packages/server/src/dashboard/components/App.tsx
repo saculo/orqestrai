@@ -3,6 +3,7 @@ import { buildBoard } from "../board.ts"
 import { useClock, usePolling, useRememberedProject, useSelectedTaskId } from "../hooks.ts"
 import { fetchBoard } from "../serverApi.ts"
 import { projectLabels } from "../tasks.ts"
+import { BacklogTasks } from "./BacklogTasks.tsx"
 import { Header } from "./Header.tsx"
 import { NeedsYou } from "./NeedsYou.tsx"
 import { RunningTasks } from "./RunningTasks.tsx"
@@ -35,6 +36,7 @@ export const App = () => {
           onToggleBoard={() => setBoardShownOnPhone(!boardShownOnPhone)}
           now={now}
         />
+        <BacklogTasks tasks={board.backlog} onSelect={selectTask} now={now} />
         {selectedTask && <TaskPanel key={selectedTask.id} task={selectedTask} now={now} onClose={() => selectTask(null)} />}
       </div>
     </>

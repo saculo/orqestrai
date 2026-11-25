@@ -14,6 +14,8 @@ export type BoardColumn = { name: string; tasks: ReadonlyArray<BoardTask> }
 export type Board = {
   /** WAITING FOR ME and BLOCKED tasks: BLOCKED first, then the longest waiting first. */
   needsYou: ReadonlyArray<BoardTask>
+  /** Tasks added but not started (no worktree yet), not finished. They are in no step column. */
+  backlog: ReadonlyArray<BoardTask>
   /** Tasks being worked on now, the phone's list. */
   running: ReadonlyArray<BoardTask>
   /** One column per step, then "done". */
@@ -30,10 +32,17 @@ const blockedFirstThenLongestWaiting = (a: BoardTask, b: BoardTask) => {
   return a.updated_at.localeCompare(b.updated_at)
 }
 
-const isRunning = (task: BoardTask) => !isWaitingForYou(task.status) && !isFinished(task.status)
+const isStarted = (task: BoardTask) => task.worktree !== null
+
+const isInBacklog = (task: BoardTask) => !isStarted(task) && !isFinished(task.status)
+
+const isRunning = (task: BoardTask) => isStarted(task) && !isWaitingForYou(task.status) && !isFinished(task.status)
 
 const stepColumns = (tasks: ReadonlyArray<BoardTask>): ReadonlyArray<BoardColumn> => [
-  ...STEPS.map((step) => ({ name: step, tasks: tasks.filter((task) => task.step === step && !isFinished(task.status)) })),
+  ...STEPS.map((step) => ({
+    name: step,
+    tasks: tasks.filter((task) => task.step === step && isStarted(task) && !isFinished(task.status)),
+  })),
   { name: "done", tasks: tasks.filter((task) => isFinished(task.status)) },
 ]
 
@@ -41,7 +50,8 @@ const stepColumns = (tasks: ReadonlyArray<BoardTask>): ReadonlyArray<BoardColumn
 export const buildBoard = (tasks: ReadonlyArray<BoardTask>, repo: string, now: number): Board => {
   const shown = tasks.filter(isInProject(repo)).filter(isStillShown(now))
   return {
-    needsYou: shown.filter((task) => isWaitingForYou(task.status)).sort(blockedFirstThenLongestWaiting),
+    needsYou: shown.filter((task) => isStarted(task) && isWaitingForYou(task.status)).sort(blockedFirstThenLongestWaiting),
+    backlog: shown.filter(isInBacklog),
     running: shown.filter(isRunning),
     columns: stepColumns(shown),
   }
