@@ -20,6 +20,7 @@ import { addTask, startTask } from "./task.ts"
 import { templates } from "./templates.ts"
 import { trigger } from "./trigger.ts"
 import { VERSION } from "./version.ts"
+import { watch } from "./watch.ts"
 import { withState } from "./with-state.ts"
 
 /** The plugin's guard hook and skills start `orq` by name. Without it on PATH they do not run. */
@@ -162,7 +163,7 @@ const createArtifact = Command.make("create-artifact", { id, name: Argument.Lite
 
 const orq = Command.make("orq").pipe(
   Command.withDescription("orqestrai mechanics. The workflow is in the skills."),
-  Command.withSubcommands([init, newTask, start, resume, ls, show, setState, createArtifact, cleanTask, issues, trigger]),
+  Command.withSubcommands([init, newTask, start, resume, ls, show, setState, createArtifact, cleanTask, issues, trigger, watch]),
 )
 
 const AppLayer = OrqConfig.layer.pipe(Layer.provideMerge(BunServices.layer))

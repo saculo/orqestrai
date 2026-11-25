@@ -251,3 +251,4 @@ the backlog and the label trigger replace `orq issues` and are the next way of w
 - W2.1: `parseRepos` moved from `issues.ts` to `task.ts`, because `orq start` resolves checkouts and `issues.ts` imports `task.ts`.
 - W2.1: a successful start of a BLOCKED task sets it back to TODO.
 - W2.2: a backlog task is in no step column and never in "needs you"; only in Backlog (or done when dropped).
+- W4.1: the reconnect wait is ORQ_WATCH_RETRY (seconds, default 2), because tests need a short one; an 'already started' failure is skipped quietly.
