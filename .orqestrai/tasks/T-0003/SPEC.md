@@ -1,6 +1,6 @@
 ---
 id: T-0003
-status: draft
+status: approved
 risk: high
 ---
 
@@ -16,6 +16,7 @@ none
 - Q14 Init: no. `orq init` stays as it is; the user writes the caller workflow, the automation file and the secrets by hand from the docs (README shows the caller and the `gh secret set` lines). This replaces REQUEST.md item 4's "a short caller that orq init writes".
 - Q16 Watch connection: (a) an open line. `orq watch` dials the server and keeps one stream open (SSE); the server sends the id of each GitHub task to start, all not-started ones first on every connect, then each new one as it is added.
 - Q17 Seams: yes (below).
+- Q18 Approve SPEC.md: yes.
 - Q15 Latest base: `orq start` fetches `origin <base>` and branches from `origin/<base>`; the local `<base>` only when there is no `origin`.
 Agent decisions (reversible, from the brief and the code):
 - A not-started task has no worktree: the worktree column becomes nullable; started = has a
