@@ -26,7 +26,7 @@ base branch (`base_branch`). Optional there: `herdr_session = "meal-prep"`, the 
 space the project's task terminals open in, as new tabs. Without it, the space is named like
 the repository's directory. A task session starts only in that space, never in another one.
 Only the Herdr app creates spaces, so the space must be open with a terminal in it. If it is
-not, `orq new` and `orq issues` keep the task and its worktree, start no session, and name the
+not, `orq start` keeps the task and its worktree, starts no session, and names the
 space; open it in the Herdr app, then run `orq resume <id>`.
 
 **The quality gate** (in verify and ship) runs the commands under `## Checks` in the
@@ -43,8 +43,7 @@ sandbox  = "fence --"                   # task sessions start inside this comman
 add_dirs = ["~/shared-skills"]          # more directories for every task session
 
 [github]
-user  = "me"                                 # orq issues reads issues you opened, nobody else's
-repos = { "me/my-app" = "~/Projects/my-app" } # repo → the checkout where its tasks start
+repos = { "me/my-app" = "~/Projects/my-app" } # repo → the checkout where orq watch starts its tasks
 ```
 
 Other keys: `model` (the task session's, default `opus`), `data` (worktrees, archive and
@@ -85,16 +84,17 @@ orq-server --socket ~/.orqestrai/orq.sock --port 7400     # 127.0.0.1:7400
 ```
 
 The task files and screenshots come from copies the CLI sends to the server whenever a step
-reports (`orq new`, `orq set-state`), so they show wherever orq-server runs.
+reports (`orq new`, `orq start`, `orq set-state`), so they show wherever orq-server runs.
 
 ## Use
 
 In a project's git repository:
 
 ```bash
-orq new "what you want"                 # id, branch, worktree, session running /orq:task <id>
+orq new "what you want"                 # adds a task to the backlog; prints its id
 orq new --playbook feature "…"          # the same, with the playbook chosen by you
 orq new --origin jira:APP-12 "…"        # linked to what it comes from, <kind>:<ref>
+orq start T-0001                        # branch, worktree, session running /orq:task <id>
 orq ls                                  # all tasks
 orq show T-0001                         # one task, its links and its last events
 orq resume T-0001                       # start its session again if it is not running (after a restart)
@@ -105,12 +105,19 @@ The sessions run the rest themselves: `orq set-state` (step, status, the questio
 on, the playbook) and `orq create-artifact` (a task file from its template). You answer a
 waiting session by typing in it. A task's PR is found by its branch.
 
-Always start a task session with `orq new` or `orq resume`. They set `ORQ_TASK`, and the
+`orq new` only adds the task: it is in the backlog (status TODO, no branch, no worktree, no
+session), and the dashboard shows it there. `orq start` fetches `origin/<base branch>`,
+branches from it (from the local base branch when there is no origin), writes `REQUEST.md`
+and opens the session. A task is started once; on a started task `orq start` fails and points
+to `orq resume`. When the start fails, the task is BLOCKED with the reason; if the Herdr space
+is not open, the worktree stays and `orq resume` finishes it.
+
+Always start a task session with `orq start` or `orq resume`. They set `ORQ_TASK`, and the
 guard hooks are active only when it is set. Each session runs in a herdr-core terminal
 named after the task (`orq-t-0001`), which stays alive when nobody watches: `hc attach
 orq-t-0001` in a terminal, or the Herdr app (desktop or phone, over SSH), shows it and lets
 you type. Without
-`hc`, `orq new` prints the command to run.
+`hc`, `orq start` prints the command to run.
 
 A project's own skills, agents and hooks go in its `.claude/` as usual. Shared ones can go
 in a directory of your own, given to every task session with `add_dirs`.
@@ -125,16 +132,118 @@ root). The session installs the browser itself (`npx @e2e-dev/web install chromi
 sandbox, allow Playwright's download hosts: `cdn.playwright.dev`,
 `playwright.download.prss.microsoft.com` and `storage.googleapis.com`.
 
-### GitHub issues (optional)
+### GitHub trigger (optional)
 
-`orq issues`, on the machine of the sessions, looks at GitHub every minute (with `gh`, so
-no open port): each open issue you opened in a repo of `[github] repos` that no task came
-from yet becomes a task, as `orq new` in that repo's checkout. The issue's title is the
-task's title, its text the request; the task's source is `github`, the issue is linked as
-its origin, and orq comments on the issue with the task's id and branch. Issues by anyone
-else are never read, so a public repo is fine. Every open issue of yours counts, so close
-the ones you do not want as tasks before you add a repo. `gh` needs read and write on the
-repo's issues.
+A label on a GitHub issue can add a task and start it. The server never runs a command and
+nothing from GitHub reaches your machines directly:
+
+```
+issue labeled → Actions job → Tailscale → orq-server's trigger port → /starts stream → orq watch → orq start
+```
+
+**Who can start a task.** Every label trigger starts its task, and anyone who can add the
+label can start one. The label is the review. The issue's text becomes the agent's request,
+so label only issues you have read, and keep the right to label to people you trust.
+
+**1. The server.** Give orq-server a trigger port of its own and a token in its environment.
+The port serves only `POST /github/issues`, with that bearer token:
+
+```bash
+export ORQ_TRIGGER_TOKEN=$(openssl rand -hex 32)
+orq-server --socket ~/.orqestrai/orq.sock --port 7400 --trigger-port 7401
+```
+
+Put the token only in the server's environment and in the repo's secrets.
+
+**2. Tailscale.** The Actions job joins your tailnet as `tag:orq-ci` and reaches only the
+trigger port. In the tailnet policy file (the server's machine has its own tag, here
+`tag:orq-server`):
+
+```json
+{
+  "tagOwners": {
+    "tag:orq-ci": ["autogroup:admin"],
+    "tag:orq-server": ["autogroup:admin"]
+  },
+  "grants": [
+    { "src": ["tag:orq-ci"], "dst": ["tag:orq-server"], "ip": ["tcp:7401"] }
+  ]
+}
+```
+
+Then create an OAuth client (Settings, OAuth clients) with the scope `auth_keys` (write)
+and the tag `tag:orq-ci`. Its nodes are ephemeral.
+
+**3. The repo's secrets and variables.**
+
+```bash
+gh secret set TS_OAUTH_CLIENT_ID --repo me/my-app
+gh secret set TS_OAUTH_SECRET --repo me/my-app
+gh secret set ORQ_TRIGGER_TOKEN --repo me/my-app      # the same token as the server's
+gh variable set ORQ_TRIGGER_URL --repo me/my-app --body "http://orq-server:7401"
+```
+
+**4. The caller**, `.github/workflows/orq.yml` in the project. It uses the reusable workflow
+of this repository, pinned to a release tag; `orq-version` is the npm version of `orqestrai`
+it runs (pin it too):
+
+```yaml
+name: orq
+on:
+  issues:
+    types: [labeled]
+permissions: {}
+jobs:
+  orq:
+    if: github.event.label.name == 'orq'      # optional: skips the runs of other labels
+    permissions:
+      contents: read
+      issues: write                           # the comment with the task id
+    uses: saculo/orqestrai/.github/workflows/issue-labeled.yml@v0.11.0
+    with:
+      orq-version: 0.11.0
+      trigger-url: ${{ vars.ORQ_TRIGGER_URL }}
+    secrets:
+      TS_OAUTH_CLIENT_ID: ${{ secrets.TS_OAUTH_CLIENT_ID }}
+      TS_OAUTH_SECRET: ${{ secrets.TS_OAUTH_SECRET }}
+      ORQ_TRIGGER_TOKEN: ${{ secrets.ORQ_TRIGGER_TOKEN }}
+```
+
+Never use `pull_request_target` for it. The job runs `orq trigger github` from npm in a
+checkout of the default branch, and comments the task id on the issue with the job's own
+`GITHUB_TOKEN`.
+
+**5. An automation file**, `.orqestrai/automations/<name>.md` in the project (committed to
+the default branch). The front matter says when it fires; the body is the request. The
+placeholders are `{{title}}`, `{{body}}`, `{{url}}`, `{{number}}` and `{{repo}}`:
+
+```markdown
+---
+provider: github
+event: issue_labeled
+labels: [orq]
+---
+Fix GitHub issue {{repo}}#{{number}}: {{title}}
+
+{{body}}
+
+Issue: {{url}}
+```
+
+A label that no automation names does nothing. A bad file fails the job with its name and the
+reason. The first file by name that names the label is used.
+
+**6. `orq watch`**, on the sessions' machine, outside the sandbox. It needs `server` (or
+`ORQ_SERVER`) and the project's checkout in `[github] repos`. It keeps the server's `/starts`
+stream open, runs `orq start` for each GitHub task (the waiting ones when it connects, then
+each new one) and reconnects when the stream drops:
+
+```bash
+orq watch
+```
+
+A task from an issue that was already added is not added twice: the job prints
+`<id> already there` and adds no comment.
 
 ### Secret files (second lock)
 

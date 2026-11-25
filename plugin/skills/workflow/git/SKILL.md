@@ -7,7 +7,7 @@ description: orqestrai git rules - branches, worktrees, staging, commit messages
 
 ## Branches and worktrees
 
-- `orq new` creates the branch `orq/<id>-<slug>` and its worktree. Do not create
+- `orq start` (not `orq new`, which only adds the task to the backlog) creates the branch `orq/<id>-<slug>` and its worktree. Do not create
   branches or worktrees yourself.
 - Work only in the task's worktree. Never commit on the base branch.
 

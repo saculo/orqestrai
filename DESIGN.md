@@ -438,17 +438,16 @@ data     = "~/.orqestrai"               # worktrees, archive, the local SQLite f
 hc       = "hc"                         # the herdr-core command, which keeps the task sessions
 
 [github]
-user     = "me"                         # orq issues reads issues you opened only
-repos    = { "me/my-app" = "~/Projects/my-app" }  # a repo and the checkout where its tasks start
+repos    = { "me/my-app" = "~/Projects/my-app" }  # a repo and the checkout where orq watch starts its tasks
 ```
 
-orq keeps no list of projects. `orq new` starts the task in the repo it runs in, so it
+orq keeps no list of projects. `orq new` adds the task for the repo it runs in, so it
 works the same from inside a project as from anywhere that `cd`s there first (for
 example a home directory whose `CLAUDE.md` lists your projects).
 
 - **Secrets are never in this file**, so sessions can read the config.
 - An environment variable `ORQ_<KEY>` overrides a key, for tests and containers
-  (`ORQ_SERVER`, `ORQ_SANDBOX`, `ORQ_DATA`, …; `[github]` is `ORQ_GITHUB_USER` and
+  (`ORQ_SERVER`, `ORQ_SANDBOX`, `ORQ_DATA`, …; `[github]` is
   `ORQ_GITHUB_REPOS=me/app=/path,…`). `packages/core/src/settings.ts` reads the file into these variables at start, and the rest of orq
   reads only variables. A key orq does not know is an error, so a typo is not ignored.
 - What belongs to a project is in the project: `.orqestrai/config.toml` (base branch),
@@ -471,12 +470,14 @@ Skills and agents are named `orq:<name>` (`/orq:task`); the folder name is the n
 |----------------------------|-------------------------------------------------------------|
 | `orq init`                 | creates `.orqestrai/config.toml`                            |
 | `orq guard`                | the PreToolUse guard hook (§6)                              |
-| `orq new [--playbook <name>] [--origin <kind>:<ref>] "<request>"` | task id, task row, worktree, branch, session; the origin linked |
+| `orq new [--playbook <name>] [--origin <kind>:<ref>] "<request>"` | adds a backlog task (TODO, no worktree, branch or session); the origin linked; prints `orq start <id>` |
+| `orq start <id>`           | starts a backlog task: fetches `origin <base>`, branches from `origin/<base>` (the local base without an origin), writes `REQUEST.md`, opens the session. A started task fails and points to `orq resume` |
 | `orq resume <id>`          | starts the task's session again if it is not running (after a restart) |
 | `orq set-state <id> <step> <status> [--note <text>] [--playbook <name>]` | updates the task row, adds an event; a waiting note is the whole message |
 | `orq show <id>`            | one task, its links and its last events                     |
 | `orq create-artifact <id> <NAME>` | a task file from `templates/`                        |
-| `orq issues`               | a task for each new GitHub issue of yours (below)           |
+| `orq trigger github`       | in a GitHub Actions job: adds the task for a labeled issue (GitHub trigger, below) |
+| `orq watch`                | on the sessions' machine: starts the tasks the triggers add (below) |
 | `orq ls`                   | lists tasks and status; reads merged PRs from `gh`          |
 | `orq clean <id>`           | ends a merged or dropped task's session, removes its worktree and branch |
 
@@ -502,29 +503,47 @@ in keeps the commands, the guard and the tests the same for every caller.
 - **Project space:** a task session starts only in the project's Herdr space: `herdr_session`
   in `.orqestrai/config.toml`, else the repository's directory name. The terminal carries the
   label `herdr.space`; `orq resume` adds it to a running task terminal that has none.
-- **Space not open:** when no terminal is open in the project's space, `orq new` and
-  `orq issues` keep the task and its worktree but start no session. orq names the space and
-  says to open it in the Herdr app, then run `orq resume <id>`. `orq new` and `orq resume`
+- **Start fails:** a failed `orq start` leaves the task BLOCKED with the reason.
+- **Space not open:** when no terminal is open in the project's space, `orq start` keeps the
+  task and its worktree but starts no session. orq names the space and
+  says to open it in the Herdr app, then run `orq resume <id>`. `orq start` and `orq resume`
   exit non-zero. An hc failure stops orq with hc's message. Without `hc`, orq prints the
   command to start the session by hand.
 - orq inside a task session passes its terminal's socket (`HC_TERMINAL_SOCKET`) to hc as
   `HC_SOCKET`.
-- **Pre-trust:** `orq new` and `orq resume` set `hasTrustDialogAccepted` for the worktree in
+- **Pre-trust:** `orq start` and `orq resume` set `hasTrustDialogAccepted` for the worktree in
   `projects[<worktree>]` of Claude's config (`$CLAUDE_CONFIG_DIR/.claude.json`, else
   `~/.claude.json`), so the folder trust dialog never blocks. `orq clean` removes the entry.
   A config file that is not valid JSON is left as it is, with a warning.
 
-### GitHub issues
+### GitHub trigger
 
-Optional. One long-running process, `orq issues` (`packages/cli/src/issues.ts`; no open port, no LLM),
-on the sessions' machine, outside the sandbox. Every minute it lists, with `gh`, the open
-issues `[github] user` opened in each repo of `[github] repos`, and starts a task for each
-one that no task is linked to (`gh-issue`, the issue's URL): `orq new` in that repo's
-checkout, with the issue's title as the title and its text as the request, source `github`,
-the issue linked as its origin before the session starts. Then it comments on the issue
-with the task's id, status and branch. A failure is printed and tried again a minute later.
-Issues by anyone else are never read. That is all for now: questions, replies and the PR
-stay in the session, the dashboard and GitHub as before.
+Optional. A label on a GitHub issue adds a task and starts it. Nothing from GitHub reaches the
+sessions' machine directly, and `orq-server` runs no command (ADR-0002).
+
+1. **Actions job.** The reusable workflow `.github/workflows/issue-labeled.yml`, called by
+   the project on `issues: labeled`, runs on a GitHub-hosted runner. It joins the tailnet with
+   `tailscale/github-action` (OAuth client, ephemeral node, `tag:orq-ci`) and runs
+   `orq trigger github` from npm at a pinned version (`packages/cli/src/trigger.ts`). That
+   command finds the **automation** (`.orqestrai/automations/<name>.md`, `packages/cli/src/automations.ts`)
+   whose `labels` name the label, fills its body with the issue's title, text, URL, number and
+   repo, and posts it to the server's trigger port. Then the job comments the task id on the
+   issue with its own `GITHUB_TOKEN`.
+2. **Trigger port.** `orq-server --trigger-port <n>` serves only `POST /github/issues`, with
+   the bearer token `ORQ_TRIGGER_TOKEN` (the server refuses to start with the port and no
+   token). It adds a **backlog task** (source `github`, the issue linked as its origin) and
+   answers with its id; an issue that already has a task gets that task's id (`already there`).
+   The Tailscale policy lets `tag:orq-ci` reach only this port.
+3. **Start stream.** `GET /starts` on the main listeners is an SSE stream of the GitHub
+   tasks that wait to be started.
+4. **`orq watch`** (`packages/cli/src/watch.ts`), on the sessions' machine, outside the sandbox,
+   keeps `/starts` open, runs `orq start` in the checkout from `[github] repos` for each task
+   (the waiting ones when it connects, then each new one), and reconnects when the stream
+   drops.
+
+Every label trigger starts its task. There is no second gate: the label is the review, and
+anyone who can add the label can start a task (§6). `orq init` does not write the workflow;
+the project writes the caller, the automation file and the secrets by hand (README).
 
 ### Files in a project
 
@@ -648,6 +667,14 @@ agents get actions (orq's commands), never credentials.
   - keeps `orq` and the sandbox's own config read-only, so a session cannot change them.
 - **`orq-server`** holds the state and runs no command, so a session cannot make it run its
   code.
+- **GitHub trigger** (§4). The trigger port is separate from the API and the dashboard, serves
+  one route and needs a bearer token (`ORQ_TRIGGER_TOKEN`, only in the server's environment and
+  the repo's secrets). The Tailscale policy lets only `tag:orq-ci` reach it. The workflow pins
+  its actions by SHA, has `contents: read` and `issues: write`, passes issue text only through
+  files and environment variables (never into a script) and is never run on `pull_request_target`.
+  **Anyone who can add the label can start a task**, and the issue's text becomes the agent's
+  request. The label is the review: give it only to people you trust, and read the issue first.
+  The task session's sandbox and the guard hook still apply.
 - GitHub: the one secret a session can read, so it can do little. A fine-grained token:
   only the project repositories, Contents and Pull requests read/write, nothing else, an
   expiry. Branch protection on `main`; the token cannot bypass it. A leaked token can push

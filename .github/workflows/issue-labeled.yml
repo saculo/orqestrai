@@ -1,0 +1,67 @@
+name: issue-labeled
+
+# Reusable workflow. A project calls it on `issues: labeled` (README, "GitHub trigger"). The job
+# joins the tailnet as tag:orq-ci, runs `orq trigger github` (which adds the task on orq-server's
+# trigger port) and comments the task id on the issue.
+# Never call it from pull_request_target: it checks out and runs code of the caller's repository.
+on:
+  workflow_call:
+    inputs:
+      orq-version:
+        description: the version of the npm package orqestrai to run, e.g. 0.11.0
+        required: true
+        type: string
+      trigger-url:
+        description: orq-server's trigger address on the tailnet, e.g. http://orq-host:7401
+        required: true
+        type: string
+    secrets:
+      TS_OAUTH_CLIENT_ID:
+        required: true
+      TS_OAUTH_SECRET:
+        required: true
+      ORQ_TRIGGER_TOKEN:
+        required: true
+
+permissions:
+  contents: read
+  issues: write # the comment with the task id
+
+jobs:
+  trigger:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      # an issues event has no pull request code; this is the default branch
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: tailscale/github-action@064b10558093f38325e838ddea35486bdc6b1d5c # v4.4.0
+        with:
+          oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
+          oauth-secret: ${{ secrets.TS_OAUTH_SECRET }}
+          tags: tag:orq-ci
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: 1.4.4
+      # The issue's title and text are read by orq from GITHUB_EVENT_PATH, never put in a script.
+      - name: orq trigger github
+        id: trigger
+        env:
+          ORQ_VERSION: ${{ inputs.orq-version }}
+          ORQ_TRIGGER_URL: ${{ inputs.trigger-url }}
+          ORQ_TRIGGER_TOKEN: ${{ secrets.ORQ_TRIGGER_TOKEN }}
+        run: |
+          out=$(bunx --package "orqestrai@${ORQ_VERSION}" orq trigger github)
+          echo "$out"
+          if [[ "$out" =~ (^|$'\n')(T-[0-9]+)\ added$ ]]; then
+            echo "task=${BASH_REMATCH[2]}" >> "$GITHUB_OUTPUT"
+          fi
+      - name: comment the task id on the issue
+        if: steps.trigger.outputs.task != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          ISSUE: ${{ github.event.issue.number }}
+          TASK: ${{ steps.trigger.outputs.task }}
+        run: gh issue comment "$ISSUE" --body "orqestrai added the task $TASK. It starts when orq watch picks it up."

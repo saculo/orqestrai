@@ -12,3 +12,10 @@
   or session. The dashboard shows these as the backlog. _Avoid_: queued task, pending task.
 - **Start (a task)**: make a backlog task's branch and worktree from the latest base branch and
   open its task session (`orq start`). A started task is never started again; it is resumed.
+- **Automation**: a file `.orqestrai/automations/<name>.md` in a project: front matter
+  (`provider`, `event`, `labels`) says when it fires, the body is the request template.
+- **Trigger**: an outside event that adds a backlog task, now a label on a GitHub issue
+  (`orq trigger github`, in a GitHub Actions job). A trigger always starts its task:
+  `orq watch` runs `orq start` for it.
+- **Watch**: `orq watch`, on the sessions' machine: keeps orq-server's `/starts` stream open and
+  starts the tasks the triggers added.
