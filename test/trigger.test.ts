@@ -59,6 +59,19 @@ describe("trigger endpoint", () => {
     expect(await tasks()).toHaveLength(0)
   })
 
+  test("a repo that is not a GitHub name, or an issue url of another repo, is 400 and adds nothing", async () => {
+    const ok = issue(5)
+    for (const repo of ["/etc", "/home/x/proj", "../x", ".a/b", "a/.b", "a/b/c", "a", "a b/c"])
+      expect((await post({ ...ok, repo }, TOKEN)).status).toBe(400)
+    for (const url of [
+      "https://github.com/other/app/issues/5",
+      "https://evil.example/acme/app/issues/5",
+      "https://github.com/acme/app/pull/5",
+    ])
+      expect((await post({ ...ok, issue: { ...ok.issue, url } }, TOKEN)).status).toBe(400)
+    expect(await tasks()).toHaveLength(0)
+  })
+
   test("only the trigger route answers on the trigger port, and it is not on the main port", async () => {
     for (const path of ["/tasks", "/board", "/"]) expect((await fetch(`http://127.0.0.1:${trig}${path}`)).status).toBe(404)
     expect((await post(issue(2), TOKEN)).status).toBe(200)

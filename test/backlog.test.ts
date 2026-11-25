@@ -115,4 +115,22 @@ describe("a task that is not started", () => {
     expect(task.repo).toBe(checkout)
     expect(readFileSync(join(task.worktree, ".orqestrai", "tasks", id, "REQUEST.md"), "utf8")).toContain("Plan meals for the week")
   })
+  test("orq clean of a dropped task that never started removes nothing and keeps the row", async () => {
+    const github = ((await (await api("POST", "/issues", anIssue())).json()) as { id: string }).id
+    const local = (await aBacklogTask()).id
+    const checkout = join(dir, "proj")
+    mkdirSync(checkout)
+    Bun.spawnSync(["git", "init", "-q", "-b", "main"], { cwd: checkout })
+    const inRepo = (await (await api("POST", "/tasks", { repo: checkout, title: "Other", slug: "other", base: "main" })).json()) as {
+      id: string
+    }
+    for (const id of [github, local, inRepo.id]) {
+      expect(orq(["set-state", id, "triage", "DROPPED"]).code).toBe(0)
+      const r = orq(["clean", id])
+      expect(r.err).toBe("")
+      expect(r.code).toBe(0)
+      expect(r.out).not.toMatch(/removed/)
+      expect(orq(["ls"]).out).toContain(id)
+    }
+  })
 })

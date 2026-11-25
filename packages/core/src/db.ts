@@ -22,6 +22,15 @@ import {
 } from "./domain.ts"
 import { asOrqError, rows } from "./sqlite.ts"
 
+const GITHUB_NAME = /^(?!\.)[\w.-]+\/(?!\.)[\w.-]+$/
+
+/** The problem with a GitHub repo name and an issue URL of it, or null when both are fine. */
+export const githubIssueProblem = (repo: string, url: string): string | null => {
+  if (!GITHUB_NAME.test(repo)) return `${repo} is not a GitHub name (owner/name)`
+  const prefix = `https://github.com/${repo}/issues/`
+  return url.startsWith(prefix) && /^\d+$/.test(url.slice(prefix.length)) ? null : `${url} is not an issue of ${repo}`
+}
+
 const noTask = (id: string) => new OrqError({ message: `no task ${id}` })
 
 export class Db extends Context.Service<
@@ -122,6 +131,8 @@ export class Db extends Context.Service<
 
       const addFromIssue = ({ repo, url, title, request }: { repo: string; url: string; title: string; request: string }) =>
         Effect.gen(function* () {
+          const problem = githubIssueProblem(repo, url)
+          if (problem !== null) return yield* new OrqError({ message: problem })
           const [found] = yield* sql<{ task_id: string }>`SELECT task_id FROM task_links WHERE kind = 'gh-issue' AND ref = ${url} LIMIT 1`
           if (found) return { id: found.task_id, added: false }
           const { id } = yield* insertTask({ repo, title, slug: slugify(title), base: "the default branch", source: "github" })

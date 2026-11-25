@@ -2,7 +2,7 @@
 // Action posts an issue there with the bearer token (ORQ_TRIGGER_TOKEN); the server adds one
 // backlog task per issue. It only touches the database; it never runs a command.
 import { createHash, timingSafeEqual } from "node:crypto"
-import { Db } from "@orqestrai/core/db.ts"
+import { Db, githubIssueProblem } from "@orqestrai/core/db.ts"
 import { Effect, Layer, Schema } from "effect"
 import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/http"
 import { addIssue, Starts } from "./starts.ts"
@@ -38,6 +38,7 @@ export const trigger = (token: string) =>
           )
           if (body === undefined) return HttpServerResponse.text("bad request", { status: 400 })
           const { repo, issue, request } = body
+          if (githubIssueProblem(repo, issue.url) !== null) return HttpServerResponse.text("bad request", { status: 400 })
           const done = yield* add({ repo, url: issue.url, title: issue.title, request })
           return yield* HttpServerResponse.json(done)
         }).pipe(Effect.catch((e) => Effect.succeed(HttpServerResponse.text(e.message, { status: 500 })))),

@@ -3,7 +3,7 @@
 // merges, so what its branch holds is copied to $ORQ_DATA/archive/<repo>/<id>/ first: its task
 // folder, and the out-of-scope notes triage wrote, so triage can still find them.
 import { cpSync, existsSync, mkdirSync } from "node:fs"
-import { basename, join } from "node:path"
+import { basename, isAbsolute, join } from "node:path"
 import { OrqConfig } from "@orqestrai/core/config.ts"
 import { Db } from "@orqestrai/core/db.ts"
 import { OrqError, type Task } from "@orqestrai/core/domain.ts"
@@ -58,7 +58,11 @@ export const clean = (id: string) =>
     if (task.status !== "MERGED" && task.status !== "DROPPED")
       return yield* refuse(`${id} is ${task.status}. orq clean removes only a merged or dropped task.`)
 
-    const tip = yield* run("git", ["rev-parse", "--verify", "--quiet", `refs/heads/${task.branch}`], task.repo)
+    // a GitHub task that never started has a GitHub name as its repo, not a folder: no branch to look for
+    const tip =
+      isAbsolute(task.repo) && existsSync(task.repo)
+        ? yield* run("git", ["rev-parse", "--verify", "--quiet", `refs/heads/${task.branch}`], task.repo)
+        : { code: 1, stdout: "" }
     // a task that never started has no worktree: nothing on disk
     const worktree = task.worktree
     const hasWorktree = worktree !== null && existsSync(worktree)
