@@ -5,6 +5,7 @@ import { createHash, timingSafeEqual } from "node:crypto"
 import { Db } from "@orqestrai/core/db.ts"
 import { Effect, Layer, Schema } from "effect"
 import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/http"
+import { addIssue, Starts } from "./starts.ts"
 
 const Body = Schema.Struct({
   repo: Schema.String,
@@ -23,6 +24,7 @@ export const trigger = (token: string) =>
   Layer.unwrap(
     Effect.gen(function* () {
       const db = yield* Db
+      const add = addIssue(db, yield* Starts)
       const allowed = bearer(token)
       return HttpRouter.add(
         "POST",
@@ -36,7 +38,7 @@ export const trigger = (token: string) =>
           )
           if (body === undefined) return HttpServerResponse.text("bad request", { status: 400 })
           const { repo, issue, request } = body
-          const done = yield* db.addFromIssue({ repo, url: issue.url, title: issue.title, request })
+          const done = yield* add({ repo, url: issue.url, title: issue.title, request })
           return yield* HttpServerResponse.json(done)
         }).pipe(Effect.catch((e) => Effect.succeed(HttpServerResponse.text(e.message, { status: 500 })))),
       )

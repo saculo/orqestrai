@@ -13,6 +13,7 @@ import { Command, Flag } from "effect/cli"
 import { HttpRouter } from "effect/http"
 import { HttpApiBuilder } from "effect/http-api"
 import { dashboard, enterPageDir, PAGE } from "./dashboard.ts"
+import { addIssue, Starts, startsRoute } from "./starts.ts"
 import { trigger } from "./trigger.ts"
 
 const tasks = HttpApiBuilder.group(
@@ -20,11 +21,12 @@ const tasks = HttpApiBuilder.group(
   "tasks",
   Effect.fnUntraced(function* (handlers) {
     const db = yield* Db
+    const add = addIssue(db, yield* Starts)
     return handlers.handleAll({
       create: ({ payload }) => db.create(payload),
       start: ({ params, payload }) => db.start(params.id, payload.repo, payload.worktree),
       unstart: ({ params, payload }) => db.unstart(params.id, payload.worktree),
-      addFromIssue: ({ payload }) => db.addFromIssue(payload),
+      addFromIssue: ({ payload }) => add(payload),
       remove: ({ params }) => db.remove(params.id),
       get: ({ params }) => db.get(params.id),
       list: () => db.list,
@@ -46,7 +48,9 @@ const tasks = HttpApiBuilder.group(
 export type Listen = { readonly unix: string } | { readonly host: string; readonly port: number }
 
 const serveApi = (listen: Listen) =>
-  HttpRouter.serve(Layer.mergeAll(HttpApiBuilder.layer(OrqApi).pipe(Layer.provide(tasks)), dashboard), { disableLogger: true }).pipe(
+  HttpRouter.serve(Layer.mergeAll(HttpApiBuilder.layer(OrqApi).pipe(Layer.provide(tasks)), dashboard, startsRoute), {
+    disableLogger: true,
+  }).pipe(
     Layer.provide(
       BunHttpServer.layer({
         ...("unix" in listen ? { unix: listen.unix } : { hostname: listen.host, port: listen.port }),
@@ -97,5 +101,5 @@ export const server = Command.make(
   },
 ).pipe(
   Command.withDescription("orqestrai's state over HTTP, for the CLI on other machines, and the dashboard at /"),
-  Command.provide(Direct),
+  Command.provide(Starts.layer.pipe(Layer.provideMerge(Direct))),
 )
