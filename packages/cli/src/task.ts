@@ -1,4 +1,4 @@
-// Adding a task (`orq new`) and starting it (`orq start`, and `orq issues`): a task is added to
+// Adding a task (`orq new`) and starting it (`orq start`): a task is added to
 // the backlog first; starting gives it its worktree, REQUEST.md and session.
 import { mkdirSync, writeFileSync } from "node:fs"
 import { basename, join } from "node:path"

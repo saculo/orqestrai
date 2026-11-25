@@ -75,6 +75,13 @@ describe("the settings file", () => {
     expect(r.err).toContain("sandboxx")
   })
 
+  test("`orq issues` is an unknown command, and [github] user fails as an unknown key", () => {
+    expect(orq(["issues"], "").code).not.toBe(0)
+    const r = orq(["ls"], `[github]\nuser = "me"\n`)
+    expect(r.code).not.toBe(0)
+    expect(r.err).toContain("unknown key github.user")
+  })
+
   test("rejects a file that is not TOML", () => {
     const r = orq(["ls"], `sandbox = \n`)
     expect(r.code).not.toBe(0)
@@ -87,12 +94,16 @@ describe("settingsEnv", () => {
     expect(() => settingsEnv({ slack: { user: "U1" } })).toThrow("unknown key slack")
   })
 
-  test("maps [github] to orq issues' variables, a repo to the checkout where its tasks start", () => {
-    const env = settingsEnv({ github: { user: "me", repos: { "me/app": "/p/app", "me/lib": "/p/lib" } } })
-    expect(env).toEqual({ ORQ_GITHUB_USER: "me", ORQ_GITHUB_REPOS: "me/app=/p/app,me/lib=/p/lib" })
+  test("maps [github] repos to the checkout where their tasks start", () => {
+    const env = settingsEnv({ github: { repos: { "me/app": "/p/app", "me/lib": "/p/lib" } } })
+    expect(env).toEqual({ ORQ_GITHUB_REPOS: "me/app=/p/app,me/lib=/p/lib" })
+  })
+
+  test("[github] user is an unknown key", () => {
+    expect(() => settingsEnv({ github: { user: "me" } })).toThrow("unknown key github.user")
   })
 
   test("rejects a key [github] does not know", () => {
-    expect(() => settingsEnv({ github: { user: "me", label: "orq" } })).toThrow("unknown key github.label")
+    expect(() => settingsEnv({ github: { label: "orq" } })).toThrow("unknown key github.label")
   })
 })

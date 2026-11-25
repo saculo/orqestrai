@@ -14,7 +14,6 @@ import { syncFilesOrWarn } from "./files.ts"
 import { baseBranch, projectSpace, topLevel } from "./git.ts"
 import { closeSession, openSession } from "./herdr.ts"
 import { install } from "./init.ts"
-import { issues } from "./issues.ts"
 import { syncMerged } from "./pr.ts"
 import { addTask, startTask } from "./task.ts"
 import { templates } from "./templates.ts"
@@ -163,7 +162,7 @@ const createArtifact = Command.make("create-artifact", { id, name: Argument.Lite
 
 const orq = Command.make("orq").pipe(
   Command.withDescription("orqestrai mechanics. The workflow is in the skills."),
-  Command.withSubcommands([init, newTask, start, resume, ls, show, setState, createArtifact, cleanTask, issues, trigger, watch]),
+  Command.withSubcommands([init, newTask, start, resume, ls, show, setState, createArtifact, cleanTask, trigger, watch]),
 )
 
 const AppLayer = OrqConfig.layer.pipe(Layer.provideMerge(BunServices.layer))

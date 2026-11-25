@@ -17,7 +17,7 @@ export const TaskType = Schema.String.pipe(Schema.check(Schema.isPattern(/^[a-z]
 
 export const TEMPLATES = ["BRIEF", "RESEARCH", "SPEC", "VERIFY", "LEARN", "PR"] as const
 
-/** Where a task was started: `orq new` in a terminal, a GitHub issue (`orq issues`); slack: by the
+/** Where a task was started: `orq new` in a terminal, a GitHub issue (the label trigger); slack: by the
  * Slack bridge, which orq no longer has (older tasks keep it). */
 export const SOURCES = ["cli", "slack", "github"] as const
 export const Source = Schema.Literals(SOURCES)
