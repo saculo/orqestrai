@@ -14,6 +14,11 @@ export class TasksApi extends HttpApiGroup.make("tasks").add(
     payload: Schema.Struct({ repo: Schema.String, worktree: Schema.String }),
     error: OrqError,
   }),
+  HttpApiEndpoint.post("unstart", "/tasks/:id/unstart", {
+    params: id,
+    payload: Schema.Struct({ worktree: Schema.String }),
+    error: OrqError,
+  }),
   HttpApiEndpoint.post("addFromIssue", "/issues", {
     payload: Schema.Struct({ repo: Schema.String, url: Schema.String, title: Schema.String, request: Schema.String }),
     success: Schema.Struct({ id: Schema.String, added: Schema.Boolean }),

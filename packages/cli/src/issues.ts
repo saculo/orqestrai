@@ -9,7 +9,7 @@ import { OrqError } from "@orqestrai/core/domain.ts"
 import { run } from "@orqestrai/core/proc.ts"
 import { Config, Console, Duration, Effect, Schema } from "effect"
 import { Command } from "effect/cli"
-import { startTask } from "./task.ts"
+import { addTask, parseRepos, startTask } from "./task.ts"
 import { withState } from "./with-state.ts"
 
 /** The link kind of a task's GitHub issue; its ref is the issue's URL. */
@@ -23,12 +23,6 @@ const settings = Config.all({
   /** seconds between two looks at GitHub */
   every: Config.Number("ORQ_GITHUB_EVERY").pipe(Config.withDefault(60)),
 })
-
-const parseRepos = (spec: string) =>
-  spec
-    .split(",")
-    .map((pair) => pair.trim().split("=", 2) as [string, string])
-    .filter(([repo, checkout]) => repo && checkout)
 
 const Issue = Schema.Struct({
   number: Schema.Number,
@@ -74,14 +68,18 @@ const openIssues = (repo: string, user: string) =>
 /** What the task is asked to do: the issue as you wrote it, and where it came from. */
 const requestOf = (issue: Issue) => `${issue.title}\n\n${issue.body.trim()}\n\nFrom GitHub issue ${issue.url}`.replace(/\n{3,}/g, "\n\n")
 
-/** A task for the issue, and a comment on the issue that says so. */
+/** A task for the issue, started, and a comment on the issue that says so. A start that fails
+ * is printed; the task stays BLOCKED in the backlog, and the comment is posted all the same. */
 const startFromIssue = (repo: string, checkout: string, issue: Issue) =>
   Effect.gen(function* () {
-    const { task, session } = yield* startTask(checkout, requestOf(issue), {
+    const task = yield* addTask(checkout, requestOf(issue), {
       title: issue.title,
       source: "github",
       origin: { kind: ISSUE_LINK, ref: issue.url },
     })
+    const started = yield* startTask(task.id).pipe(
+      Effect.catch((e) => Console.error(`orq issues: ${repo}#${issue.number}: ${e.message}`).pipe(Effect.as(null))),
+    )
     yield* gh([
       "issue",
       "comment",
@@ -92,7 +90,7 @@ const startFromIssue = (repo: string, checkout: string, issue: Issue) =>
       `orq: **${task.id}** created (${task.status}), branch \`${task.branch}\`.`,
     ])
     yield* Console.log(`orq issues: ${repo}#${issue.number} → ${task.id}`)
-    if (session.spaceNotOpen) yield* Console.error(`orq issues: ${repo}#${issue.number}: ${session.message}`)
+    if (started?.session.spaceNotOpen) yield* Console.error(`orq issues: ${repo}#${issue.number}: ${started.session.message}`)
   })
 
 /** One look at every repo: a task for each of your open issues that has none. A failure is

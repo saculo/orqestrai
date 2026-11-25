@@ -36,6 +36,15 @@ const orq = (args: string[]) => {
   return { code: p.exitCode, out: p.stdout.toString(), err: p.stderr.toString() }
 }
 
+/** `orq new`, then `orq start` on the task it added; the two outputs together. A `new` that fails is its result. */
+const begin = (args: string[], ...rest: Parameters<typeof orq> extends [unknown, ...infer R] ? R : never) => {
+  const added = orq(args, ...rest)
+  const id = /^(T-\d+)/.exec(added.out)?.[1]
+  if (added.code !== 0 || !id) return added
+  const started = orq(["start", id], ...rest)
+  return { code: started.code, out: added.out + started.out, err: added.err + started.err }
+}
+
 const issue = (number: number, title: string, body = "", login = "me") => ({
   number,
   title,
@@ -167,6 +176,6 @@ describe("orq issues", () => {
 })
 
 test("a task started in a terminal has source cli", () => {
-  orq(["new", "Add search"])
+  begin(["new", "Add search"])
   expect(orq(["show", "T-0001"]).out).toMatch(/source = cli/)
 })

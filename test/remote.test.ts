@@ -44,6 +44,7 @@ describe("orq with ORQ_SERVER", () => {
     const created = orq(["new", "--origin", "gh-issue:o/r#3", "Add search"])
     expect(created.code).toBe(0)
     expect(created.out).toContain("T-0001  orq/T-0001-add-search")
+    expect(orq(["start", "T-0001"]).code).toBe(0)
     expect(existsSync(join(dir, "home", "worktrees", "proj", "T-0001-add-search", ".orqestrai", "tasks", "T-0001", "REQUEST.md"))).toBe(
       true,
     )

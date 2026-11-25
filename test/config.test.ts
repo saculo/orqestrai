@@ -22,6 +22,15 @@ const orq = (args: string[], toml: string, extra: Record<string, string> = {}) =
   return { code: p.exitCode, out: p.stdout.toString(), err: p.stderr.toString() }
 }
 
+/** `orq new`, then `orq start` on the task it added; the two outputs together. A `new` that fails is its result. */
+const begin = (args: string[], ...rest: Parameters<typeof orq> extends [unknown, ...infer R] ? R : never) => {
+  const added = orq(args, ...rest)
+  const id = /^(T-\d+)/.exec(added.out)?.[1]
+  if (added.code !== 0 || !id) return added
+  const started = orq(["start", id], ...rest)
+  return { code: started.code, out: added.out + started.out, err: added.err + started.err }
+}
+
 beforeEach(() => {
   dir = mkdtempSync(join(tmpdir(), "orq-config-"))
   repo = join(dir, "proj")
@@ -34,7 +43,7 @@ afterEach(() => rmSync(dir, { recursive: true, force: true }))
 
 describe("the settings file", () => {
   test("gives the task session its sandbox, directories, model and data folder", () => {
-    const r = orq(["new", "x"], `sandbox = "fence --"\nadd_dirs = ["/srv/home", "~/shared"]\nmodel = "sonnet"\ndata = "${dir}/data"\n`)
+    const r = begin(["new", "x"], `sandbox = "fence --"\nadd_dirs = ["/srv/home", "~/shared"]\nmodel = "sonnet"\ndata = "${dir}/data"\n`)
     expect(r.code).toBe(0)
     expect(r.out).toContain(`cd ${dir}/data/worktrees/`)
     expect(r.out).toMatch(/&& fence -- env ORQ_TASK=T-0001 .* claude --model sonnet --add-dir=\/srv\/home --add-dir=\S+\/shared /)
@@ -42,7 +51,7 @@ describe("the settings file", () => {
   })
 
   test("a variable that is set wins over the file", () => {
-    const r = orq(["new", "x"], `data = "${dir}/data"\nmodel = "sonnet"\n`, { ORQ_MODEL: "haiku" })
+    const r = begin(["new", "x"], `data = "${dir}/data"\nmodel = "sonnet"\n`, { ORQ_MODEL: "haiku" })
     expect(r.out).toContain("claude --model haiku")
   })
 
@@ -54,7 +63,8 @@ describe("the settings file", () => {
       ORQ_CONFIG: join(dir, "missing.toml"),
       ORQ_DATA: join(dir, "data"),
     }
-    const p = Bun.spawnSync([...ORQ, "new", "x"], { cwd: repo, env, stdout: "pipe", stderr: "pipe" })
+    Bun.spawnSync([...ORQ, "new", "x"], { cwd: repo, env, stdout: "pipe", stderr: "pipe" })
+    const p = Bun.spawnSync([...ORQ, "start", "T-0001"], { cwd: repo, env, stdout: "pipe", stderr: "pipe" })
     expect(p.exitCode).toBe(0)
     expect(p.stdout.toString()).toContain("claude --model opus")
   })

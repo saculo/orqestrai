@@ -1,7 +1,7 @@
 // Tasks that are not started (a backlog): added through the state's HTTP API, with no worktree
 // until they start. The CLI and the dashboard have to cope with them.
 import { afterEach, beforeEach, describe, expect, test } from "bun:test"
-import { mkdirSync, mkdtempSync, rmSync } from "node:fs"
+import { mkdirSync, mkdtempSync, readFileSync, rmSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import type { Subprocess } from "bun"
@@ -17,8 +17,8 @@ const api = (method: string, path: string, body?: unknown) =>
     ...(body === undefined ? {} : { headers: { "content-type": "application/json" }, body: JSON.stringify(body) }),
   } as RequestInit)
 
-const orq = (args: string[]) => {
-  const env = { ...process.env, ORQ_DATA: join(dir, "home"), ORQ_SERVER: socket, ORQ_HC: "orq-test-no-hc" }
+const orq = (args: string[], extra: Record<string, string> = {}) => {
+  const env = { ...process.env, ORQ_DATA: join(dir, "home"), ORQ_SERVER: socket, ORQ_HC: "orq-test-no-hc", ...extra }
   const p = Bun.spawnSync([...ORQ, ...args], { cwd: dir, env, stdout: "pipe", stderr: "pipe" })
   return { code: p.exitCode, out: p.stdout.toString(), err: p.stderr.toString() }
 }
@@ -90,5 +90,29 @@ describe("a task that is not started", () => {
     const file = (await (await api("GET", `/tasks/${id}/copy?path=REQUEST.md`)).json()) as string
     expect(Buffer.from(file, "base64").toString()).toContain(`id: ${id}\ncreated: `)
     expect(Buffer.from(file, "base64").toString()).toEndWith("---\n\nPlan meals for the week\n")
+  })
+
+  test("B6: a GitHub task whose repo has no checkout is BLOCKED naming [github] repos; once added, start works", async () => {
+    const checkout = join(dir, "meal-prep")
+    mkdirSync(checkout)
+    for (const args of [
+      ["init", "-q", "-b", "main"],
+      ["commit", "-q", "--allow-empty", "-m", "init"],
+    ])
+      Bun.spawnSync(["git", "-c", "user.name=t", "-c", "user.email=t@t", ...args], { cwd: checkout })
+    const { id } = (await (await api("POST", "/issues", anIssue())).json()) as { id: string }
+
+    const failed = orq(["start", id])
+    expect(failed.code).not.toBe(0)
+    const shown = orq(["show", id]).out
+    expect(shown).toMatch(/status = BLOCKED/)
+    expect(shown).toContain("saculo/meal-prep")
+    expect(shown).toContain("[github] repos")
+
+    const started = orq(["start", id], { ORQ_GITHUB_REPOS: `saculo/meal-prep=${checkout}` })
+    expect(started.code).toBe(0)
+    const task = (await (await api("GET", `/tasks/${id}`)).json()) as { worktree: string; repo: string }
+    expect(task.repo).toBe(checkout)
+    expect(readFileSync(join(task.worktree, ".orqestrai", "tasks", id, "REQUEST.md"), "utf8")).toContain("Plan meals for the week")
   })
 })

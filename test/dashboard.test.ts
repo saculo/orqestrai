@@ -49,6 +49,7 @@ beforeAll(async () => {
   url = `http://127.0.0.1:${port}`
 
   orq(["new", "--origin", "gh-issue:https://github.com/me/proj/issues/5", "Weekly shopping list"])
+  orq(["start", "T-0001"])
   orq(["new", "Dark mode"])
   orq(["set-state", "T-0001", "plan", "IN PROGRESS"])
 
@@ -99,6 +100,7 @@ describe("the dashboard", () => {
 
   test("a message is shown only while the task waits on it", async () => {
     orq(["new", "Portions"])
+    orq(["start", "T-0003"])
     orq(["set-state", "T-0003", "triage", "WAITING FOR ME", "--note", "**Which unit?**"])
     const waiting = (await json<BoardTask[]>("/board")).find((t) => t.id === "T-0003")
     expect(waiting).toMatchObject({ status: "WAITING FOR ME", note: "Which unit?", message: "**Which unit?**" })

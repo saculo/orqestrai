@@ -16,7 +16,7 @@ import { closeSession, openSession } from "./herdr.ts"
 import { install } from "./init.ts"
 import { issues } from "./issues.ts"
 import { syncMerged } from "./pr.ts"
-import { startTask } from "./task.ts"
+import { addTask, startTask } from "./task.ts"
 import { templates } from "./templates.ts"
 import { VERSION } from "./version.ts"
 import { withState } from "./with-state.ts"
@@ -62,16 +62,24 @@ const parseOrigin = (origin: string) => {
 const newTask = Command.make("new", { request: Argument.String("request"), playbook, origin: Origin }, ({ request, playbook, origin }) =>
   Effect.gen(function* () {
     const from = Option.isSome(origin) ? yield* parseOrigin(origin.value) : undefined
-    const { task, worktree, session } = yield* startTask(yield* topLevel(), request, {
+    const task = yield* addTask(yield* topLevel(), request, {
       playbook: Option.getOrUndefined(playbook),
       ...(from ? { origin: from } : {}),
     })
+    yield* Console.log(`${task.id}  ${task.branch}`)
+    yield* Console.log(`start it: orq start ${task.id}`)
+  }),
+).pipe(Command.withDescription("add a task to the backlog: id, branch (--playbook, --origin); orq start begins it"), withState)
+
+const start = Command.make("start", { id }, ({ id }) =>
+  Effect.gen(function* () {
+    const { task, worktree, session } = yield* startTask(id)
     yield* Console.log(`${task.id}  ${task.branch}  ${worktree}`)
     yield* warnIfNotOnPath
     if (session.spaceNotOpen) return yield* new OrqError({ message: session.message })
     yield* Console.log(session.message)
   }),
-).pipe(Command.withDescription("new task: id, branch, worktree, session (--playbook, --origin)"), withState)
+).pipe(Command.withDescription("start a backlog task: its worktree from the latest base, REQUEST.md, session"), withState)
 
 const resume = Command.make("resume", { id }, ({ id }) =>
   Effect.gen(function* () {
@@ -153,7 +161,7 @@ const createArtifact = Command.make("create-artifact", { id, name: Argument.Lite
 
 const orq = Command.make("orq").pipe(
   Command.withDescription("orqestrai mechanics. The workflow is in the skills."),
-  Command.withSubcommands([init, newTask, resume, ls, show, setState, createArtifact, cleanTask, issues]),
+  Command.withSubcommands([init, newTask, start, resume, ls, show, setState, createArtifact, cleanTask, issues]),
 )
 
 const AppLayer = OrqConfig.layer.pipe(Layer.provideMerge(BunServices.layer))

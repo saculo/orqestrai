@@ -246,3 +246,8 @@ the backlog and the label trigger replace `orq issues` and are the next way of w
   `plugin/` calls `orq new` (checked: only the git skill names it, as text, and W4.2 updates it).
 
 ## Impl notes
+- W1.1: foreign keys are switched on after the migrations (not alongside), because the table rebuild in 0004 must not cascade-delete events, links and files.
+- W2.1: `Db.unstart(id, worktree)` (`POST /tasks/:id/unstart`) undoes a claim when git fails after it, because a start claims first (two starters at once) and a failed start must leave the task startable.
+- W2.1: `parseRepos` moved from `issues.ts` to `task.ts`, because `orq start` resolves checkouts and `issues.ts` imports `task.ts`.
+- W2.1: a successful start of a BLOCKED task sets it back to TODO.
+- W2.2: a backlog task is in no step column and never in "needs you"; only in Backlog (or done when dropped).

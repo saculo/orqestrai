@@ -35,13 +35,22 @@ const head = () => sh(["git", "rev-parse", "HEAD"], worktree())
 
 /** A task with a committed task file and an open PR for its branch, as ship leaves it. */
 const shipped = () => {
-  orq(["new", "Add search"])
+  begin(["new", "Add search"])
   writeFileSync(join(worktree(), ".orqestrai/tasks/T-0001/BRIEF.md"), "brief\n")
   git(["add", "."], worktree())
   git(["commit", "-q", "-m", "docs(T-0001): brief"], worktree())
   orq(["set-state", "T-0001", "ship", "WAITING FOR ME", "--note", "PR open"])
 }
 const merged = () => ({ FAKE_GH_STATE: "MERGED", FAKE_GH_HEAD: head() })
+
+/** `orq new`, then `orq start` on the task it added; the two outputs together. A `new` that fails is its result. */
+const begin = (args: string[], ...rest: Parameters<typeof orq> extends [unknown, ...infer R] ? R : never) => {
+  const added = orq(args, ...rest)
+  const id = /^(T-\d+)/.exec(added.out)?.[1]
+  if (added.code !== 0 || !id) return added
+  const started = orq(["start", id], ...rest)
+  return { code: started.code, out: added.out + started.out, err: added.err + started.err }
+}
 
 beforeEach(() => {
   dir = mkdtempSync(join(tmpdir(), "orq-clean-"))
@@ -103,7 +112,7 @@ describe("the merged state, read from GitHub", () => {
 
 describe("orq clean", () => {
   test("refuses a task that is not finished", () => {
-    orq(["new", "Add search"])
+    begin(["new", "Add search"])
     const r = orq(["clean", "T-0001"])
     expect(r.code).toBe(1)
     expect(r.err).toContain("T-0001 is TODO")
@@ -122,7 +131,7 @@ describe("orq clean", () => {
   test("removes the worktree's entry from Claude's config and keeps the rest", () => {
     mkdirSync(join(dir, "claude"))
     writeFileSync(join(dir, "claude", ".claude.json"), '{"numStartups":3,"projects":{"/a":{"hasTrustDialogAccepted":true}}}')
-    orq(["new", "Add search"])
+    begin(["new", "Add search"])
     const file = () => JSON.parse(readFileSync(join(dir, "claude", ".claude.json"), "utf8"))
     expect(Object.keys(file().projects)).toHaveLength(2)
     writeFileSync(join(worktree(), ".orqestrai/tasks/T-0001/BRIEF.md"), "no\n")
@@ -164,7 +173,7 @@ describe("orq clean", () => {
   })
 
   test("archives a dropped task's files before it removes them", () => {
-    orq(["new", "Add search"])
+    begin(["new", "Add search"])
     writeFileSync(join(worktree(), ".orqestrai/tasks/T-0001/BRIEF.md"), "we will not do this\n")
     git(["add", "."], worktree())
     git(["commit", "-q", "-m", "docs(T-0001): drop"], worktree())
@@ -177,7 +186,7 @@ describe("orq clean", () => {
   })
 
   test("archives the out-of-scope note a dropped task wrote on its branch", () => {
-    orq(["new", "Add search"])
+    begin(["new", "Add search"])
     mkdirSync(join(worktree(), ".orqestrai/out-of-scope"), { recursive: true })
     writeFileSync(join(worktree(), ".orqestrai/out-of-scope/search.md"), "# Search\n")
     git(["add", "."], worktree())
@@ -189,7 +198,7 @@ describe("orq clean", () => {
   })
 
   test("refuses a dropped branch that changes other files, so they are not lost", () => {
-    orq(["new", "Add search"])
+    begin(["new", "Add search"])
     writeFileSync(join(worktree(), "search.ts"), "export {}\n")
     git(["add", "."], worktree())
     git(["commit", "-q", "-m", "wip"], worktree())

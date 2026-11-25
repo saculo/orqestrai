@@ -32,6 +32,8 @@ export class Db extends Context.Service<
     readonly create: (task: NewTask) => Effect.Effect<Task, OrqError>
     /** Records where the task's checkout is (`repo`, `worktree`), once: fails when it is started already. */
     readonly start: (id: string, repo: string, worktree: string) => Effect.Effect<void, OrqError>
+    /** Undoes `start` when the setup after it failed: the worktree goes back to null, only where it is `worktree`. */
+    readonly unstart: (id: string, worktree: string) => Effect.Effect<void, OrqError>
     /** Adds a backlog task for a GitHub issue, once per url: the same url gives the same id, added false.
      * The request is the task's REQUEST.md. */
     readonly addFromIssue: (issue: {
@@ -110,6 +112,14 @@ export class Db extends Context.Service<
           yield* addEvent(id, "started", worktree)
         }).pipe(sql.withTransaction, asOrqError("start"))
 
+      const unstart = (id: string, worktree: string) =>
+        Effect.gen(function* () {
+          yield* lockTask(id)
+          const changed = yield* sql`UPDATE tasks SET worktree = NULL, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ')
+            WHERE id = ${id} AND worktree = ${worktree} RETURNING id`
+          if (changed.length > 0) yield* addEvent(id, "start undone", worktree)
+        }).pipe(sql.withTransaction, asOrqError("unstart"))
+
       const addFromIssue = ({ repo, url, title, request }: { repo: string; url: string; title: string; request: string }) =>
         Effect.gen(function* () {
           const [found] = yield* sql<{ task_id: string }>`SELECT task_id FROM task_links WHERE kind = 'gh-issue' AND ref = ${url} LIMIT 1`
@@ -173,6 +183,7 @@ export class Db extends Context.Service<
       return {
         create,
         start,
+        unstart,
         addFromIssue,
         remove: (id) => sql`DELETE FROM tasks WHERE id = ${id}`.pipe(Effect.asVoid, asOrqError("remove")),
         get,
