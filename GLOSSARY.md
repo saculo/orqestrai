@@ -8,3 +8,7 @@
   one live terminal is in it (hc cannot list spaces).
 - **Task session**: the Claude session orq starts for one task, in the hc terminal
   `orq-t-NNNN`, in the task's worktree. Not a Herdr space.
+- **Backlog task**: a task that was added but not started: status TODO and no worktree, branch
+  or session. The dashboard shows these as the backlog. _Avoid_: queued task, pending task.
+- **Start (a task)**: make a backlog task's branch and worktree from the latest base branch and
+  open its task session (`orq start`). A started task is never started again; it is resumed.
