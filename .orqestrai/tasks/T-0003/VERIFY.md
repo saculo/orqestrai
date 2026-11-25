@@ -1,7 +1,7 @@
 ---
 id: T-0003
-status: failed
-round: 1
+status: passed
+round: 2
 ---
 
 # Verify: backlog, orq start, the GitHub label trigger and orq watch
@@ -50,5 +50,38 @@ Root causes:
 - review:R1:packages/cli/src/clean.ts:61
 - review:R2:packages/server/src/trigger.ts:11
 
+## Round 2
+
+### Quality gate
+The tree of `a9b29c2`, the repository root.
+
+| Command | Result | Evidence |
+|---------|--------|----------|
+| `bun run check` | pass | `tsc --noEmit`, no output |
+| `bunx biome ci .` | pass | `Checked 83 files … No fixes applied.` |
+| `bun test` | pass | `--timeout 60000`: `191 pass, 0 fail, Ran 191 tests across 15 files. [408.68s]` |
+
+### Checks (verifier)
+| Check | Claim | Verdict | Evidence |
+|-------|-------|---------|----------|
+| V1 | AC1-AC9 | VERIFIED | B1-B22 and the round 2 tests pass (gate above) |
+| V2 | AC10 | VERIFIED | unchanged since round 1 (actionlint exit 0; docs in the diff) |
+| V3 | AC5 | manual | the user, at the PR |
+| V4 | AC6-AC8, AC10 | manual | the user, at the PR |
+
+### Review (reviewer)
+**Hypotheses:** (1) the R1 fix guards only one git call — not confirmed; (2) the R2 check is
+only on the trigger port — not confirmed (`Db.addFromIssue` checks it); (3) the `owner/name`
+pattern lets a path through — not confirmed (tests cover `/etc`, `../x`, `.a/b`, `a/b/c`, …).
+
+**Prior findings:** R1 fixed (`packages/cli/src/clean.ts:61-65`, test in `test/backlog.test.ts`);
+R2 fixed (`packages/core/src/db.ts`, `packages/server/src/trigger.ts:41`, test in `test/trigger.test.ts`).
+
+No new findings at confidence 75 or more.
+
+### Outcome
+passed.
+
 ## For the PR body
 - Many CLI tests now run `orq new` and `orq start` (two processes); on a loaded 1-CPU machine more of them pass bun's 5 s default only with `--timeout 60000` (as .orqestrai/testing.md says for main too).
+- The round 2 clean test runs ~15 processes in one test; it needs `--timeout 60000` on a slow machine (could be split later).
