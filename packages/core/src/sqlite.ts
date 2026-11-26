@@ -13,9 +13,10 @@ import { OrqError } from "./domain.ts"
 import init from "./migrations/0001_init.ts"
 import files from "./migrations/0002_files.ts"
 import source from "./migrations/0003_source.ts"
+import backlog from "./migrations/0004_backlog.ts"
 
 /** Every migration, in order. A schema change is a new file in src/migrations/ and a line here. */
-const MIGRATIONS = { "0001_init": init, "0002_files": files, "0003_source": source }
+const MIGRATIONS = { "0001_init": init, "0002_files": files, "0003_source": source, "0004_backlog": backlog }
 
 /** Any failure becomes a message the CLI prints; an OrqError passes through as it is. */
 export const asOrqError =
@@ -38,7 +39,8 @@ const client = Layer.effectContext(
   }),
 ).pipe(Layer.provide(Reactivity.layer))
 
-/** Deleting a task deletes its events and links. SQLite checks foreign keys only when asked. */
+/** Deleting a task deletes its events and links. SQLite checks foreign keys only when asked; after the
+ * migrations, which rebuild tables. */
 const foreignKeys = Layer.effectDiscard(
   Effect.gen(function* () {
     const sql = yield* SqlClient
@@ -52,4 +54,4 @@ const migrate = Layer.effectDiscard(
 )
 
 /** The SqlClient for orq's state, open and migrated. */
-export const Database = Layer.mergeAll(migrate, foreignKeys).pipe(Layer.provideMerge(client))
+export const Database = foreignKeys.pipe(Layer.provideMerge(migrate), Layer.provideMerge(client))

@@ -47,3 +47,6 @@ export const requireRef = (root: string, ref: string) =>
 
 export const addWorktree = (root: string, branch: string, path: string, base: string) =>
   exec("git", ["worktree", "add", "--quiet", "-b", branch, path, base], root)
+
+/** The latest `<base>` of origin, as `origin/<base>`; a failure carries git's message. */
+export const fetchBase = (root: string, base: string) => exec("git", ["fetch", "--quiet", "origin", base], root).pipe(Effect.asVoid)

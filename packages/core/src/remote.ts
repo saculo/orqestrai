@@ -37,6 +37,9 @@ const db = Layer.effect(
     const { tasks } = yield* Client
     return Db.of({
       create: (task) => call(tasks.create({ payload: task })),
+      start: (id, repo, worktree) => call(tasks.start({ params: { id }, payload: { repo, worktree } })),
+      unstart: (id, worktree) => call(tasks.unstart({ params: { id }, payload: { worktree } })),
+      addFromIssue: (issue) => call(tasks.addFromIssue({ payload: issue })),
       remove: (id) => call(tasks.remove({ params: { id } })),
       get: (id) => call(tasks.get({ params: { id } })),
       list: call(tasks.list()),

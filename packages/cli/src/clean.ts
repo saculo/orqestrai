@@ -3,7 +3,7 @@
 // merges, so what its branch holds is copied to $ORQ_DATA/archive/<repo>/<id>/ first: its task
 // folder, and the out-of-scope notes triage wrote, so triage can still find them.
 import { cpSync, existsSync, mkdirSync } from "node:fs"
-import { basename, join } from "node:path"
+import { basename, isAbsolute, join } from "node:path"
 import { OrqConfig } from "@orqestrai/core/config.ts"
 import { Db } from "@orqestrai/core/db.ts"
 import { OrqError, type Task } from "@orqestrai/core/domain.ts"
@@ -28,10 +28,12 @@ const requireInPr = (task: Task, tip: string) =>
   })
 
 /** A dropped task: copy what its branch adds to the archive. Refuses a change it would lose. */
-const archive = (task: Task, home: string) =>
+const archive = (task: Task, worktree: string | null, home: string) =>
   Effect.gen(function* () {
-    if (!existsSync(task.worktree))
-      return yield* refuse(`${task.branch} is not merged and its worktree ${task.worktree} is gone, so its files cannot be archived.`)
+    if (worktree === null || !existsSync(worktree))
+      return yield* refuse(
+        `${task.branch} is not merged and its worktree ${worktree ?? "(none)"} is gone, so its files cannot be archived.`,
+      )
     const base = yield* baseBranch(task.repo)
     const changed = (yield* exec("git", ["diff", "--name-only", `${base}...${task.branch}`], task.repo)).split("\n").filter(Boolean)
     const folder = `.orqestrai/tasks/${task.id}/`
@@ -39,10 +41,10 @@ const archive = (task: Task, home: string) =>
     if (other.length) return yield* refuse(`${task.branch} changes files outside its task folder and ${OUT_OF_SCOPE}: ${other.join(", ")}.`)
     const out = join(home, "archive", basename(task.repo), task.id)
     mkdirSync(out, { recursive: true })
-    const files = join(task.worktree, folder)
+    const files = join(worktree, folder)
     if (existsSync(files)) cpSync(files, out, { recursive: true })
-    for (const f of changed.filter((f) => f.startsWith(OUT_OF_SCOPE) && existsSync(join(task.worktree, f))))
-      cpSync(join(task.worktree, f), join(out, "out-of-scope", f.slice(OUT_OF_SCOPE.length)), { recursive: true })
+    for (const f of changed.filter((f) => f.startsWith(OUT_OF_SCOPE) && existsSync(join(worktree, f))))
+      cpSync(join(worktree, f), join(out, "out-of-scope", f.slice(OUT_OF_SCOPE.length)), { recursive: true })
     return out
   })
 
@@ -56,21 +58,27 @@ export const clean = (id: string) =>
     if (task.status !== "MERGED" && task.status !== "DROPPED")
       return yield* refuse(`${id} is ${task.status}. orq clean removes only a merged or dropped task.`)
 
-    const tip = yield* run("git", ["rev-parse", "--verify", "--quiet", `refs/heads/${task.branch}`], task.repo)
-    const hasWorktree = existsSync(task.worktree)
-    if (hasWorktree && (yield* exec("git", ["status", "--porcelain"], task.worktree)))
-      return yield* refuse(`${task.worktree} has uncommitted changes. Commit or remove them first.`)
+    // a GitHub task that never started has a GitHub name as its repo, not a folder: no branch to look for
+    const tip =
+      isAbsolute(task.repo) && existsSync(task.repo)
+        ? yield* run("git", ["rev-parse", "--verify", "--quiet", `refs/heads/${task.branch}`], task.repo)
+        : { code: 1, stdout: "" }
+    // a task that never started has no worktree: nothing on disk
+    const worktree = task.worktree
+    const hasWorktree = worktree !== null && existsSync(worktree)
+    if (hasWorktree && (yield* exec("git", ["status", "--porcelain"], worktree)))
+      return yield* refuse(`${worktree} has uncommitted changes. Commit or remove them first.`)
 
     const done: string[] = []
     if (tip.code === 0) {
       if (task.status === "MERGED") yield* requireInPr(task, tip.stdout.trim())
-      else done.push(`archived ${yield* archive(task, home)}`)
+      else done.push(`archived ${yield* archive(task, worktree, home)}`)
     }
     if (hasWorktree) {
-      yield* exec("git", ["worktree", "remove", task.worktree], task.repo)
-      done.push(`removed worktree ${task.worktree}`)
+      yield* exec("git", ["worktree", "remove", worktree], task.repo)
+      done.push(`removed worktree ${worktree}`)
     }
-    yield* untrust(task.worktree)
+    if (worktree !== null) yield* untrust(worktree)
     if (tip.code === 0) {
       yield* exec("git", ["branch", "-D", task.branch], task.repo)
       done.push(`removed branch ${task.branch}`)

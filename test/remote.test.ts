@@ -44,6 +44,7 @@ describe("orq with ORQ_SERVER", () => {
     const created = orq(["new", "--origin", "gh-issue:o/r#3", "Add search"])
     expect(created.code).toBe(0)
     expect(created.out).toContain("T-0001  orq/T-0001-add-search")
+    expect(orq(["start", "T-0001"]).code).toBe(0)
     expect(existsSync(join(dir, "home", "worktrees", "proj", "T-0001-add-search", ".orqestrai", "tasks", "T-0001", "REQUEST.md"))).toBe(
       true,
     )
@@ -65,7 +66,7 @@ describe("orq with ORQ_SERVER", () => {
     expect(orq(["show", "T-0001"]).out).toMatch(/type = bugfix[\s\S]*type\s+bugfix/)
   })
 
-  test("the server finds the task an outside reference started (orq issues' issues)", async () => {
+  test("the server finds the task an outside reference started (GitHub issues)", async () => {
     expect(orq(["new", "--origin", "gh-issue:https://github.com/o/r/issues/3", "Add search"]).code).toBe(0)
     const find = (ref: string) =>
       fetch(`http://orq/links?kind=gh-issue&ref=${encodeURIComponent(ref)}`, { unix: socket } as RequestInit).then((r) => r.json())

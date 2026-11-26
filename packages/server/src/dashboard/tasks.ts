@@ -41,7 +41,7 @@ export const pullRequestOf = (task: BoardTask) => {
   return { url: ref.startsWith("http") ? ref : null, label: number ? `#${number}` : "PR" }
 }
 
-/** The GitHub issue the task was started from (`orq issues`): its URL, and its number as a label. */
+/** The GitHub issue the task was started from: its URL, and its number as a label. */
 export const issueOf = (task: BoardTask) => {
   const url = linkedRef(task, "gh-issue")
   if (!url) return null

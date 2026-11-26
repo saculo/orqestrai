@@ -9,10 +9,12 @@ export const startServer = async (
   env: Record<string, string>,
   alsoPort?: number,
   cwd?: string,
+  triggerPort?: number,
 ): Promise<Subprocess> => {
   const flags = [
     ...(typeof at === "string" ? ["--socket", at] : ["--host", "127.0.0.1", "--port", String(at)]),
     ...(alsoPort === undefined ? [] : ["--host", "127.0.0.1", "--port", String(alsoPort)]),
+    ...(triggerPort === undefined ? [] : ["--trigger-port", String(triggerPort)]),
   ]
   const ping =
     typeof at === "string" ? () => fetch("http://orq/tasks", { unix: at } as RequestInit) : () => fetch(`http://127.0.0.1:${at}/tasks`)

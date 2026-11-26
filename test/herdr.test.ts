@@ -53,6 +53,15 @@ const orq = (args: string[], extra: Record<string, string | undefined> = {}) => 
   return { code: p.exitCode, out: p.stdout.toString(), err: p.stderr.toString() }
 }
 
+/** `orq new`, then `orq start` on the task it added; the two outputs together. A `new` that fails is its result. */
+const begin = (args: string[], ...rest: Parameters<typeof orq> extends [unknown, ...infer R] ? R : never) => {
+  const added = orq(args, ...rest)
+  const id = /^(T-\d+)/.exec(added.out)?.[1]
+  if (added.code !== 0 || !id) return added
+  const started = orq(["start", id], ...rest)
+  return { code: started.code, out: added.out + started.out, err: added.err + started.err }
+}
+
 const hcCalls = () => readFileSync(join(dir, "log"), "utf8").trim().split("\n")
 const hcRuns = () => hcCalls().filter((c) => c.startsWith("|run "))
 const sockets = () => readFileSync(join(dir, "sockets"), "utf8").trim().split("\n")
@@ -89,9 +98,58 @@ const claudeConfig = () => JSON.parse(readFileSync(claudeFile(), "utf8"))
 const worktreeOf = (id: string) => /worktree = (.+)/.exec(orq(["show", id]).out)?.[1]?.trim() ?? ""
 
 describe("task sessions in herdr-core", () => {
+  test("orq new runs no session; a second orq start runs none either", () => {
+    spaceOpen("proj", "sp-proj")
+    orq(["new", "Add search"])
+    expect(existsSync(join(dir, "log"))).toBe(false)
+    expect(orq(["start", "T-0001"]).code).toBe(0)
+    expect(hcRuns()).toHaveLength(1)
+    const again = orq(["start", "T-0001"])
+    expect(again.code).not.toBe(0)
+    expect(again.err).toContain("orq resume T-0001")
+    expect(hcRuns()).toHaveLength(1)
+  })
+
+  test("two orq start of one task at once: it is started once, with one session, and is not BLOCKED", async () => {
+    spaceOpen("proj", "sp-proj")
+    orq(["new", "Add search"])
+    const env = {
+      ...process.env,
+      ORQ_DATA: join(dir, "home"),
+      ORQ_HC: join(dir, "hc"),
+      FAKE_HC_DIR: dir,
+      CLAUDE_CONFIG_DIR: join(dir, "claude"),
+    }
+    const start = () => Bun.spawn([...ORQ, "start", "T-0001"], { cwd: repo, env, stdout: "pipe", stderr: "pipe" }).exited
+    const codes = await Promise.all([start(), start()])
+
+    expect(codes.filter((c) => c === 0)).toHaveLength(1)
+    expect(hcRuns()).toHaveLength(1)
+    const shown = orq(["show", "T-0001"]).out
+    expect(shown).toContain("status = TODO")
+    expect(existsSync(worktreeOf("T-0001"))).toBe(true)
+  })
+
+  test("B7: a space that is not open blocks the task, naming the space and orq resume; resume starts the session", () => {
+    const added = orq(["new", "Add search"])
+    expect(added.code).toBe(0)
+    const r = orq(["start", "T-0001"])
+    expect(r.code).not.toBe(0)
+    expect(existsSync(worktreeOf("T-0001"))).toBe(true)
+    const shown = orq(["show", "T-0001"]).out
+    expect(shown).toMatch(/status = BLOCKED/)
+    expect(shown).toContain("proj")
+    expect(shown).toContain("orq resume T-0001")
+    expect(hcRuns()).toEqual([""].slice(1))
+
+    spaceOpen("proj", "sp-proj")
+    expect(orq(["resume", "T-0001"]).out).toContain("started orq-t-0001")
+    expect(hcRuns()).toHaveLength(1)
+  })
+
   test("orq new starts the session in a terminal named after the task, in its worktree, with no parent", () => {
     spaceOpen("proj", "sp-proj")
-    const r = orq(["new", "Add search"])
+    const r = begin(["new", "Add search"])
     expect(r.out).toContain("started orq-t-0001 in herdr-core (hc attach orq-t-0001)")
     // no HC_TERMINAL_ID: the session would end with the terminal orq ran in
     expect(hcCalls()).toContainEqual(
@@ -106,20 +164,20 @@ describe("task sessions in herdr-core", () => {
     writeFileSync(join(repo, ".orqestrai", "config.toml"), 'herdr_session = "meal-prep"\n')
     spaceOpen("home", "sp-home", "t9")
     spaceOpen("meal-prep", "sp-meal")
-    orq(["new", "x"])
+    begin(["new", "x"])
     expect(hcRuns()).toEqual([expect.stringContaining("--label herdr.space=sp-meal ")])
   })
 
   test("without herdr_session the space is the repo's directory name", () => {
     spaceOpen("home", "sp-home", "t9")
     spaceOpen("proj", "sp-proj")
-    orq(["new", "x"])
+    begin(["new", "x"])
     expect(hcRuns()).toEqual([expect.stringContaining("--label herdr.space=sp-proj ")])
   })
 
   test("orq new with the space not open keeps the task and says what to do", () => {
     spaceOpen("home", "sp-home", "t9")
-    const r = orq(["new", "x"])
+    const r = begin(["new", "x"])
     expect(r.code).not.toBe(0)
     expect(r.out + r.err).toMatch(NOT_OPEN)
     expect(r.out + r.err).toContain("Herdr app")
@@ -132,7 +190,7 @@ describe("task sessions in herdr-core", () => {
 
   test("orq resume with the space not open says the same and starts nothing", () => {
     spaceOpen("home", "sp-home", "t9")
-    orq(["new", "x"])
+    begin(["new", "x"])
     const r = orq(["resume", "T-0001"])
     expect(r.code).not.toBe(0)
     expect(r.err).toMatch(NOT_OPEN)
@@ -141,7 +199,7 @@ describe("task sessions in herdr-core", () => {
   })
 
   test("orq resume starts the session once the space is open", () => {
-    orq(["new", "x"])
+    begin(["new", "x"])
     spaceOpen("proj", "sp-proj")
     const r = orq(["resume", "T-0001"])
     expect(r.code).toBe(0)
@@ -166,7 +224,7 @@ describe("task sessions in herdr-core", () => {
     ],
   ])("when %s, orq stops with the reason and starts no session", (_name, given, message) => {
     given()
-    const r = orq(["new", "x"])
+    const r = begin(["new", "x"])
     expect(r.code).not.toBe(0)
     expect(r.out + r.err).toContain(message)
     expect(hcRuns()).toEqual([])
@@ -174,18 +232,18 @@ describe("task sessions in herdr-core", () => {
 
   test("orq inside a Fence task session passes its terminal's socket to hc", () => {
     spaceOpen("proj", "sp-proj")
-    orq(["new", "x"], { HC_TERMINAL_SOCKET: "/run/x.sock", HC_SOCKET: undefined })
+    begin(["new", "x"], { HC_TERMINAL_SOCKET: "/run/x.sock", HC_SOCKET: undefined })
     expect(new Set(sockets())).toEqual(new Set(["/run/x.sock"]))
   })
 
   test("an HC_SOCKET that is set wins over the terminal's socket", () => {
     spaceOpen("proj", "sp-proj")
-    orq(["new", "x"], { HC_TERMINAL_SOCKET: "/run/x.sock", HC_SOCKET: "/run/y.sock" })
+    begin(["new", "x"], { HC_TERMINAL_SOCKET: "/run/x.sock", HC_SOCKET: "/run/y.sock" })
     expect(new Set(sockets())).toEqual(new Set(["/run/y.sock"]))
   })
 
   test("orq resume labels a running terminal that has no space label, and starts nothing", () => {
-    orq(["new", "x"]) // space not open: only the task
+    begin(["new", "x"]) // space not open: only the task
     spaceOpen("proj", "sp-proj")
     running()
     const r = orq(["resume", "T-0001"])
@@ -197,7 +255,7 @@ describe("task sessions in herdr-core", () => {
   })
 
   test("orq resume leaves a running session that has its space label as it is", () => {
-    orq(["new", "x"])
+    begin(["new", "x"])
     spaceOpen("proj", "sp-proj")
     running({ "herdr.space": "sp-proj" })
     expect(orq(["resume", "T-0001"]).out).toContain("orq-t-0001 is already running")
@@ -206,7 +264,7 @@ describe("task sessions in herdr-core", () => {
   })
 
   test("orq resume leaves a running session labelled with another space as it is", () => {
-    orq(["new", "x"])
+    begin(["new", "x"])
     spaceOpen("proj", "sp-proj")
     running({ "herdr.space": "sp-other" })
     expect(orq(["resume", "T-0001"]).out).toContain("orq-t-0001 is already running")
@@ -215,7 +273,7 @@ describe("task sessions in herdr-core", () => {
 
   test("orq clean ends the session and removes its terminal", () => {
     spaceOpen("proj", "sp-proj")
-    orq(["new", "Add search"])
+    begin(["new", "Add search"])
     orq(["set-state", "T-0001", "triage", "DROPPED"])
     const worktree = /worktree = (.+)/.exec(orq(["show", "T-0001"]).out)?.[1]?.trim() ?? ""
     sh(["git", "add", "-A"], worktree)
@@ -230,7 +288,7 @@ describe("task sessions in herdr-core", () => {
     mkdirSync(join(dir, "claude"))
     writeFileSync(claudeFile(), '{"numStartups":3,"projects":{"/a":{"hasTrustDialogAccepted":true,"x":1}}}')
     spaceOpen("proj", "sp-proj")
-    orq(["new", "x"])
+    begin(["new", "x"])
     const config = claudeConfig()
     expect(config.projects[worktreeOf("T-0001")].hasTrustDialogAccepted).toBe(true)
     expect(config.numStartups).toBe(3)
@@ -239,7 +297,7 @@ describe("task sessions in herdr-core", () => {
 
   test("orq new creates Claude's config when there is none", () => {
     spaceOpen("proj", "sp-proj")
-    orq(["new", "x"])
+    begin(["new", "x"])
     expect(claudeConfig().projects[worktreeOf("T-0001")].hasTrustDialogAccepted).toBe(true)
   })
 
@@ -247,7 +305,7 @@ describe("task sessions in herdr-core", () => {
     mkdirSync(join(dir, "claude"))
     writeFileSync(claudeFile(), "{not json")
     spaceOpen("proj", "sp-proj")
-    const r = orq(["new", "x"])
+    const r = begin(["new", "x"])
     expect(r.code).toBe(0)
     expect(r.err).toContain("not valid JSON")
     expect(readFileSync(claudeFile(), "utf8")).toBe("{not json")
@@ -256,7 +314,7 @@ describe("task sessions in herdr-core", () => {
 
   test("orq resume trusts the worktree again, also when the space is not open", () => {
     spaceOpen("home", "sp-home", "t9")
-    orq(["new", "x"])
+    begin(["new", "x"])
     const wt = worktreeOf("T-0001")
     writeFileSync(claudeFile(), '{"projects":{}}')
     orq(["resume", "T-0001"])
@@ -270,7 +328,7 @@ describe("task sessions in herdr-core", () => {
     spaceOpen("proj", "sp-proj")
     const old = process.umask(0o002)
     try {
-      orq(["new", "x"])
+      begin(["new", "x"])
     } finally {
       process.umask(old)
     }
@@ -281,7 +339,7 @@ describe("task sessions in herdr-core", () => {
     spaceOpen("proj", "sp-proj")
     const old = process.umask(0o002)
     try {
-      orq(["new", "x"])
+      begin(["new", "x"])
     } finally {
       process.umask(old)
     }
@@ -294,7 +352,7 @@ describe("task sessions in herdr-core", () => {
     writeFileSync(target, "{}", { mode: 0o600 })
     symlinkSync(target, claudeFile())
     spaceOpen("proj", "sp-proj")
-    orq(["new", "x"])
+    begin(["new", "x"])
     expect(lstatSync(claudeFile()).isSymbolicLink()).toBe(true)
     expect(JSON.parse(readFileSync(target, "utf8")).projects[worktreeOf("T-0001")].hasTrustDialogAccepted).toBe(true)
   })

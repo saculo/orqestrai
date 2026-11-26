@@ -41,8 +41,7 @@ export const settingsEnv = (s: Settings): Record<string, string> => {
   }
   if (s.github !== undefined) {
     const github = table(s.github, "github")
-    only(github, ["user", "repos"], "github.")
-    if (github.user !== undefined) env.ORQ_GITHUB_USER = path(github.user, "github.user")
+    only(github, ["repos"], "github.")
     // each repo and the checkout where its tasks start
     if (github.repos !== undefined)
       env.ORQ_GITHUB_REPOS = Object.entries(table(github.repos, "github.repos"))

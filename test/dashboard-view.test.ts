@@ -26,6 +26,21 @@ const task = (fields: Partial<BoardTask> & Pick<BoardTask, "id">): BoardTask => 
   ...fields,
 })
 
+describe("the backlog group", () => {
+  test("a task not started is in the backlog only; started tasks are running", () => {
+    const tasks = [
+      task({ id: "T-1", status: "TODO", worktree: null }),
+      task({ id: "T-2", status: "TODO" }),
+      task({ id: "T-3", status: "IN PROGRESS" }),
+    ]
+    const board = buildBoard(tasks, ALL_PROJECTS, NOW)
+    const ids = (list: ReadonlyArray<BoardTask>) => list.map((t) => t.id)
+    expect(ids(board.backlog)).toEqual(["T-1"])
+    expect(ids(board.running)).toEqual(["T-2", "T-3"])
+    expect(board.columns.flatMap((c) => ids(c.tasks))).not.toContain("T-1")
+  })
+})
+
 describe("the board", () => {
   const tasks = [
     task({ id: "T-1", status: "WAITING FOR ME", step: "plan", updated_at: minutesAgo(5) }),
